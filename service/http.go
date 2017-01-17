@@ -9,13 +9,21 @@ import (
 )
 
 type HttpService struct {
-	database string
-	api      backend.InfluxAPI
+	db  string
+	api backend.InfluxAPI
+}
+
+func NewHttpService(api backend.InfluxAPI, db string) (hs *HttpService) {
+	hs = &HttpService{
+		db:  db,
+		api: api,
+	}
+	return
 }
 
 func (hs *HttpService) Register(mux *http.ServeMux) {
 	// TODO: reload
-	// mux.HandleFunc("/ping", hs.HandlerPing)
+	mux.HandleFunc("/ping", hs.HandlerPing)
 	// mux.HandleFunc("/query", hs.HandlerQuery)
 	mux.HandleFunc("/write", hs.HandlerWrite)
 	mux.HandleFunc("/debug/pprof/", pprof.Index)
@@ -52,7 +60,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if db[0] != hs.database {
+	if db[0] != hs.db {
 		w.WriteHeader(404)
 		w.Write([]byte("database not exist."))
 		return

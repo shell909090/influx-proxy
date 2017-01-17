@@ -8,14 +8,23 @@ import (
 	"time"
 )
 
-// TODO: cache & redo
+// TODO: redo
 
 type CacheableAPI struct {
-	writer   io.Writer
-	lock     sync.Mutex
-	buffer   *bytes.Buffer
-	timer    *time.Timer
-	interval int
+	Api      InfluxAPI
+	Interval int
+
+	lock   sync.Mutex
+	buffer bytes.Buffer
+	timer  *time.Timer
+}
+
+func NewCacheableAPI(api InfluxAPI, interval int) (ca *CacheableAPI) {
+	ca = &CacheableAPI{
+		Api:      api,
+		Interval: interval,
+	}
+	return
 }
 
 func (ca *CacheableAPI) Flush() {
@@ -27,36 +36,38 @@ func (ca *CacheableAPI) Flush() {
 		// trigger twice.
 		return
 	}
-
-	// FIXME: maybe blocked here, should we hold lock now?
-	// maybe this can be delayed. Or run in another goroutine?
-	n, err := ca.writer.Write(p)
-	if err != nil {
-		log.Printf("error: %s\n", err)
-		return
-	}
-	if n != len(p) {
-		err = io.ErrShortWrite
-		log.Printf("error: %s\n", err)
-		return
-	}
-
 	ca.buffer.Reset()
 	ca.timer = nil
+
+	go func() {
+		// maybe blocked here, run in another goroutine
+		err := ca.Api.Write(p)
+		if err != nil {
+			log.Printf("error: %s\n", err)
+			return
+		}
+	}()
+
 	return
 }
 
-func (ca *CacheableAPI) Write(p []byte) (n int, err error) {
+func (ca *CacheableAPI) Write(p []byte) (err error) {
 	ca.lock.Lock()
 	defer ca.lock.Unlock()
 
-	n, err = ca.buffer.Write(p)
+	n, err := ca.buffer.Write(p)
 	if err != nil {
 		log.Printf("error: %s\n", err)
 		return
 	}
 	if n != len(p) {
 		err = io.ErrShortWrite
+		log.Printf("error: %s\n", err)
+		return
+	}
+
+	err = ca.buffer.WriteByte('\n')
+	if err != nil {
 		log.Printf("error: %s\n", err)
 		return
 	}
@@ -64,7 +75,7 @@ func (ca *CacheableAPI) Write(p []byte) (n int, err error) {
 	// TODO: size > max_size, trigger Flush.
 	if ca.timer == nil {
 		ca.timer = time.AfterFunc(
-			time.Millisecond*time.Duration(ca.interval),
+			time.Millisecond*time.Duration(ca.Interval),
 			ca.Flush)
 	}
 

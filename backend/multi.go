@@ -32,6 +32,13 @@ type MultiAPI struct {
 	key2apis map[string][]InfluxAPI
 }
 
+func NewMultiAPI(key2apis map[string][]InfluxAPI) (mi *MultiAPI) {
+	mi = &MultiAPI{
+		key2apis: key2apis,
+	}
+	return
+}
+
 func (mi *MultiAPI) WriteOneRow(p []byte) (err error) {
 	key, err := ScanKey(p)
 	if err != nil {

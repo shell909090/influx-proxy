@@ -1,0 +1,19 @@
+{
+    "upstream": {
+	"local": {
+	    "url": "http://localhost:8086",
+	    "db": "test",
+	    "interval": 200
+	},
+	"local2": {
+	    "url": "http://localhost:8086",
+	    "db": "test2",
+	    "interval": 200
+	}
+    },
+    "keymap": {
+	"cpu": ["local"],
+	"temperature": ["local2"],
+    }
+}
+    

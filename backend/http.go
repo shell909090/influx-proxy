@@ -39,6 +39,8 @@ func (hb *HttpBackend) Write(p []byte) (err error) {
 	q := url.Values{}
 	q.Set("db", hb.DB)
 
+	fmt.Printf("debug %s: %s\n", hb.DB, string(p))
+
 	var buf bytes.Buffer
 	zip := gzip.NewWriter(&buf)
 	n, err := zip.Write(p)

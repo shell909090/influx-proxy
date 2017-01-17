@@ -14,5 +14,4 @@ func TestHttpBackend(t *testing.T) {
 		t.Errorf("error: %s", err)
 		return
 	}
-
 }
