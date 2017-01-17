@@ -1,4 +1,0 @@
-cp\ u,host=server01,region=uswest value=1 1434055562000000000
-cp\,u,host=server02,region=uswest value=3 1434055562000010000
-temperature,machine=unit42,type=assembly internal=32,external=100 1434055562000000035
-temperature,machine=unit143,type=assembly internal=22,external=130 1434055562005000035
