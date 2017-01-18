@@ -1,4 +1,6 @@
 {
+    "addr": ":6666",
+    "db": "test",
     "upstream": {
 	"local": {
 	    "url": "http://localhost:8086",
@@ -13,7 +15,7 @@
     },
     "keymap": {
 	"cpu": ["local"],
-	"temperature": ["local2"],
+	"temperature": ["local2"]
     }
 }
     

@@ -2,6 +2,7 @@ package service
 
 import (
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/http/pprof"
 
@@ -18,13 +19,14 @@ func NewHttpService(api backend.InfluxAPI, db string) (hs *HttpService) {
 		db:  db,
 		api: api,
 	}
+	log.Print("database: ", hs.db)
 	return
 }
 
 func (hs *HttpService) Register(mux *http.ServeMux) {
 	// TODO: reload
 	mux.HandleFunc("/ping", hs.HandlerPing)
-	// mux.HandleFunc("/query", hs.HandlerQuery)
+	mux.HandleFunc("/query", hs.HandlerQuery)
 	mux.HandleFunc("/write", hs.HandlerWrite)
 	mux.HandleFunc("/debug/pprof/", pprof.Index)
 }
@@ -53,17 +55,20 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
 	}
 
 	q := req.URL.Query()
-	db, ok := q["db"]
-	if !ok || len(db) != 1 {
-		w.WriteHeader(404)
-		w.Write([]byte("database empty."))
-		return
-	}
 
-	if db[0] != hs.db {
-		w.WriteHeader(404)
-		w.Write([]byte("database not exist."))
-		return
+	if hs.db != "" {
+		db, ok := q["db"]
+		if !ok || len(db) != 1 {
+			w.WriteHeader(400)
+			w.Write([]byte("illegal database."))
+			return
+		}
+
+		if db[0] != hs.db {
+			w.WriteHeader(404)
+			w.Write([]byte("database not exist."))
+			return
+		}
 	}
 
 	p, err := ioutil.ReadAll(req.Body)

@@ -19,10 +19,10 @@ type CacheableAPI struct {
 	timer  *time.Timer
 }
 
-func NewCacheableAPI(api InfluxAPI, interval int) (ca *CacheableAPI) {
+func NewCacheableAPI(api InfluxAPI, cfg *BackendConfig) (ca *CacheableAPI) {
 	ca = &CacheableAPI{
 		Api:      api,
-		Interval: interval,
+		Interval: cfg.Interval,
 	}
 	return
 }

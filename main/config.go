@@ -14,14 +14,10 @@ var (
 	ErrConfig = errors.New("config parse error")
 )
 
-type Backend struct {
-	URL      string
-	DB       string
-	Interval int
-}
-
 type Config struct {
-	Upstream map[string]Backend
+	Addr     string
+	DB       string
+	Upstream map[string]backend.BackendConfig
 	KeyMap   map[string][]string
 }
 
@@ -43,6 +39,12 @@ func LoadConfig() (cfg Config, err error) {
 		return
 	}
 
+	for _, b := range cfg.Upstream {
+		if b.Timeout == 0 {
+			b.Timeout = 10
+		}
+	}
+
 	return
 }
 
@@ -50,16 +52,8 @@ func (c *Config) CreateUpstreamAPI() (hs *service.HttpService, err error) {
 	var upstream map[string]backend.InfluxAPI
 	upstream = make(map[string]backend.InfluxAPI, 1)
 
-	var hb *backend.HttpBackend
 	for name, bk := range c.Upstream {
-		hb, err = backend.NewHttpBackend(bk.URL, bk.DB)
-		if err != nil {
-			log.Printf("error: %s", err)
-			return
-		}
-
-		ca := backend.NewCacheableAPI(hb, bk.Interval)
-		upstream[name] = ca
+		upstream[name] = bk.CreateCacheableHttp()
 	}
 
 	var key2apis map[string][]backend.InfluxAPI
@@ -71,7 +65,7 @@ func (c *Config) CreateUpstreamAPI() (hs *service.HttpService, err error) {
 			api, ok := upstream[up]
 			if !ok {
 				err = ErrConfig
-				log.Fatalf("error: %s", err)
+				log.Fatal(err)
 				return
 			}
 			apis = append(apis, api)
@@ -80,6 +74,6 @@ func (c *Config) CreateUpstreamAPI() (hs *service.HttpService, err error) {
 	}
 
 	mi := backend.NewMultiAPI(key2apis)
-	hs = service.NewHttpService(mi, "wtf")
+	hs = service.NewHttpService(mi, c.DB)
 	return
 }

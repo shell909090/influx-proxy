@@ -11,6 +11,8 @@ var (
 )
 
 func init() {
+	log.SetFlags(log.LstdFlags | log.Lmicroseconds | log.Lshortfile)
+
 	flag.StringVar(&ConfigFile, "config", "/etc/influxdb/proxy.json", "config file")
 	flag.Parse()
 }
@@ -18,23 +20,21 @@ func init() {
 func main() {
 	cfg, err := LoadConfig()
 	if err != nil {
-		log.Print(err)
+		log.Print("load config failed: ", err)
 		return
 	}
 
 	h, err := cfg.CreateUpstreamAPI()
 	if err != nil {
-		log.Print(err)
 		return
 	}
 
 	mux := http.NewServeMux()
 	h.Register(mux)
-	for {
-		err = http.ListenAndServe(addr, handler)
-		if err != nil {
-			log.Error("%s", err.Error())
-			return
-		}
+
+	err = http.ListenAndServe(cfg.Addr, mux)
+	if err != nil {
+		log.Print(err)
+		return
 	}
 }

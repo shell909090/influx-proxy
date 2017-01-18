@@ -47,7 +47,7 @@ func (mi *MultiAPI) WriteOneRow(p []byte) (err error) {
 	}
 
 	mi.lock.RLock()
-	defer mi.lock.Unlock()
+	defer mi.lock.RUnlock()
 
 	apis, ok := mi.key2apis[key]
 	if !ok {
