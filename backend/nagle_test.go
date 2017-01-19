@@ -6,14 +6,9 @@ import (
 )
 
 func TestCache(t *testing.T) {
-	hb, err := NewHttpBackend("http://localhost:8086", "test")
-	if err != nil {
-		t.Errorf("error: %s", err)
-		return
-	}
-	ca := NewCacheableAPI(hb, 200)
+	ca := TESTCFG.CreateCacheableHttp()
 
-	err = ca.Write([]byte("cpu,host=server01,region=uswest value=1 1434055562000000000"))
+	err := ca.Write([]byte("cpu,host=server01,region=uswest value=1 1434055562000000000"))
 	if err != nil {
 		t.Errorf("error: %s", err)
 		return
@@ -25,5 +20,5 @@ func TestCache(t *testing.T) {
 		return
 	}
 
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(300 * time.Millisecond)
 }

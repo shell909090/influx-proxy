@@ -11,7 +11,7 @@ import (
 // TODO: redo
 
 type CacheableAPI struct {
-	Api      InfluxAPI
+	InfluxAPI
 	Interval int
 
 	lock   sync.Mutex
@@ -21,8 +21,8 @@ type CacheableAPI struct {
 
 func NewCacheableAPI(api InfluxAPI, cfg *BackendConfig) (ca *CacheableAPI) {
 	ca = &CacheableAPI{
-		Api:      api,
-		Interval: cfg.Interval,
+		InfluxAPI: api,
+		Interval:  cfg.Interval,
 	}
 	return
 }
@@ -41,7 +41,7 @@ func (ca *CacheableAPI) Flush() {
 
 	go func() {
 		// maybe blocked here, run in another goroutine
-		err := ca.Api.Write(p)
+		err := ca.InfluxAPI.Write(p)
 		if err != nil {
 			log.Printf("error: %s\n", err)
 			return

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"log"
+	"net/http"
 	"sync"
 )
 
@@ -27,6 +28,10 @@ func ScanKey(pointbuf []byte) (key string, err error) {
 	return "", io.EOF
 }
 
+func GetMeasurementFromInfluxQL(q string) (m string, err error) {
+	return
+}
+
 type MultiAPI struct {
 	lock     sync.RWMutex
 	key2apis map[string][]InfluxAPI
@@ -36,6 +41,25 @@ func NewMultiAPI(key2apis map[string][]InfluxAPI) (mi *MultiAPI) {
 	mi = &MultiAPI{
 		key2apis: key2apis,
 	}
+	return
+}
+
+func (mi *MultiAPI) Ping() (version string, err error) {
+	version = VERSION
+	return
+}
+
+// FIXME:
+func (mi *MultiAPI) Query(w http.ResponseWriter, req *http.Request) (err error) {
+	switch req.Method {
+	case "GET", "POST":
+	default:
+		w.WriteHeader(400)
+		w.Write([]byte("illegal method"))
+	}
+
+	// q := req.URL.Query().Get("q")
+
 	return
 }
 
@@ -51,7 +75,8 @@ func (mi *MultiAPI) WriteOneRow(p []byte) (err error) {
 
 	apis, ok := mi.key2apis[key]
 	if !ok {
-		// TODO: new key?
+		log.Printf("new measurement: %s\n", key)
+		// TODO: new measurement?
 		return
 	}
 

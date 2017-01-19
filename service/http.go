@@ -33,20 +33,20 @@ func (hs *HttpService) Register(mux *http.ServeMux) {
 
 func (hs *HttpService) HandlerPing(w http.ResponseWriter, req *http.Request) {
 	defer req.Body.Close()
-	w.Header().Add("X-Influxdb-Version", "1.1")
+	w.Header().Add("X-Influxdb-Version", backend.VERSION)
 	w.WriteHeader(204)
 	return
 }
 
 func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
 	defer req.Body.Close()
-	w.Header().Add("X-Influxdb-Version", "1.1")
+	w.Header().Add("X-Influxdb-Version", backend.VERSION)
 	return
 }
 
 func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
 	defer req.Body.Close()
-	w.Header().Add("X-Influxdb-Version", "1.1")
+	w.Header().Add("X-Influxdb-Version", backend.VERSION)
 
 	if req.Method != "POST" {
 		w.WriteHeader(405)

@@ -47,6 +47,61 @@ func NewHttpBackend(cfg *BackendConfig) (hb *HttpBackend) {
 }
 
 func (hb *HttpBackend) Ping() (version string, err error) {
+	resp, err := hb.client.Get(hb.URL + "/ping")
+	defer resp.Body.Close()
+	if err != nil {
+		log.Print("http error: ", err)
+		return
+	}
+
+	version = resp.Header.Get("X-Influxdb-Version")
+
+	log.Print("ping status code: ", resp.StatusCode)
+	if resp.StatusCode == 204 {
+		return
+	}
+
+	respbuf, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Print("readall error: ", err)
+		return
+	}
+	log.Printf("error response: %s\n", respbuf)
+	return
+}
+
+func copyHeader(dst, src http.Header) {
+	for k, vv := range src {
+		for _, v := range vv {
+			dst.Add(k, v)
+		}
+	}
+}
+
+func (hb *HttpBackend) Query(w http.ResponseWriter, req *http.Request) (err error) {
+	q := req.URL.Query()
+	q.Set("db", hb.DB)
+	req.URL, err = url.Parse(hb.URL + "/query?" + q.Encode())
+	if err != nil {
+		log.Print("internal url parse error: ", err)
+		w.WriteHeader(400)
+		w.Write([]byte("internal url parse error"))
+		return
+	}
+
+	resp, err := hb.client_query.Do(req)
+	defer resp.Body.Close()
+
+	copyHeader(w.Header(), resp.Header)
+	w.WriteHeader(resp.StatusCode)
+
+	_, err = io.Copy(w, resp.Body)
+	if err != nil {
+		log.Print("copy body error: ", err)
+		w.WriteHeader(400)
+		w.Write([]byte("copy body error"))
+		return
+	}
 	return
 }
 
@@ -69,11 +124,11 @@ func (hb *HttpBackend) Write(p []byte) (err error) {
 	resp, err := hb.client.Do(req)
 	defer resp.Body.Close()
 	if err != nil {
-		log.Printf("error: %s\n", err)
+		log.Print("http error: ", err)
 		return
 	}
 
-	log.Print("status code: ", resp.StatusCode)
+	log.Print("write status code: ", resp.StatusCode)
 	if resp.StatusCode == 204 {
 		return
 	}

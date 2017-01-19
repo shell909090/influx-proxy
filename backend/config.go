@@ -1,5 +1,9 @@
 package backend
 
+const (
+	VERSION = "1.1"
+)
+
 type BackendConfig struct {
 	URL          string
 	DB           string
