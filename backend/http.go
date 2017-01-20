@@ -45,7 +45,7 @@ func NewHttpBackend(cfg *BackendConfig) (hb *HttpBackend) {
 		client: &http.Client{
 			Timeout: time.Second * time.Duration(cfg.Timeout),
 		},
-		// FIXME: query timeout?
+		// TODO: query timeout?
 		// client_query: &http.Client{
 		// 	Timeout: time.Second * time.Duration(cfg.TimeoutQuery),
 		// },

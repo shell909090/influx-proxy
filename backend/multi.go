@@ -101,14 +101,16 @@ func (mi *MultiAPI) WriteOneRow(p []byte) (err error) {
 		return
 	}
 
-	for _, api := range apis {
-		// TODO: blocked?
-		err = api.Write(p)
-		if err != nil {
-			// critical
-			return
+	go func() {
+		// don't block here
+		for _, api := range apis {
+			err = api.Write(p)
+			if err != nil {
+				// critical
+				return
+			}
 		}
-	}
+	}()
 
 	return
 }

@@ -72,7 +72,6 @@ func (ca *CacheableAPI) Write(p []byte) (err error) {
 		return
 	}
 
-	// TODO: size > max_size, trigger Flush.
 	if ca.timer == nil {
 		ca.timer = time.AfterFunc(
 			time.Millisecond*time.Duration(ca.Interval),
