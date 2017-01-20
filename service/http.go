@@ -41,6 +41,29 @@ func (hs *HttpService) HandlerPing(w http.ResponseWriter, req *http.Request) {
 func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
 	defer req.Body.Close()
 	w.Header().Add("X-Influxdb-Version", backend.VERSION)
+
+	q := req.URL.Query()
+
+	if hs.db != "" {
+		db, ok := q["db"]
+		if !ok || len(db) != 1 {
+			w.WriteHeader(400)
+			w.Write([]byte("illegal database."))
+			return
+		}
+
+		if db[0] != hs.db {
+			w.WriteHeader(404)
+			w.Write([]byte("database not exist."))
+			return
+		}
+	}
+
+	err := hs.api.Query(w, req)
+	if err != nil {
+		log.Printf("query error: %s\n", err)
+		return
+	}
 	return
 }
 
@@ -79,8 +102,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
 	}
 
 	err = hs.api.Write(p)
-	switch err {
-	case nil:
+	if err == nil {
 		w.WriteHeader(204)
 	}
 	return

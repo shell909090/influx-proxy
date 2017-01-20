@@ -3,12 +3,20 @@ package backend
 import (
 	"bytes"
 	"compress/gzip"
+	"errors"
 	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
 	"time"
+)
+
+var (
+	ErrBadRequest = errors.New("Bad Request")
+	ErrNotFound   = errors.New("Not Found")
+	ErrInternal   = errors.New("Internal Error")
+	ErrUnknown    = errors.New("Unknown Error")
 )
 
 func Compress(buf *bytes.Buffer, p []byte) (err error) {
@@ -26,10 +34,10 @@ func Compress(buf *bytes.Buffer, p []byte) (err error) {
 }
 
 type HttpBackend struct {
-	client       *http.Client
-	client_query *http.Client
-	URL          string
-	DB           string
+	client    *http.Client
+	transport http.Transport
+	URL       string
+	DB        string
 }
 
 func NewHttpBackend(cfg *BackendConfig) (hb *HttpBackend) {
@@ -37,9 +45,10 @@ func NewHttpBackend(cfg *BackendConfig) (hb *HttpBackend) {
 		client: &http.Client{
 			Timeout: time.Second * time.Duration(cfg.Timeout),
 		},
-		client_query: &http.Client{
-			Timeout: time.Second * time.Duration(cfg.TimeoutQuery),
-		},
+		// FIXME: query timeout?
+		// client_query: &http.Client{
+		// 	Timeout: time.Second * time.Duration(cfg.TimeoutQuery),
+		// },
 		URL: cfg.URL,
 		DB:  cfg.DB,
 	}
@@ -78,6 +87,7 @@ func copyHeader(dst, src http.Header) {
 	}
 }
 
+// TODO: accept zip?
 func (hb *HttpBackend) Query(w http.ResponseWriter, req *http.Request) (err error) {
 	q := req.URL.Query()
 	q.Set("db", hb.DB)
@@ -89,7 +99,13 @@ func (hb *HttpBackend) Query(w http.ResponseWriter, req *http.Request) (err erro
 		return
 	}
 
-	resp, err := hb.client_query.Do(req)
+	resp, err := hb.transport.RoundTrip(req)
+	if err != nil {
+		log.Print("query error: ", err)
+		w.WriteHeader(400)
+		w.Write([]byte("query error"))
+		return
+	}
 	defer resp.Body.Close()
 
 	copyHeader(w.Header(), resp.Header)

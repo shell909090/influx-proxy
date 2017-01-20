@@ -28,10 +28,6 @@ func ScanKey(pointbuf []byte) (key string, err error) {
 	return "", io.EOF
 }
 
-func GetMeasurementFromInfluxQL(q string) (m string, err error) {
-	return
-}
-
 type MultiAPI struct {
 	lock     sync.RWMutex
 	key2apis map[string][]InfluxAPI
@@ -49,7 +45,13 @@ func (mi *MultiAPI) Ping() (version string, err error) {
 	return
 }
 
-// FIXME:
+func (mi *MultiAPI) getapi(key string) (apis []InfluxAPI, ok bool) {
+	mi.lock.RLock()
+	defer mi.lock.RUnlock()
+	apis, ok = mi.key2apis[key]
+	return
+}
+
 func (mi *MultiAPI) Query(w http.ResponseWriter, req *http.Request) (err error) {
 	switch req.Method {
 	case "GET", "POST":
@@ -58,7 +60,29 @@ func (mi *MultiAPI) Query(w http.ResponseWriter, req *http.Request) (err error) 
 		w.Write([]byte("illegal method"))
 	}
 
-	// q := req.URL.Query().Get("q")
+	q := req.URL.Query().Get("q")
+	key, err := GetMeasurementFromInfluxQL(q)
+	if err != nil {
+		log.Printf("can't get measurement: %s\n", q)
+		w.WriteHeader(400)
+		w.Write([]byte("can't get measurement"))
+		return
+	}
+
+	apis, ok := mi.getapi(key)
+	if !ok {
+		log.Printf("unknown measurement: %s\n", key)
+		w.WriteHeader(400)
+		w.Write([]byte("unknown measurement"))
+		return
+	}
+
+	for _, api := range apis {
+		err = api.Query(w, req)
+		if err == nil {
+			return
+		}
+	}
 
 	return
 }
@@ -70,10 +94,7 @@ func (mi *MultiAPI) WriteOneRow(p []byte) (err error) {
 		return
 	}
 
-	mi.lock.RLock()
-	defer mi.lock.RUnlock()
-
-	apis, ok := mi.key2apis[key]
+	apis, ok := mi.getapi(key)
 	if !ok {
 		log.Printf("new measurement: %s\n", key)
 		// TODO: new measurement?

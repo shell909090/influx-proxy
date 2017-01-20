@@ -121,13 +121,8 @@ func VerifyResults(t *testing.T, buf []byte) {
 	}
 	rrr := rr[0]
 
-	name, ok := rrr["name"]
-	if !ok {
-		t.Errorf("no name")
-		return
-	}
-	if name != "cpu" {
-		t.Errorf("wrong name")
+	if _, ok = rrr["series"]; !ok {
+		t.Errorf("no series")
 		return
 	}
 
