@@ -1,6 +1,11 @@
 package backend
 
-import "testing"
+import (
+	"bytes"
+	"fmt"
+	"io"
+	"testing"
+)
 
 func TestScanKey(t *testing.T) {
 	var points []string = []string{
@@ -31,4 +36,35 @@ func TestScanKey(t *testing.T) {
 	}
 
 	return
+}
+
+func BenchmarkScanKey(b *testing.B) {
+	buf := &bytes.Buffer{}
+	for i := 0; i < b.N; i++ {
+		fmt.Fprintf(buf, "%s%d,a=%d,b=2 c=3 10000\n", "name", i, i)
+	}
+	b.ResetTimer()
+
+	var err error
+	var line []byte
+	for {
+		line, err = buf.ReadBytes('\n')
+		switch err {
+		default:
+			b.Error(err)
+			return
+		case io.EOF, nil:
+		}
+
+		if len(line) == 0 {
+			break
+		}
+
+		line = bytes.TrimRight(line, " \t\r\n")
+		_, err = ScanKey(line)
+		if err != nil {
+			b.Error(err)
+			return
+		}
+	}
 }

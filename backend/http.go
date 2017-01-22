@@ -87,7 +87,8 @@ func copyHeader(dst, src http.Header) {
 	}
 }
 
-// TODO: accept zip?
+// Don't setup Accept-Encoding: gzip. Let real client do so.
+// If real client don't support gzip and we setted, it will be a mistake.
 func (hb *HttpBackend) Query(w http.ResponseWriter, req *http.Request) (err error) {
 	q := req.URL.Query()
 	q.Set("db", hb.DB)

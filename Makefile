@@ -13,8 +13,9 @@ build:
 
 test:
 	go test -v github.com/shell909090/influx-proxy/backend
-	# go test github.com/shell909090/influx-proxy/service
-	# go test github.com/shell909090/influx-proxy/main
+
+bench:
+	go test -bench=. github.com/shell909090/influx-proxy/backend
 
 clean:
 	rm -rf bin

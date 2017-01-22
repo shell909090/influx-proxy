@@ -86,3 +86,18 @@ func checkPoint(t *testing.T, q string, m string) {
 		return
 	}
 }
+
+func BenchmarkInfluxQL(b *testing.B) {
+	q := "SELECT mean(\"value\") FROM \"cpu\" WHERE \"region\" = 'uswest' GROUP BY time(10m) fill(0)"
+	for i := 0; i < b.N; i++ {
+		qm, err := GetMeasurementFromInfluxQL(q)
+		if err != nil {
+			b.Errorf("error: %s", err)
+			return
+		}
+		if qm != "cpu" {
+			b.Errorf("measurement wrong: %s != %s", qm, "cpu")
+			return
+		}
+	}
+}

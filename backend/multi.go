@@ -28,27 +28,37 @@ func ScanKey(pointbuf []byte) (key string, err error) {
 	return "", io.EOF
 }
 
+// faster then bytes.TrimRight, not sure why.
+func TrimRight(p []byte, s []byte) (r []byte) {
+	r = p
+	if len(r) == 0 {
+		return
+	}
+
+	i := len(r) - 1
+	for ; bytes.IndexByte(s, r[i]) != -1; i-- {
+	}
+	return r[0 : i+1]
+}
+
 type MultiAPI struct {
 	lock     sync.RWMutex
+	queue    chan []byte
 	key2apis map[string][]InfluxAPI
 }
 
 func NewMultiAPI(key2apis map[string][]InfluxAPI) (mi *MultiAPI) {
 	mi = &MultiAPI{
+		queue:    make(chan []byte, 32),
 		key2apis: key2apis,
 	}
+	// How many workers?
+	go mi.worker()
 	return
 }
 
 func (mi *MultiAPI) Ping() (version string, err error) {
 	version = VERSION
-	return
-}
-
-func (mi *MultiAPI) getapi(key string) (apis []InfluxAPI, ok bool) {
-	mi.lock.RLock()
-	defer mi.lock.RUnlock()
-	apis, ok = mi.key2apis[key]
 	return
 }
 
@@ -69,7 +79,9 @@ func (mi *MultiAPI) Query(w http.ResponseWriter, req *http.Request) (err error) 
 		return
 	}
 
-	apis, ok := mi.getapi(key)
+	mi.lock.RLock()
+	apis, ok := mi.key2apis[key]
+	mi.lock.RUnlock()
 	if !ok {
 		log.Printf("unknown measurement: %s\n", key)
 		w.WriteHeader(400)
@@ -87,38 +99,13 @@ func (mi *MultiAPI) Query(w http.ResponseWriter, req *http.Request) (err error) 
 	return
 }
 
-func (mi *MultiAPI) WriteOneRow(p []byte) (err error) {
-	key, err := ScanKey(p)
-	if err != nil {
-		log.Printf("error: %s\n", err)
-		return
-	}
-
-	apis, ok := mi.getapi(key)
-	if !ok {
-		log.Printf("new measurement: %s\n", key)
-		// TODO: new measurement?
-		return
-	}
-
-	go func() {
-		// don't block here
-		for _, api := range apis {
-			err = api.Write(p)
-			if err != nil {
-				// critical
-				return
-			}
-		}
-	}()
-
-	return
-}
-
-func (mi *MultiAPI) Write(p []byte) (err error) {
+func (mi *MultiAPI) WriteRows(p []byte) (err error) {
+	mi.lock.RLock()
+	defer mi.lock.RUnlock()
 	buf := bytes.NewBuffer(p)
 
 	var line []byte
+	var key string
 	for {
 		line, err = buf.ReadBytes('\n')
 		switch err {
@@ -132,13 +119,52 @@ func (mi *MultiAPI) Write(p []byte) (err error) {
 			break
 		}
 
+		// maybe trim?
 		line = bytes.TrimRight(line, " \t\r\n")
-		err = mi.WriteOneRow(line)
+
+		// empty line, ignore it.
+		if len(line) == 0 {
+			continue
+		}
+
+		key, err = ScanKey(p)
 		if err != nil {
-			log.Printf("error: %s\n", err)
+			log.Printf("scan key error: %s\n", err)
+			// don't stop, try next line.
+			continue
+		}
+
+		apis, ok := mi.key2apis[key]
+		if !ok {
+			log.Printf("new measurement: %s\n", key)
+			// TODO: new measurement?
 			return
+		}
+
+		// don't block here for a lont time, we just have one worker.
+		for _, api := range apis {
+			err = api.Write(p)
+			if err != nil {
+				// critical
+				return
+			}
 		}
 	}
 
+	return
+}
+
+func (mi *MultiAPI) worker() {
+	for {
+		p := <-mi.queue
+		err := mi.WriteRows(p)
+		if err != nil {
+			log.Printf("write row: %s", err)
+		}
+	}
+}
+
+func (mi *MultiAPI) Write(p []byte) (err error) {
+	mi.queue <- p
 	return
 }

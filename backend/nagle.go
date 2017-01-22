@@ -66,10 +66,12 @@ func (ca *CacheableAPI) Write(p []byte) (err error) {
 		return
 	}
 
-	err = ca.buffer.WriteByte('\n')
-	if err != nil {
-		log.Printf("error: %s\n", err)
-		return
+	if p[len(p)-1] != '\n' {
+		err = ca.buffer.WriteByte('\n')
+		if err != nil {
+			log.Printf("error: %s\n", err)
+			return
+		}
 	}
 
 	if ca.timer == nil {
