@@ -6,6 +6,8 @@ import (
 	"log"
 	"net/http"
 	"sync"
+
+	"gopkg.in/redis.v5"
 )
 
 func ScanKey(pointbuf []byte) (key string, err error) {
@@ -43,17 +45,102 @@ func TrimRight(p []byte, s []byte) (r []byte) {
 
 type MultiAPI struct {
 	lock     sync.RWMutex
+	Zone     string
+	client   *redis.Client
 	queue    chan []byte
+	upstream map[string]InfluxAPI
 	key2apis map[string][]InfluxAPI
 }
 
-func NewMultiAPI(key2apis map[string][]InfluxAPI) (mi *MultiAPI) {
+func NewMultiAPI(client *redis.Client, zone string) (mi *MultiAPI) {
 	mi = &MultiAPI{
-		queue:    make(chan []byte, 32),
-		key2apis: key2apis,
+		Zone:   zone,
+		client: client,
+		queue:  make(chan []byte, 32),
 	}
 	// How many workers?
 	go mi.worker()
+	return
+}
+
+func (mi *MultiAPI) loadUpstream() (err error) {
+	mi.upstream = make(map[string]InfluxAPI, 1)
+
+	names, err := mi.client.Keys("b:*").Result()
+	if err != nil {
+		log.Printf("read redis error: %s", err)
+		return
+	}
+
+	var cfg *BackendConfig
+	for _, name := range names {
+		name = name[2:len(name)]
+		cfg, err = LoadConfigFromRedis(mi.client, name)
+		if err != nil {
+			return
+		}
+		mi.upstream[name] = cfg.CreateCacheableHttp(name)
+	}
+	log.Printf("%d upstreams loaded.", len(mi.upstream))
+	return
+}
+
+func (mi *MultiAPI) loadKeyMap() (key2apis map[string][]InfluxAPI, err error) {
+	key2apis = make(map[string][]InfluxAPI, 1)
+
+	measurements, err := mi.client.Keys("m:*").Result()
+	if err != nil {
+		log.Printf("read redis error: %s", err)
+		return
+	}
+
+	var length int64
+	var upstreams []string
+
+	for _, measurement := range measurements {
+		measurement = measurement[2:len(measurement)]
+
+		length, err = mi.client.LLen(measurement).Result()
+		if err != nil {
+			return
+		}
+		upstreams, err = mi.client.LRange(measurement, 0, length).Result()
+		if err != nil {
+			return
+		}
+
+		var apis []InfluxAPI
+		for _, up := range upstreams {
+			api, ok := mi.upstream[up]
+			if !ok {
+				err = ErrIllegalConfig
+				log.Fatal(err)
+				return
+			}
+			apis = append(apis, api)
+		}
+		key2apis[measurement] = apis
+	}
+	log.Printf("%d measurements loaded.", len(key2apis))
+	return
+}
+
+func (mi *MultiAPI) LoadConfig() (err error) {
+	err = mi.loadUpstream()
+	if err != nil {
+		return
+	}
+
+	key2apis, err := mi.loadKeyMap()
+	if err != nil {
+		return
+	}
+
+	mi.lock.Lock()
+	defer mi.lock.Unlock()
+
+	mi.key2apis = key2apis
+	// FIXME: free?
 	return
 }
 
@@ -90,6 +177,10 @@ func (mi *MultiAPI) Query(w http.ResponseWriter, req *http.Request) (err error) 
 	}
 
 	for _, api := range apis {
+		// FIXME:
+		// if !api.Active {
+		// 	continue
+		// }
 		err = api.Query(w, req)
 		if err == nil {
 			return

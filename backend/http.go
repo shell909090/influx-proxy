@@ -36,8 +36,11 @@ func Compress(buf *bytes.Buffer, p []byte) (err error) {
 type HttpBackend struct {
 	client    *http.Client
 	transport http.Transport
+	Timeout   int
 	URL       string
 	DB        string
+	Zone      string
+	Active    bool
 }
 
 func NewHttpBackend(cfg *BackendConfig) (hb *HttpBackend) {
@@ -49,10 +52,23 @@ func NewHttpBackend(cfg *BackendConfig) (hb *HttpBackend) {
 		// client_query: &http.Client{
 		// 	Timeout: time.Second * time.Duration(cfg.TimeoutQuery),
 		// },
-		URL: cfg.URL,
-		DB:  cfg.DB,
+		Timeout: cfg.Timeout,
+		URL:     cfg.URL,
+		DB:      cfg.DB,
+		Zone:    cfg.Zone,
+		Active:  true,
 	}
+	go hb.CheckActive()
 	return
+}
+
+func (hb *HttpBackend) CheckActive() {
+	var err error
+	for {
+		_, err = hb.Ping()
+		hb.Active = (err == nil)
+		time.Sleep(time.Second * time.Duration(hb.Timeout))
+	}
 }
 
 func (hb *HttpBackend) Ping() (version string, err error) {
@@ -105,6 +121,7 @@ func (hb *HttpBackend) Query(w http.ResponseWriter, req *http.Request) (err erro
 		log.Print("query error: ", err)
 		w.WriteHeader(400)
 		w.Write([]byte("query error"))
+		hb.Active = false
 		return
 	}
 	defer resp.Body.Close()
@@ -142,6 +159,7 @@ func (hb *HttpBackend) Write(p []byte) (err error) {
 	defer resp.Body.Close()
 	if err != nil {
 		log.Print("http error: ", err)
+		hb.Active = false
 		return
 	}
 
