@@ -10,7 +10,7 @@ import (
 
 // TODO: redo
 
-type CacheableAPI struct {
+type Backends struct {
 	InfluxAPI
 	Interval int
 
@@ -19,30 +19,30 @@ type CacheableAPI struct {
 	timer  *time.Timer
 }
 
-func NewCacheableAPI(api InfluxAPI, cfg *BackendConfig) (ca *CacheableAPI) {
-	ca = &CacheableAPI{
-		InfluxAPI: api,
+func NewBackends(cfg *BackendConfig, name string) (bs *Backends) {
+	bs = &Backends{
+		InfluxAPI: NewHttpBackend(cfg),
 		Interval:  cfg.Interval,
 	}
 	return
 }
 
 // TODO: move compress here
-func (ca *CacheableAPI) Flush() {
-	ca.lock.Lock()
-	defer ca.lock.Unlock()
+func (bs *Backends) Flush() {
+	bs.lock.Lock()
+	defer bs.lock.Unlock()
 
-	p := ca.buffer.Bytes()
+	p := bs.buffer.Bytes()
 	if len(p) == 0 {
 		// trigger twice.
 		return
 	}
-	ca.buffer.Reset()
-	ca.timer = nil
+	bs.buffer.Reset()
+	bs.timer = nil
 
 	go func() {
 		// maybe blocked here, run in another goroutine
-		err := ca.InfluxAPI.Write(p)
+		err := bs.InfluxAPI.Write(p)
 		if err != nil {
 			log.Printf("error: %s\n", err)
 			return
@@ -53,11 +53,11 @@ func (ca *CacheableAPI) Flush() {
 }
 
 // TODO: add counter
-func (ca *CacheableAPI) Write(p []byte) (err error) {
-	ca.lock.Lock()
-	defer ca.lock.Unlock()
+func (bs *Backends) Write(p []byte) (err error) {
+	bs.lock.Lock()
+	defer bs.lock.Unlock()
 
-	n, err := ca.buffer.Write(p)
+	n, err := bs.buffer.Write(p)
 	if err != nil {
 		log.Printf("error: %s\n", err)
 		return
@@ -69,17 +69,17 @@ func (ca *CacheableAPI) Write(p []byte) (err error) {
 	}
 
 	if p[len(p)-1] != '\n' {
-		err = ca.buffer.WriteByte('\n')
+		err = bs.buffer.WriteByte('\n')
 		if err != nil {
 			log.Printf("error: %s\n", err)
 			return
 		}
 	}
 
-	if ca.timer == nil {
-		ca.timer = time.AfterFunc(
-			time.Millisecond*time.Duration(ca.Interval),
-			ca.Flush)
+	if bs.timer == nil {
+		bs.timer = time.AfterFunc(
+			time.Millisecond*time.Duration(bs.Interval),
+			bs.Flush)
 	}
 
 	return

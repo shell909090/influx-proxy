@@ -84,9 +84,9 @@ func main() {
 		return
 	}
 
-	m := backend.NewMultiAPI(client, nodecfg.Zone)
-	m.LoadConfig()
-	hs := service.NewHttpService(m, nodecfg.DB)
+	ic := backend.NewInfluxCluster(client, nodecfg.Zone)
+	ic.LoadConfig()
+	hs := service.NewHttpService(ic, nodecfg.DB)
 
 	mux := http.NewServeMux()
 	hs.Register(mux)

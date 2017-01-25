@@ -41,16 +41,15 @@ type HttpBackend struct {
 	DB        string
 	Zone      string
 	Active    bool
+	running   bool
 }
-
-// TODO: active check
 
 func NewHttpBackend(cfg *BackendConfig) (hb *HttpBackend) {
 	hb = &HttpBackend{
 		client: &http.Client{
 			Timeout: time.Second * time.Duration(cfg.Timeout),
 		},
-		// TODO: query timeout?
+		// TODO: query timeout? use req.Cancel
 		// client_query: &http.Client{
 		// 	Timeout: time.Second * time.Duration(cfg.TimeoutQuery),
 		// },
@@ -59,6 +58,7 @@ func NewHttpBackend(cfg *BackendConfig) (hb *HttpBackend) {
 		DB:      cfg.DB,
 		Zone:    cfg.Zone,
 		Active:  true,
+		running: true,
 	}
 	go hb.CheckActive()
 	return
@@ -66,11 +66,15 @@ func NewHttpBackend(cfg *BackendConfig) (hb *HttpBackend) {
 
 func (hb *HttpBackend) CheckActive() {
 	var err error
-	for {
+	for hb.running {
 		_, err = hb.Ping()
 		hb.Active = (err == nil)
 		time.Sleep(time.Second * time.Duration(hb.Timeout))
 	}
+}
+
+func (hb *HttpBackend) IsActive() bool {
+	return hb.Active
 }
 
 func (hb *HttpBackend) Ping() (version string, err error) {
@@ -187,5 +191,10 @@ func (hb *HttpBackend) Write(p []byte) (err error) {
 	default:
 		err = ErrUnknown
 	}
+	return
+}
+
+func (hb *HttpBackend) Close() (err error) {
+	hb.running = false
 	return
 }

@@ -43,30 +43,33 @@ func TrimRight(p []byte, s []byte) (r []byte) {
 	return r[0 : i+1]
 }
 
-type MultiAPI struct {
+type InfluxCluster struct {
 	lock     sync.RWMutex
 	Zone     string
 	client   *redis.Client
 	queue    chan []byte
-	upstream map[string]InfluxAPI
-	key2apis map[string][]InfluxAPI
+	running  bool
+	backends map[string]InfluxAPI
+	// measurements to backends
+	m2bs     map[string][]InfluxAPI
 }
 
-func NewMultiAPI(client *redis.Client, zone string) (mi *MultiAPI) {
-	mi = &MultiAPI{
-		Zone:   zone,
-		client: client,
-		queue:  make(chan []byte, 32),
+func NewInfluxCluster(client *redis.Client, zone string) (ic *InfluxCluster) {
+	ic = &InfluxCluster{
+		Zone:    zone,
+		client:  client,
+		queue:   make(chan []byte, 32),
+		running: true,
 	}
 	// How many workers?
-	go mi.worker()
+	go ic.worker()
 	return
 }
 
-func (mi *MultiAPI) loadUpstream() (err error) {
-	mi.upstream = make(map[string]InfluxAPI, 1)
+func (ic *InfluxCluster) loadBackends() (backends map[string]InfluxAPI, err error) {
+	backends = make(map[string]InfluxAPI)
 
-	names, err := mi.client.Keys("b:*").Result()
+	names, err := ic.client.Keys("b:*").Result()
 	if err != nil {
 		log.Printf("read redis error: %s", err)
 		return
@@ -75,89 +78,104 @@ func (mi *MultiAPI) loadUpstream() (err error) {
 	var cfg *BackendConfig
 	for _, name := range names {
 		name = name[2:len(name)]
-		cfg, err = LoadConfigFromRedis(mi.client, name)
+		cfg, err = LoadConfigFromRedis(ic.client, name)
 		if err != nil {
 			return
 		}
-		mi.upstream[name] = cfg.CreateCacheableHttp(name)
+		backends[name] = NewBackends(cfg, name)
 	}
-	log.Printf("%d upstreams loaded.", len(mi.upstream))
+	log.Printf("%d backends loaded.", len(backends))
 	return
 }
 
-func (mi *MultiAPI) loadKeyMap() (key2apis map[string][]InfluxAPI, err error) {
-	key2apis = make(map[string][]InfluxAPI, 1)
+func (ic *InfluxCluster) loadMeasurements(backends map[string]InfluxAPI) (m2bs map[string][]InfluxAPI, err error) {
+	m2bs = make(map[string][]InfluxAPI)
 
-	measurements, err := mi.client.Keys("m:*").Result()
+	m_names, err := ic.client.Keys("m:*").Result()
 	if err != nil {
 		log.Printf("read redis error: %s", err)
 		return
 	}
 
 	var length int64
-	var upstreams []string
+	var bs_names []string
 
-	for _, measurement := range measurements {
-		measurement = measurement[2:len(measurement)]
+	for _, m_name := range m_names {
+		m_name = m_name[2:len(m_name)]
 
-		length, err = mi.client.LLen(measurement).Result()
+		length, err = ic.client.LLen(m_name).Result()
 		if err != nil {
 			return
 		}
-		upstreams, err = mi.client.LRange(measurement, 0, length).Result()
+		bs_names, err = ic.client.LRange(m_name, 0, length).Result()
 		if err != nil {
 			return
 		}
 
-		var apis []InfluxAPI
-		for _, up := range upstreams {
-			api, ok := mi.upstream[up]
+		var bss []InfluxAPI
+		for _, bs_name := range bs_names {
+			bs, ok := backends[bs_name]
 			if !ok {
 				err = ErrIllegalConfig
 				log.Fatal(err)
 				return
 			}
-			apis = append(apis, api)
+			bss = append(bss, bs)
 		}
-		key2apis[measurement] = apis
+		m2bs[m_name] = bss
 	}
-	log.Printf("%d measurements loaded.", len(key2apis))
+	log.Printf("%d measurements loaded.", len(m2bs))
 	return
 }
 
-func (mi *MultiAPI) LoadConfig() (err error) {
-	err = mi.loadUpstream()
+func (ic *InfluxCluster) LoadConfig() (err error) {
+	backends, err := ic.loadBackends()
 	if err != nil {
 		return
 	}
 
-	key2apis, err := mi.loadKeyMap()
+	m2bs, err := ic.loadMeasurements(backends)
 	if err != nil {
 		return
 	}
 
-	mi.lock.Lock()
-	defer mi.lock.Unlock()
+	ic.lock.Lock()
+	orig_backends := ic.backends
+	ic.backends = backends
+	ic.m2bs = m2bs
+	ic.lock.Unlock()
 
-	mi.key2apis = key2apis
-	// FIXME: free?
+	for name, bs := range orig_backends {
+		err = bs.Close()
+		if err != nil {
+			log.Printf("fail in close backend %s", name)
+		}
+	}
 	return
 }
 
-func (mi *MultiAPI) Ping() (version string, err error) {
+func (ic *InfluxCluster) Ping() (version string, err error) {
 	version = VERSION
 	return
 }
 
-func (mi *MultiAPI) Query(w http.ResponseWriter, req *http.Request) (err error) {
+func (ic *InfluxCluster) Query(w http.ResponseWriter, req *http.Request) (err error) {
 	switch req.Method {
 	case "GET", "POST":
 	default:
 		w.WriteHeader(400)
 		w.Write([]byte("illegal method"))
+		return
 	}
 
+	// TODO: all query in q?
 	q := req.URL.Query().Get("q")
+	if q == "" {
+		w.WriteHeader(400)
+		w.Write([]byte("empty query"))
+		return
+	}
+
 	key, err := GetMeasurementFromInfluxQL(q)
 	if err != nil {
 		log.Printf("can't get measurement: %s\n", q)
@@ -166,9 +184,9 @@ func (mi *MultiAPI) Query(w http.ResponseWriter, req *http.Request) (err error) 
 		return
 	}
 
-	mi.lock.RLock()
-	apis, ok := mi.key2apis[key]
-	mi.lock.RUnlock()
+	ic.lock.RLock()
+	apis, ok := ic.m2bs[key]
+	ic.lock.RUnlock()
 	if !ok {
 		log.Printf("unknown measurement: %s\n", key)
 		w.WriteHeader(400)
@@ -176,6 +194,7 @@ func (mi *MultiAPI) Query(w http.ResponseWriter, req *http.Request) (err error) 
 		return
 	}
 
+	// same zone first, other zone. pass non-active.
 	for _, api := range apis {
 		// FIXME:
 		// if !api.Active {
@@ -190,9 +209,9 @@ func (mi *MultiAPI) Query(w http.ResponseWriter, req *http.Request) (err error) 
 	return
 }
 
-func (mi *MultiAPI) WriteRows(p []byte) (err error) {
-	mi.lock.RLock()
-	defer mi.lock.RUnlock()
+func (ic *InfluxCluster) WriteRows(p []byte) (err error) {
+	ic.lock.RLock()
+	defer ic.lock.RUnlock()
 	buf := bytes.NewBuffer(p)
 
 	var line []byte
@@ -225,7 +244,7 @@ func (mi *MultiAPI) WriteRows(p []byte) (err error) {
 			continue
 		}
 
-		apis, ok := mi.key2apis[key]
+		bs, ok := ic.m2bs[key]
 		if !ok {
 			log.Printf("new measurement: %s\n", key)
 			// TODO: new measurement?
@@ -233,8 +252,8 @@ func (mi *MultiAPI) WriteRows(p []byte) (err error) {
 		}
 
 		// don't block here for a lont time, we just have one worker.
-		for _, api := range apis {
-			err = api.Write(p)
+		for _, b := range bs {
+			err = b.Write(p)
 			if err != nil {
 				// critical
 				return
@@ -245,17 +264,30 @@ func (mi *MultiAPI) WriteRows(p []byte) (err error) {
 	return
 }
 
-func (mi *MultiAPI) worker() {
-	for {
-		p := <-mi.queue
-		err := mi.WriteRows(p)
+func (ic *InfluxCluster) worker() {
+	for ic.running {
+		p := <-ic.queue
+		err := ic.WriteRows(p)
 		if err != nil {
 			log.Printf("write row: %s", err)
 		}
 	}
 }
 
-func (mi *MultiAPI) Write(p []byte) (err error) {
-	mi.queue <- p
+func (ic *InfluxCluster) Write(p []byte) (err error) {
+	// Sometimes, 'if running' go first, then 'running = false' and 'close queue'.
+	// So 'send queue' will panic.
+	// Thanks god, when this really happen, program should stop soon.
+	// In the other hand, why use call write after close?
+	if !ic.running {
+		return ErrClosed
+	}
+	ic.queue <- p
+	return
+}
+
+func (ic *InfluxCluster) Close () (err error) {
+	ic.running = false
+	close(ic.queue)
 	return
 }

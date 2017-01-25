@@ -6,15 +6,15 @@ import (
 )
 
 func TestCache(t *testing.T) {
-	ca := TESTCFG.CreateCacheableHttp()
+	bs := NewBackends(TESTCFG)
 
-	err := ca.Write([]byte("cpu,host=server01,region=uswest value=1 1434055562000000000"))
+	err := bs.Write([]byte("cpu,host=server01,region=uswest value=1 1434055562000000000"))
 	if err != nil {
 		t.Errorf("error: %s", err)
 		return
 	}
 
-	err = ca.Write([]byte("cpu value=3,value2=4 1434055562000010000"))
+	err = bs.Write([]byte("cpu value=3,value2=4 1434055562000010000"))
 	if err != nil {
 		t.Errorf("error: %s", err)
 		return

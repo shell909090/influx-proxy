@@ -13,7 +13,7 @@ import getopt
 import redis
 
 
-UPSTREAMS = {
+BACKENDS = {
     'local': {
         'url': 'http://localhost:8086',
         'db': 'test',
@@ -70,7 +70,7 @@ def main():
 
     cleanup(client, ['b:*', 'm:*', 'n:*'])
 
-    write_config(client, UPSTREAMS, 'b:')
+    write_config(client, BACKENDS, 'b:')
     write_config(client, NODES, 'n:')
 
     for k, ups in KEYMAPS.items():

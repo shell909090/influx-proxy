@@ -11,13 +11,13 @@ import (
 
 type HttpService struct {
 	db string
-	m  *backend.MultiAPI
+	ic  *backend.InfluxCluster
 }
 
-func NewHttpService(m *backend.MultiAPI, db string) (hs *HttpService) {
+func NewHttpService(ic *backend.InfluxCluster, db string) (hs *HttpService) {
 	hs = &HttpService{
 		db: db,
-		m:  m,
+		ic: ic,
 	}
 	if hs.db != "" {
 		log.Print("http database: ", hs.db)
@@ -37,7 +37,7 @@ func (hs *HttpService) HandlerReload(w http.ResponseWriter, req *http.Request) {
 	defer req.Body.Close()
 	w.Header().Add("X-Influxdb-Version", backend.VERSION)
 
-	err := hs.m.LoadConfig()
+	err := hs.ic.LoadConfig()
 	if err != nil {
 		w.WriteHeader(400)
 		w.Write([]byte(err.Error()))
@@ -50,7 +50,12 @@ func (hs *HttpService) HandlerReload(w http.ResponseWriter, req *http.Request) {
 
 func (hs *HttpService) HandlerPing(w http.ResponseWriter, req *http.Request) {
 	defer req.Body.Close()
-	w.Header().Add("X-Influxdb-Version", backend.VERSION)
+	version, err := hs.ic.Ping()
+	if err != nil {
+		panic("WTF")
+		return
+	}
+	w.Header().Add("X-Influxdb-Version", version)
 	w.WriteHeader(204)
 	return
 }
@@ -76,7 +81,7 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	err := hs.m.Query(w, req)
+	err := hs.ic.Query(w, req)
 	if err != nil {
 		log.Printf("query error: %s\n", err)
 		return
@@ -118,7 +123,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	err = hs.m.Write(p)
+	err = hs.ic.Write(p)
 	if err == nil {
 		w.WriteHeader(204)
 	}

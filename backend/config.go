@@ -79,9 +79,3 @@ func LoadConfigFromRedis(client *redis.Client, name string) (cfg *BackendConfig,
 	}
 	return
 }
-
-func (cfg *BackendConfig) CreateCacheableHttp(Name string) (ca *CacheableAPI) {
-	hb := NewHttpBackend(cfg)
-	ca = NewCacheableAPI(hb, cfg)
-	return
-}
