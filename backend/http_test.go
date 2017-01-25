@@ -2,24 +2,38 @@ package backend
 
 import (
 	"bytes"
-	"encoding/json"
+	"log"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"testing"
 )
 
-var (
-	TESTCFG = &BackendConfig{
-		URL:          "http://localhost:8086",
-		DB:           "test",
+func HandlerAny(w http.ResponseWriter, req *http.Request) {
+	defer req.Body.Close()
+	log.Printf("handler any get url: %s", req.URL)
+	w.Header().Add("X-Influxdb-Version", VERSION)
+	w.WriteHeader(204)
+	return
+}
+
+func CreateTestBackendConfig(dbname string) (cfg *BackendConfig, ts *httptest.Server) {
+	ts = httptest.NewServer(http.HandlerFunc(HandlerAny))
+	cfg = &BackendConfig{
+		URL:          ts.URL,
+		DB:           dbname,
 		Interval:     100,
 		Timeout:      10,
 		TimeoutQuery: 60,
 	}
-)
+	return
+}
 
 func TestHttpBackendWrite(t *testing.T) {
-	hb := NewHttpBackend(TESTCFG)
+	cfg, ts := CreateTestBackendConfig("test")
+	defer ts.Close()
+	hb := NewHttpBackend(cfg)
+	defer hb.Close()
 
 	err := hb.Write([]byte("cpu,host=server01,region=uswest value=1 1434055562000000000\ncpu value=3,value2=4 1434055562000010000"))
 	if err != nil {
@@ -29,7 +43,10 @@ func TestHttpBackendWrite(t *testing.T) {
 }
 
 func TestHttpBackendPing(t *testing.T) {
-	hb := NewHttpBackend(TESTCFG)
+	cfg, ts := CreateTestBackendConfig("test")
+	defer ts.Close()
+	hb := NewHttpBackend(cfg)
+	defer hb.Close()
 
 	version, err := hb.Ping()
 	if err != nil {
@@ -70,7 +87,10 @@ func (drw *DummyResponseWriter) WriteHeader(code int) {
 }
 
 func TestHttpBackendQuery(t *testing.T) {
-	hb := NewHttpBackend(TESTCFG)
+	cfg, ts := CreateTestBackendConfig("test")
+	defer ts.Close()
+	hb := NewHttpBackend(cfg)
+	defer hb.Close()
 
 	q := make(url.Values, 1)
 	q.Set("db", "test")
@@ -90,41 +110,8 @@ func TestHttpBackendQuery(t *testing.T) {
 		return
 	}
 
-	buf := w.buffer.Bytes()
-	if len(buf) == 0 {
-		t.Errorf("response empty")
+	if w.status != 204 {
+		t.Errorf("response error")
 		return
 	}
-
-	VerifyResults(t, buf)
-}
-
-type Results map[string][]map[string]interface{}
-
-func VerifyResults(t *testing.T, buf []byte) {
-	var r Results
-	err := json.Unmarshal(buf, &r)
-	if err != nil {
-		t.Errorf("json decode error")
-		return
-	}
-
-	rr, ok := r["results"]
-	if !ok {
-		t.Errorf("no results")
-		return
-	}
-
-	if len(rr) != 1 {
-		t.Errorf("no results")
-		return
-	}
-	rrr := rr[0]
-
-	if _, ok = rrr["series"]; !ok {
-		t.Errorf("no series")
-		return
-	}
-
-	return
 }

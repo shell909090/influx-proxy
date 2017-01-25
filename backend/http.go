@@ -153,7 +153,7 @@ func (hb *HttpBackend) Write(p []byte) (err error) {
 		return
 	}
 
-	log.Printf("http backend write %s\n%s\n", hb.DB, string(p))
+	log.Printf("http backend write %s", hb.DB)
 	err = hb.WriteStream(&buf, true)
 	return
 }

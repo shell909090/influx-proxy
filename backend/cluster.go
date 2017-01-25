@@ -7,8 +7,6 @@ import (
 	"log"
 	"net/http"
 	"sync"
-
-	"gopkg.in/redis.v5"
 )
 
 var (
@@ -56,7 +54,7 @@ type InfluxCluster struct {
 	running  bool
 	backends map[string]InfluxAPI
 	// measurements to backends
-	m2bs     map[string][]InfluxAPI
+	m2bs map[string][]InfluxAPI
 }
 
 func NewInfluxCluster(client *redis.Client, zone string) (ic *InfluxCluster) {
@@ -200,11 +198,28 @@ func (ic *InfluxCluster) Query(w http.ResponseWriter, req *http.Request) (err er
 	}
 
 	// same zone first, other zone. pass non-active.
+	// TODO: better way?
+
 	for _, api := range apis {
-		// FIXME:
-		// if !api.Active {
-		// 	continue
-		// }
+		if api.Zone != ic.Zone {
+			continue
+		}
+		if !api.IsActive() {
+			continue
+		}
+		err = api.Query(w, req)
+		if err == nil {
+			return
+		}
+	}
+
+	for _, api := range apis {
+		if api.Zone == ic.Zone {
+			continue
+		}
+		if !api.IsActive() {
+			continue
+		}
 		err = api.Query(w, req)
 		if err == nil {
 			return
@@ -291,7 +306,7 @@ func (ic *InfluxCluster) Write(p []byte) (err error) {
 	return
 }
 
-func (ic *InfluxCluster) Close () (err error) {
+func (ic *InfluxCluster) Close() (err error) {
 	ic.running = false
 	close(ic.queue)
 	return

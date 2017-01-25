@@ -6,7 +6,10 @@ import (
 )
 
 func TestCache(t *testing.T) {
-	bs := NewBackends(TESTCFG)
+	cfg, ts := CreateTestBackendConfig("test")
+	defer ts.Close()
+	bs := NewBackends(cfg, "test")
+	defer bs.Close()
 
 	err := bs.Write([]byte("cpu,host=server01,region=uswest value=1 1434055562000000000"))
 	if err != nil {
@@ -21,4 +24,5 @@ func TestCache(t *testing.T) {
 	}
 
 	time.Sleep(300 * time.Millisecond)
+	// FIXME: just once?
 }
