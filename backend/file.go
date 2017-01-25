@@ -11,10 +11,11 @@ type FileBackend struct {
 }
 
 func NewFileBackend(hb *HttpBackend, filename string) (fb *FileBackend, err error) {
-	fb := &FileBackend{
+	fb = &FileBackend{
 		hb: hb,
 	}
-	fb.data, err = os.OpenFile(filename+".dat", os.O_RDWR|os.O_APPEND|O_CREATE, 0666)
+	fb.data, err = os.OpenFile(filename+".dat",
+		os.O_RDWR|os.O_APPEND|os.O_CREATE, 0666)
 	if err != nil {
 		return
 	}
@@ -22,7 +23,7 @@ func NewFileBackend(hb *HttpBackend, filename string) (fb *FileBackend, err erro
 }
 
 func (fb *FileBackend) Write(p []byte) (err error) {
-	n, err := fb.Write(p)
+	n, err := fb.data.Write(p)
 	if err != nil {
 		return
 	}
