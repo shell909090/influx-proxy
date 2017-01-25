@@ -40,6 +40,8 @@ type HttpBackend struct {
 	DB        string
 }
 
+// TODO: active check
+
 func NewHttpBackend(cfg *BackendConfig) (hb *HttpBackend) {
 	hb = &HttpBackend{
 		client: &http.Client{

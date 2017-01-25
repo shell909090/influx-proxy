@@ -27,6 +27,7 @@ func NewCacheableAPI(api InfluxAPI, cfg *BackendConfig) (ca *CacheableAPI) {
 	return
 }
 
+// TODO: move compress here
 func (ca *CacheableAPI) Flush() {
 	ca.lock.Lock()
 	defer ca.lock.Unlock()
@@ -51,6 +52,7 @@ func (ca *CacheableAPI) Flush() {
 	return
 }
 
+// TODO: add counter
 func (ca *CacheableAPI) Write(p []byte) (err error) {
 	ca.lock.Lock()
 	defer ca.lock.Unlock()
