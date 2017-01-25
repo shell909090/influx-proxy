@@ -146,11 +146,6 @@ func (hb *HttpBackend) Query(w http.ResponseWriter, req *http.Request) (err erro
 }
 
 func (hb *HttpBackend) Write(p []byte) (err error) {
-	q := url.Values{}
-	q.Set("db", hb.DB)
-
-	log.Printf("http backend write %s\n%s\n", hb.DB, string(p))
-
 	var buf bytes.Buffer
 	err = Compress(&buf, p)
 	if err != nil {
@@ -158,8 +153,19 @@ func (hb *HttpBackend) Write(p []byte) (err error) {
 		return
 	}
 
-	req, err := http.NewRequest("POST", hb.URL+"/write?"+q.Encode(), &buf)
-	req.Header.Add("Content-Encoding", "gzip")
+	log.Printf("http backend write %s\n%s\n", hb.DB, string(p))
+	err = hb.WriteStream(&buf, true)
+	return
+}
+
+func (hb *HttpBackend) WriteStream(stream io.Reader, compressed bool) (err error) {
+	q := url.Values{}
+	q.Set("db", hb.DB)
+
+	req, err := http.NewRequest("POST", hb.URL+"/write?"+q.Encode(), stream)
+	if compressed {
+		req.Header.Add("Content-Encoding", "gzip")
+	}
 
 	resp, err := hb.client.Do(req)
 	defer resp.Body.Close()

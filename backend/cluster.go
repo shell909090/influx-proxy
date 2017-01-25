@@ -2,12 +2,17 @@ package backend
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"log"
 	"net/http"
 	"sync"
 
 	"gopkg.in/redis.v5"
+)
+
+var (
+	ErrClosed = errors.New("write in a closed file")
 )
 
 func ScanKey(pointbuf []byte) (key string, err error) {
