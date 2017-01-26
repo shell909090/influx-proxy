@@ -22,9 +22,9 @@ func CreateTestBackendConfig(dbname string) (cfg *BackendConfig, ts *httptest.Se
 	cfg = &BackendConfig{
 		URL:          ts.URL,
 		DB:           dbname,
-		Interval:     100,
-		Timeout:      10,
-		TimeoutQuery: 60,
+		Interval:     200,
+		Timeout:      4000,
+		TimeoutQuery: 60000,
 	}
 	return
 }

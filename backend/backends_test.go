@@ -8,10 +8,14 @@ import (
 func TestCache(t *testing.T) {
 	cfg, ts := CreateTestBackendConfig("test")
 	defer ts.Close()
-	bs := NewBackends(cfg, "test")
+	bs, err := NewBackends(cfg, "test")
+	if err != nil {
+		t.Errorf("error: %s", err)
+		return
+	}
 	defer bs.Close()
 
-	err := bs.Write([]byte("cpu,host=server01,region=uswest value=1 1434055562000000000"))
+	err = bs.Write([]byte("cpu,host=server01,region=uswest value=1 1434055562000000000"))
 	if err != nil {
 		t.Errorf("error: %s", err)
 		return

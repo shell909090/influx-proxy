@@ -1,2 +1,4 @@
 bin
 testbk*
+*.dat
+*.rec

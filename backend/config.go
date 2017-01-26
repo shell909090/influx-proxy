@@ -69,13 +69,13 @@ func LoadConfigFromRedis(client *redis.Client, name string) (cfg *BackendConfig,
 	}
 
 	if cfg.Interval == 0 {
-		cfg.Interval = 10
+		cfg.Interval = 200
 	}
 	if cfg.Timeout == 0 {
-		cfg.Timeout = 10
+		cfg.Timeout = 4000
 	}
 	if cfg.TimeoutQuery == 0 {
-		cfg.TimeoutQuery = 60
+		cfg.TimeoutQuery = 60000
 	}
 	return
 }

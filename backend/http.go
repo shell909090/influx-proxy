@@ -47,11 +47,11 @@ type HttpBackend struct {
 func NewHttpBackend(cfg *BackendConfig) (hb *HttpBackend) {
 	hb = &HttpBackend{
 		client: &http.Client{
-			Timeout: time.Second * time.Duration(cfg.Timeout),
+			Timeout: time.Millisecond * time.Duration(cfg.Timeout),
 		},
 		// TODO: query timeout? use req.Cancel
 		// client_query: &http.Client{
-		// 	Timeout: time.Second * time.Duration(cfg.TimeoutQuery),
+		// 	Timeout: time.Millisecond * time.Duration(cfg.TimeoutQuery),
 		// },
 		Timeout: cfg.Timeout,
 		URL:     cfg.URL,
@@ -64,12 +64,14 @@ func NewHttpBackend(cfg *BackendConfig) (hb *HttpBackend) {
 	return
 }
 
+// TODO: update active when calling successed or failed.
+
 func (hb *HttpBackend) CheckActive() {
 	var err error
 	for hb.running {
 		_, err = hb.Ping()
 		hb.Active = (err == nil)
-		time.Sleep(time.Second * time.Duration(hb.Timeout))
+		time.Sleep(time.Millisecond * time.Duration(hb.Timeout))
 	}
 }
 
@@ -162,6 +164,12 @@ func (hb *HttpBackend) Write(p []byte) (err error) {
 	return
 }
 
+func (hb *HttpBackend) WriteCompressed(p []byte) (err error) {
+	buf := bytes.NewBuffer(p)
+	err = hb.WriteStream(buf, true)
+	return
+}
+
 func (hb *HttpBackend) WriteStream(stream io.Reader, compressed bool) (err error) {
 	q := url.Values{}
 	q.Set("db", hb.DB)
@@ -172,12 +180,12 @@ func (hb *HttpBackend) WriteStream(stream io.Reader, compressed bool) (err error
 	}
 
 	resp, err := hb.client.Do(req)
-	defer resp.Body.Close()
 	if err != nil {
 		log.Print("http error: ", err)
 		hb.Active = false
 		return
 	}
+	defer resp.Body.Close()
 
 	log.Print("write status code: ", resp.StatusCode)
 	if resp.StatusCode == 204 {
@@ -198,7 +206,8 @@ func (hb *HttpBackend) WriteStream(stream io.Reader, compressed bool) (err error
 		err = ErrBadRequest
 	case 404:
 		err = ErrNotFound
-	default:
+	default: // mostly tcp connection timeout
+		log.Printf("status: %d", resp.StatusCode)
 		err = ErrUnknown
 	}
 	return

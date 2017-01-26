@@ -79,9 +79,14 @@ func (ic *InfluxCluster) loadBackends() (backends map[string]BackendAPI, err err
 		name = name[2:len(name)]
 		cfg, err = LoadConfigFromRedis(ic.client, name)
 		if err != nil {
+			log.Printf("read redis config error: %s", err)
 			return
 		}
-		backends[name] = NewBackends(cfg, name)
+		backends[name], err = NewBackends(cfg, name)
+		if err != nil {
+			log.Printf("create backend error: %s", err)
+			return
+		}
 	}
 	log.Printf("%d backends loaded.", len(backends))
 	return

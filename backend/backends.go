@@ -16,92 +16,41 @@ const (
 
 type Backends struct {
 	*HttpBackend
+	fb       *FileBackend
 	Interval int
+	Timeout  int
 
-	running       bool
-	ch_write      chan []byte
-	buffer        *bytes.Buffer
-	writer        *gzip.Writer
-	ch_timer      <-chan time.Time
-	write_counter int32
+	running          bool
+	ticker           *time.Ticker
+	ch_write         chan []byte
+	buffer           *bytes.Buffer
+	zip              *gzip.Writer
+	ch_timer         <-chan time.Time
+	write_counter    int32
+	rewriter_running bool
 }
+
+// TODO: report counter
 
 // maybe ch_timer is not the best way.
-func NewBackends(cfg *BackendConfig, name string) (bs *Backends) {
+func NewBackends(cfg *BackendConfig, name string) (bs *Backends, err error) {
 	bs = &Backends{
 		HttpBackend: NewHttpBackend(cfg),
-		Interval:    cfg.Interval,
-		running:     true,
-		ch_write:    make(chan []byte, 16),
+		// FIXME: path...
+		Interval: cfg.Interval,
+		Timeout:  cfg.Timeout,
+		running:  true,
+		ticker:   time.NewTicker(time.Millisecond * time.Duration(cfg.Timeout)),
+		ch_write: make(chan []byte, 16),
+
+		rewriter_running: false,
 	}
+	bs.fb, err = NewFileBackend(name)
+	if err != nil {
+		return
+	}
+
 	go bs.worker()
-	return
-}
-
-func (bs *Backends) Flush() {
-	if bs.buffer == nil {
-		return
-	}
-
-	err := bs.writer.Close()
-	if err != nil {
-		log.Printf("zip close error: %s\n", err)
-		return
-	}
-
-	p := bs.buffer.Bytes()
-	bs.buffer.Reset()
-	bs.buffer = nil
-	bs.writer = nil
-	bs.ch_timer = nil
-
-	if len(p) == 0 {
-		return
-	}
-
-	// maybe blocked here, run in another goroutine
-	err = bs.HttpBackend.Write(p)
-	if err != nil {
-		log.Printf("error: %s\n", err)
-		return
-	}
-
-	return
-}
-
-// TODO: add counter
-// FIXME: move compress here
-func (bs *Backends) WriteBuffer(p []byte) {
-	bs.write_counter++
-
-	if bs.buffer == nil {
-		bs.buffer = &bytes.Buffer{}
-		bs.writer = gzip.NewWriter(bs.buffer)
-	}
-
-	n, err := bs.buffer.Write(p)
-	if err != nil {
-		log.Printf("error: %s\n", err)
-		return
-	}
-	if n != len(p) {
-		err = io.ErrShortWrite
-		log.Printf("error: %s\n", err)
-		return
-	}
-
-	if p[len(p)-1] != '\n' {
-		err = bs.buffer.WriteByte('\n')
-		if err != nil {
-			log.Printf("error: %s\n", err)
-			return
-		}
-	}
-
-	if bs.ch_timer == nil {
-		bs.ch_timer = time.After(time.Millisecond * time.Duration(bs.Interval))
-	}
-
 	return
 }
 
@@ -123,6 +72,11 @@ func (bs *Backends) worker() {
 				bs.HttpBackend.Close()
 				return
 			}
+
+		case <-bs.ticker.C:
+			bs.Idle()
+
+			// <- fb.read
 		}
 	}
 }
@@ -139,5 +93,129 @@ func (bs *Backends) Write(p []byte) (err error) {
 func (bs *Backends) Close() (err error) {
 	bs.running = false
 	close(bs.ch_write)
+	return
+}
+
+func (bs *Backends) WriteBuffer(p []byte) {
+	bs.write_counter++
+
+	if bs.buffer == nil {
+		bs.buffer = &bytes.Buffer{}
+		bs.zip = gzip.NewWriter(bs.buffer)
+	}
+
+	n, err := bs.zip.Write(p)
+	if err != nil {
+		log.Printf("error: %s\n", err)
+		return
+	}
+	if n != len(p) {
+		err = io.ErrShortWrite
+		log.Printf("error: %s\n", err)
+		return
+	}
+
+	if p[len(p)-1] != '\n' {
+		_, err = bs.zip.Write([]byte{'\n'})
+		if err != nil {
+			log.Printf("error: %s\n", err)
+			return
+		}
+	}
+
+	if bs.ch_timer == nil {
+		bs.ch_timer = time.After(time.Millisecond * time.Duration(bs.Interval))
+	}
+
+	return
+}
+
+func (bs *Backends) Flush() {
+	if bs.buffer == nil {
+		return
+	}
+
+	err := bs.zip.Close()
+	if err != nil {
+		log.Printf("zip close error: %s\n", err)
+		return
+	}
+
+	p := bs.buffer.Bytes()
+	bs.buffer.Reset()
+	bs.buffer = nil
+	bs.zip = nil
+	bs.ch_timer = nil
+
+	if len(p) == 0 {
+		return
+	}
+
+	go func() {
+		// maybe blocked here, run in another goroutine
+		if bs.HttpBackend.IsActive() {
+			err = bs.HttpBackend.WriteCompressed(p)
+			if err == nil {
+				return
+			}
+			log.Printf("write http error: %s\n", err)
+		}
+
+		err = bs.fb.Write(p)
+		if err != nil {
+			log.Printf("write file error: %s\n", err)
+		}
+	}()
+
+	return
+}
+
+func (bs *Backends) Idle() {
+	if !bs.rewriter_running && bs.fb.IsData() {
+		bs.rewriter_running = true
+		go bs.RewriteLoop()
+	}
+}
+
+func (bs *Backends) RewriteLoop() {
+	for bs.fb.IsData() {
+		if !bs.HttpBackend.IsActive() {
+			time.Sleep(time.Millisecond * time.Duration(bs.Timeout))
+			continue
+		}
+		err := bs.Rewrite()
+		if err != nil {
+			time.Sleep(time.Millisecond * time.Duration(bs.Timeout))
+			continue
+		}
+	}
+	bs.rewriter_running = true
+}
+
+func (bs *Backends) Rewrite() (err error) {
+	p, err := bs.fb.Read()
+	if err != nil {
+		return
+	}
+	if p == nil { // why?
+		return
+	}
+
+	err = bs.HttpBackend.WriteCompressed(p)
+	if err != nil {
+		log.Printf("rewrite http error: %s\n", err)
+
+		err = bs.fb.RollbackMeta()
+		if err != nil {
+			log.Printf("rollback meta error: %s\n", err)
+		}
+		return
+	}
+
+	err = bs.fb.UpdateMeta()
+	if err != nil {
+		log.Printf("update meta error: %s\n", err)
+		return
+	}
 	return
 }

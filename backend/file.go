@@ -11,6 +11,7 @@ import (
 type FileBackend struct {
 	lock     sync.Mutex
 	filename string
+	dataflag bool
 	producer *os.File
 	consumer *os.File
 	meta     *os.File
@@ -19,6 +20,7 @@ type FileBackend struct {
 func NewFileBackend(filename string) (fb *FileBackend, err error) {
 	fb = &FileBackend{
 		filename: filename,
+		dataflag: false,
 	}
 
 	fb.producer, err = os.OpenFile(filename+".dat",
@@ -41,6 +43,11 @@ func NewFileBackend(filename string) (fb *FileBackend, err error) {
 		log.Print("open meta error: ", err)
 		return
 	}
+
+	err = fb.RollbackMeta()
+	if err != nil {
+		err = nil
+	}
 	return
 }
 
@@ -55,8 +62,6 @@ func (fb *FileBackend) Write(p []byte) (err error) {
 		return
 	}
 
-	fb.producer.Sync()
-
 	n, err := fb.producer.Write(p)
 	if err != nil {
 		log.Print("write error: ", err)
@@ -65,11 +70,29 @@ func (fb *FileBackend) Write(p []byte) (err error) {
 	if n != len(p) {
 		return io.ErrShortWrite
 	}
+
+	err = fb.producer.Sync()
+	if err != nil {
+		log.Print("sync meta error: ", err)
+		return
+	}
+
+	fb.dataflag = true
 	return
+}
+
+func (fb *FileBackend) IsData() (dataflag bool) {
+	fb.lock.Lock()
+	defer fb.lock.Unlock()
+	return fb.dataflag
 }
 
 // FIXME: signal here
 func (fb *FileBackend) Read() (p []byte, err error) {
+	if !fb.IsData() {
+		return nil, nil
+	}
+
 	var length uint32
 
 	err = binary.Read(fb.consumer, binary.BigEndian, &length)
@@ -113,6 +136,8 @@ func (fb *FileBackend) CleanUp() (err error) {
 		log.Print("open producer error: ", err)
 		return
 	}
+
+	fb.dataflag = false
 	return
 }
 
@@ -138,6 +163,7 @@ func (fb *FileBackend) UpdateMeta() (err error) {
 		if err != nil {
 			return
 		}
+		off = 0
 	}
 
 	_, err = fb.meta.Seek(0, os.SEEK_SET)
@@ -146,11 +172,43 @@ func (fb *FileBackend) UpdateMeta() (err error) {
 		return
 	}
 
+	log.Printf("write meta: %d", off)
 	err = binary.Write(fb.meta, binary.BigEndian, &off)
 	if err != nil {
 		log.Print("write meta error: ", err)
 		return
 	}
 
+	err = fb.meta.Sync()
+	if err != nil {
+		log.Print("sync meta error: ", err)
+		return
+	}
+
+	return
+}
+
+func (fb *FileBackend) RollbackMeta() (err error) {
+	fb.lock.Lock()
+	defer fb.lock.Unlock()
+
+	_, err = fb.meta.Seek(0, os.SEEK_SET)
+	if err != nil {
+		log.Print("seek meta error: ", err)
+		return
+	}
+
+	var off int64
+	err = binary.Read(fb.meta, binary.BigEndian, &off)
+	if err != nil {
+		log.Print("read meta error: ", err)
+		return
+	}
+
+	_, err = fb.consumer.Seek(off, os.SEEK_SET)
+	if err != nil {
+		log.Print("seek consumer error: ", err)
+		return
+	}
 	return
 }
