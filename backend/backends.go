@@ -30,8 +30,6 @@ type Backends struct {
 	rewriter_running bool
 }
 
-// TODO: report counter
-
 // maybe ch_timer is not the best way.
 func NewBackends(cfg *BackendConfig, name string) (bs *Backends, err error) {
 	bs = &Backends{
@@ -75,8 +73,6 @@ func (bs *Backends) worker() {
 
 		case <-bs.ticker.C:
 			bs.Idle()
-
-			// <- fb.read
 		}
 	}
 }
@@ -165,6 +161,8 @@ func (bs *Backends) Flush() {
 		if err != nil {
 			log.Printf("write file error: %s\n", err)
 		}
+		// don't try to run rewrite loop directly.
+		// that need a lock.
 	}()
 
 	return
@@ -175,6 +173,8 @@ func (bs *Backends) Idle() {
 		bs.rewriter_running = true
 		go bs.RewriteLoop()
 	}
+
+	// TODO: report counter
 }
 
 func (bs *Backends) RewriteLoop() {
@@ -189,7 +189,7 @@ func (bs *Backends) RewriteLoop() {
 			continue
 		}
 	}
-	bs.rewriter_running = true
+	bs.rewriter_running = false
 }
 
 func (bs *Backends) Rewrite() (err error) {
