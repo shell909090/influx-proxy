@@ -9,7 +9,7 @@ all: build
 
 build:
 	mkdir -p bin
-	go build -o bin/influx-proxy github.com/shell909090/influx-proxy/main
+	go build -o bin/influx-proxy github.com/shell909090/influx-proxy/service
 
 test:
 	go test -v github.com/shell909090/influx-proxy/backend

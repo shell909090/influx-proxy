@@ -1,4 +1,4 @@
-package service
+package main
 
 import (
 	"io/ioutil"
@@ -11,7 +11,7 @@ import (
 
 type HttpService struct {
 	db string
-	ic  *backend.InfluxCluster
+	ic *backend.InfluxCluster
 }
 
 func NewHttpService(ic *backend.InfluxCluster, db string) (hs *HttpService) {

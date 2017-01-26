@@ -7,6 +7,8 @@ import (
 	"log"
 	"net/http"
 	"sync"
+
+	redis "gopkg.in/redis.v5"
 )
 
 var (
@@ -50,27 +52,21 @@ type InfluxCluster struct {
 	lock     sync.RWMutex
 	Zone     string
 	client   *redis.Client
-	queue    chan []byte
-	running  bool
-	backends map[string]InfluxAPI
+	backends map[string]BackendAPI
 	// measurements to backends
-	m2bs map[string][]InfluxAPI
+	m2bs map[string][]BackendAPI
 }
 
 func NewInfluxCluster(client *redis.Client, zone string) (ic *InfluxCluster) {
 	ic = &InfluxCluster{
-		Zone:    zone,
-		client:  client,
-		queue:   make(chan []byte, 32),
-		running: true,
+		Zone:   zone,
+		client: client,
 	}
-	// How many workers?
-	go ic.worker()
 	return
 }
 
-func (ic *InfluxCluster) loadBackends() (backends map[string]InfluxAPI, err error) {
-	backends = make(map[string]InfluxAPI)
+func (ic *InfluxCluster) loadBackends() (backends map[string]BackendAPI, err error) {
+	backends = make(map[string]BackendAPI)
 
 	names, err := ic.client.Keys("b:*").Result()
 	if err != nil {
@@ -91,8 +87,8 @@ func (ic *InfluxCluster) loadBackends() (backends map[string]InfluxAPI, err erro
 	return
 }
 
-func (ic *InfluxCluster) loadMeasurements(backends map[string]InfluxAPI) (m2bs map[string][]InfluxAPI, err error) {
-	m2bs = make(map[string][]InfluxAPI)
+func (ic *InfluxCluster) loadMeasurements(backends map[string]BackendAPI) (m2bs map[string][]BackendAPI, err error) {
+	m2bs = make(map[string][]BackendAPI)
 
 	m_names, err := ic.client.Keys("m:*").Result()
 	if err != nil {
@@ -103,19 +99,17 @@ func (ic *InfluxCluster) loadMeasurements(backends map[string]InfluxAPI) (m2bs m
 	var length int64
 	var bs_names []string
 
-	for _, m_name := range m_names {
-		m_name = m_name[2:len(m_name)]
-
-		length, err = ic.client.LLen(m_name).Result()
+	for _, key := range m_names {
+		length, err = ic.client.LLen(key).Result()
 		if err != nil {
 			return
 		}
-		bs_names, err = ic.client.LRange(m_name, 0, length).Result()
+		bs_names, err = ic.client.LRange(key, 0, length).Result()
 		if err != nil {
 			return
 		}
 
-		var bss []InfluxAPI
+		var bss []BackendAPI
 		for _, bs_name := range bs_names {
 			bs, ok := backends[bs_name]
 			if !ok {
@@ -125,7 +119,7 @@ func (ic *InfluxCluster) loadMeasurements(backends map[string]InfluxAPI) (m2bs m
 			}
 			bss = append(bss, bs)
 		}
-		m2bs[m_name] = bss
+		m2bs[key[2:len(key)]] = bss
 	}
 	log.Printf("%d measurements loaded.", len(m2bs))
 	return
@@ -201,7 +195,7 @@ func (ic *InfluxCluster) Query(w http.ResponseWriter, req *http.Request) (err er
 	// TODO: better way?
 
 	for _, api := range apis {
-		if api.Zone != ic.Zone {
+		if api.GetZone() != ic.Zone {
 			continue
 		}
 		if !api.IsActive() {
@@ -214,7 +208,7 @@ func (ic *InfluxCluster) Query(w http.ResponseWriter, req *http.Request) (err er
 	}
 
 	for _, api := range apis {
-		if api.Zone == ic.Zone {
+		if api.GetZone() == ic.Zone {
 			continue
 		}
 		if !api.IsActive() {
@@ -229,13 +223,47 @@ func (ic *InfluxCluster) Query(w http.ResponseWriter, req *http.Request) (err er
 	return
 }
 
-func (ic *InfluxCluster) WriteRows(p []byte) (err error) {
+// Wrong in one row will not stop others.
+// So don't try to return error, just print it.
+func (ic *InfluxCluster) WriteRow(line []byte) {
+	// maybe trim?
+	line = bytes.TrimRight(line, " \t\r\n")
+
+	// empty line, ignore it.
+	if len(line) == 0 {
+		return
+	}
+
+	key, err := ScanKey(line)
+	if err != nil {
+		log.Printf("scan key error: %s\n", err)
+		return
+	}
+
 	ic.lock.RLock()
-	defer ic.lock.RUnlock()
+	bs, ok := ic.m2bs[key]
+	ic.lock.RUnlock()
+	if !ok {
+		log.Printf("new measurement: %s\n", key)
+		// TODO: new measurement?
+		return
+	}
+
+	// don't block here for a lont time, we just have one worker.
+	for _, b := range bs {
+		err = b.Write(line)
+		if err != nil {
+			log.Printf("cluster write fail: %s\n", key)
+			return
+		}
+	}
+	return
+}
+
+func (ic *InfluxCluster) Write(p []byte) (err error) {
 	buf := bytes.NewBuffer(p)
 
 	var line []byte
-	var key string
 	for {
 		line, err = buf.ReadBytes('\n')
 		switch err {
@@ -249,65 +277,12 @@ func (ic *InfluxCluster) WriteRows(p []byte) (err error) {
 			break
 		}
 
-		// maybe trim?
-		line = bytes.TrimRight(line, " \t\r\n")
-
-		// empty line, ignore it.
-		if len(line) == 0 {
-			continue
-		}
-
-		key, err = ScanKey(p)
-		if err != nil {
-			log.Printf("scan key error: %s\n", err)
-			// don't stop, try next line.
-			continue
-		}
-
-		bs, ok := ic.m2bs[key]
-		if !ok {
-			log.Printf("new measurement: %s\n", key)
-			// TODO: new measurement?
-			return
-		}
-
-		// don't block here for a lont time, we just have one worker.
-		for _, b := range bs {
-			err = b.Write(p)
-			if err != nil {
-				// critical
-				return
-			}
-		}
+		ic.WriteRow(line)
 	}
 
-	return
-}
-
-func (ic *InfluxCluster) worker() {
-	for ic.running {
-		p := <-ic.queue
-		err := ic.WriteRows(p)
-		if err != nil {
-			log.Printf("write row: %s", err)
-		}
-	}
-}
-
-func (ic *InfluxCluster) Write(p []byte) (err error) {
-	// Sometimes, 'if running' go first, then 'running = false' and 'close queue'.
-	// So 'send queue' will panic.
-	// Thanks god, when this really happen, program should stop soon.
-	// In the other hand, why use call write after close?
-	if !ic.running {
-		return ErrClosed
-	}
-	ic.queue <- p
 	return
 }
 
 func (ic *InfluxCluster) Close() (err error) {
-	ic.running = false
-	close(ic.queue)
 	return
 }

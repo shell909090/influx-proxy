@@ -2,22 +2,11 @@ package backend
 
 import "net/http"
 
-type Pinger interface {
+type BackendAPI interface {
 	IsActive() (b bool)
 	Ping() (version string, err error)
-}
-
-type Querist interface {
+	GetZone() (zone string)
 	Query(w http.ResponseWriter, req *http.Request) (err error)
-}
-
-type WriteCloser interface {
 	Write(p []byte) (err error)
 	Close() (err error)
-}
-
-type InfluxAPI interface {
-	Pinger
-	Querist
-	WriteCloser
 }

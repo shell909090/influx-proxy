@@ -79,11 +79,11 @@ func (hb *HttpBackend) IsActive() bool {
 
 func (hb *HttpBackend) Ping() (version string, err error) {
 	resp, err := hb.client.Get(hb.URL + "/ping")
-	defer resp.Body.Close()
 	if err != nil {
 		log.Print("http error: ", err)
 		return
 	}
+	defer resp.Body.Close()
 
 	version = resp.Header.Get("X-Influxdb-Version")
 
@@ -107,6 +107,10 @@ func copyHeader(dst, src http.Header) {
 			dst.Add(k, v)
 		}
 	}
+}
+
+func (hb *HttpBackend) GetZone() (zone string) {
+	return hb.Zone
 }
 
 // Don't setup Accept-Encoding: gzip. Let real client do so.
