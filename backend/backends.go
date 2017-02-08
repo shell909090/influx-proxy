@@ -2,7 +2,6 @@ package backend
 
 import (
 	"bytes"
-	"compress/gzip"
 	"io"
 	"log"
 	"time"
@@ -24,7 +23,6 @@ type Backends struct {
 	ticker           *time.Ticker
 	ch_write         chan []byte
 	buffer           *bytes.Buffer
-	zip              *gzip.Writer
 	ch_timer         <-chan time.Time
 	write_counter    int32
 	rewriter_running bool
@@ -97,10 +95,9 @@ func (bs *Backends) WriteBuffer(p []byte) {
 
 	if bs.buffer == nil {
 		bs.buffer = &bytes.Buffer{}
-		bs.zip = gzip.NewWriter(bs.buffer)
 	}
 
-	n, err := bs.zip.Write(p)
+	n, err := bs.buffer.Write(p)
 	if err != nil {
 		log.Printf("error: %s\n", err)
 		return
@@ -112,7 +109,7 @@ func (bs *Backends) WriteBuffer(p []byte) {
 	}
 
 	if p[len(p)-1] != '\n' {
-		_, err = bs.zip.Write([]byte{'\n'})
+		_, err = bs.buffer.Write([]byte{'\n'})
 		if err != nil {
 			log.Printf("error: %s\n", err)
 			return
@@ -131,16 +128,8 @@ func (bs *Backends) Flush() {
 		return
 	}
 
-	err := bs.zip.Close()
-	if err != nil {
-		log.Printf("zip close error: %s\n", err)
-		return
-	}
-
 	p := bs.buffer.Bytes()
-	bs.buffer.Reset()
 	bs.buffer = nil
-	bs.zip = nil
 	bs.ch_timer = nil
 
 	if len(p) == 0 {
@@ -148,6 +137,15 @@ func (bs *Backends) Flush() {
 	}
 
 	go func() {
+		var buf bytes.Buffer
+		err := Compress(&buf, p)
+		if err != nil {
+			log.Printf("write file error: %s\n", err)
+			return
+		}
+
+		p = buf.Bytes()
+
 		// maybe blocked here, run in another goroutine
 		if bs.HttpBackend.IsActive() {
 			err = bs.HttpBackend.WriteCompressed(p)
