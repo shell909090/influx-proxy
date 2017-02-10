@@ -7,8 +7,6 @@ import (
 	"time"
 )
 
-// TODO: redo
-
 const (
 	WRITE_QUEUE = 16
 )

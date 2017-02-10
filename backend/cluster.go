@@ -6,11 +6,15 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"regexp"
+	"strings"
 	"sync"
 )
 
 var (
-	ErrClosed = errors.New("write in a closed file")
+	ErrClosed          = errors.New("write in a closed file")
+	ErrBackendNotExist = errors.New("use a backend not exists")
+	ErrQueryForbidden  = errors.New("query forbidden")
 )
 
 func ScanKey(pointbuf []byte) (key string, err error) {
@@ -46,22 +50,62 @@ func TrimRight(p []byte, s []byte) (r []byte) {
 	return r[0 : i+1]
 }
 
+// TODO: kafka next
+
 type InfluxCluster struct {
-	lock     sync.RWMutex
-	Zone     string
-	cfgsrc   *RedisConfigSource
-	bas      []BackendAPI
-	backends map[string]BackendAPI
-	// measurements to backends
-	m2bs map[string][]BackendAPI
+	lock           sync.RWMutex
+	Zone           string
+	nexts          string
+	ForbiddenQuery []*regexp.Regexp
+	ObligatedQuery []*regexp.Regexp
+	cfgsrc         *RedisConfigSource
+	bas            []BackendAPI
+	backends       map[string]BackendAPI
+	m2bs           map[string][]BackendAPI // measurements to backends
 }
 
-func NewInfluxCluster(cfgsrc *RedisConfigSource, zone string) (ic *InfluxCluster) {
+func NewInfluxCluster(cfgsrc *RedisConfigSource, nodecfg *NodeConfig) (ic *InfluxCluster) {
 	ic = &InfluxCluster{
-		Zone:   zone,
+		Zone:   nodecfg.Zone,
+		nexts:  nodecfg.Nexts,
 		cfgsrc: cfgsrc,
 		bas:    make([]BackendAPI, 0),
 	}
+
+	err := ic.ForbidQuery("select\\s+\\*")
+	if err != nil {
+		panic(err)
+		return
+	}
+	err = ic.EnsureQuery("where.*time")
+	if err != nil {
+		panic(err)
+		return
+	}
+	return
+}
+
+func (ic *InfluxCluster) ForbidQuery(s string) (err error) {
+	r, err := regexp.Compile(s)
+	if err != nil {
+		return
+	}
+
+	ic.lock.Lock()
+	defer ic.lock.Unlock()
+	ic.ForbiddenQuery = append(ic.ForbiddenQuery, r)
+	return
+}
+
+func (ic *InfluxCluster) EnsureQuery(s string) (err error) {
+	r, err := regexp.Compile(s)
+	if err != nil {
+		return
+	}
+
+	ic.lock.Lock()
+	defer ic.lock.Unlock()
+	ic.ObligatedQuery = append(ic.ObligatedQuery, r)
 	return
 }
 
@@ -72,7 +116,7 @@ func (ic *InfluxCluster) AddNext(ba BackendAPI) {
 	return
 }
 
-func (ic *InfluxCluster) loadBackends() (backends map[string]BackendAPI, err error) {
+func (ic *InfluxCluster) loadBackends() (backends map[string]BackendAPI, bas []BackendAPI, err error) {
 	backends = make(map[string]BackendAPI)
 
 	bkcfgs, err := ic.cfgsrc.LoadBackends()
@@ -85,6 +129,18 @@ func (ic *InfluxCluster) loadBackends() (backends map[string]BackendAPI, err err
 		if err != nil {
 			log.Printf("create backend error: %s", err)
 			return
+		}
+	}
+
+	if ic.nexts != "" {
+		for _, nextname := range strings.Split(ic.nexts, ",") {
+			ba, ok := backends[nextname]
+			if !ok {
+				err = ErrBackendNotExist
+				log.Fatal(err)
+				return
+			}
+			bas = append(bas, ba)
 		}
 	}
 
@@ -102,9 +158,9 @@ func (ic *InfluxCluster) loadMeasurements(backends map[string]BackendAPI) (m2bs 
 	for name, bs_names := range m_map {
 		var bss []BackendAPI
 		for _, bs_name := range bs_names {
-			bs, ok := ic.backends[bs_name]
+			bs, ok := backends[bs_name]
 			if !ok {
-				err = ErrIllegalConfig
+				err = ErrBackendNotExist
 				log.Fatal(err)
 				return
 			}
@@ -116,7 +172,7 @@ func (ic *InfluxCluster) loadMeasurements(backends map[string]BackendAPI) (m2bs 
 }
 
 func (ic *InfluxCluster) LoadConfig() (err error) {
-	backends, err := ic.loadBackends()
+	backends, bas, err := ic.loadBackends()
 	if err != nil {
 		return
 	}
@@ -129,6 +185,7 @@ func (ic *InfluxCluster) LoadConfig() (err error) {
 	ic.lock.Lock()
 	orig_backends := ic.backends
 	ic.backends = backends
+	ic.bas = bas
 	ic.m2bs = m2bs
 	ic.lock.Unlock()
 
@@ -146,6 +203,27 @@ func (ic *InfluxCluster) Ping() (version string, err error) {
 	return
 }
 
+func (ic *InfluxCluster) CheckQuery(q string) (err error) {
+	ic.lock.RLock()
+	defer ic.lock.RUnlock()
+
+	if len(ic.ForbiddenQuery) != 0 {
+		for _, fq := range ic.ForbiddenQuery {
+			if fq.MatchString(q) {
+				return ErrQueryForbidden
+			}
+		}
+	}
+	if len(ic.ObligatedQuery) != 0 {
+		for _, pq := range ic.ObligatedQuery {
+			if !pq.MatchString(q) {
+				return ErrQueryForbidden
+			}
+		}
+	}
+	return
+}
+
 func (ic *InfluxCluster) Query(w http.ResponseWriter, req *http.Request) (err error) {
 	switch req.Method {
 	case "GET", "POST":
@@ -160,6 +238,13 @@ func (ic *InfluxCluster) Query(w http.ResponseWriter, req *http.Request) (err er
 	if q == "" {
 		w.WriteHeader(400)
 		w.Write([]byte("empty query"))
+		return
+	}
+
+	err = ic.CheckQuery(q)
+	if err != nil {
+		w.WriteHeader(400)
+		w.Write([]byte("query forbidden"))
 		return
 	}
 
@@ -270,6 +355,8 @@ func (ic *InfluxCluster) Write(p []byte) (err error) {
 		ic.WriteRow(line)
 	}
 
+	ic.lock.RLock()
+	defer ic.lock.RUnlock()
 	if len(ic.bas) > 0 {
 		for _, n := range ic.bas {
 			err = n.Write(p)
@@ -283,6 +370,8 @@ func (ic *InfluxCluster) Write(p []byte) (err error) {
 }
 
 func (ic *InfluxCluster) Close() (err error) {
+	ic.lock.RLock()
+	defer ic.lock.RUnlock()
 	for name, bs := range ic.backends {
 		err = bs.Close()
 		if err != nil {

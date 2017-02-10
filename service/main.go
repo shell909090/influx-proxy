@@ -75,7 +75,7 @@ func main() {
 		return
 	}
 
-	ic := backend.NewInfluxCluster(rcs, nodecfg.Zone)
+	ic := backend.NewInfluxCluster(rcs, &nodecfg)
 	ic.LoadConfig()
 
 	mux := http.NewServeMux()
