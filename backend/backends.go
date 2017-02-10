@@ -147,6 +147,7 @@ func (bs *Backends) Flush() {
 		return
 	}
 
+	// TODO: limitation
 	go func() {
 		// maybe blocked here, run in another goroutine
 		if bs.HttpBackend.IsActive() {
