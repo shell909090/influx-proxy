@@ -7,8 +7,6 @@ import (
 	"log"
 	"net/http"
 	"sync"
-
-	redis "gopkg.in/redis.v5"
 )
 
 var (
@@ -51,72 +49,60 @@ func TrimRight(p []byte, s []byte) (r []byte) {
 type InfluxCluster struct {
 	lock     sync.RWMutex
 	Zone     string
-	client   *redis.Client
+	cfgsrc   *RedisConfigSource
+	bas      []BackendAPI
 	backends map[string]BackendAPI
 	// measurements to backends
 	m2bs map[string][]BackendAPI
 }
 
-func NewInfluxCluster(client *redis.Client, zone string) (ic *InfluxCluster) {
+func NewInfluxCluster(cfgsrc *RedisConfigSource, zone string) (ic *InfluxCluster) {
 	ic = &InfluxCluster{
 		Zone:   zone,
-		client: client,
+		cfgsrc: cfgsrc,
+		bas:    make([]BackendAPI, 0),
 	}
+	return
+}
+
+func (ic *InfluxCluster) AddNext(ba BackendAPI) {
+	ic.lock.Lock()
+	defer ic.lock.Unlock()
+	ic.bas = append(ic.bas, ba)
 	return
 }
 
 func (ic *InfluxCluster) loadBackends() (backends map[string]BackendAPI, err error) {
 	backends = make(map[string]BackendAPI)
 
-	names, err := ic.client.Keys("b:*").Result()
+	bkcfgs, err := ic.cfgsrc.LoadBackends()
 	if err != nil {
-		log.Printf("read redis error: %s", err)
 		return
 	}
 
-	var cfg *BackendConfig
-	for _, name := range names {
-		name = name[2:len(name)]
-		cfg, err = LoadConfigFromRedis(ic.client, name)
-		if err != nil {
-			log.Printf("read redis config error: %s", err)
-			return
-		}
+	for name, cfg := range bkcfgs {
 		backends[name], err = NewBackends(cfg, name)
 		if err != nil {
 			log.Printf("create backend error: %s", err)
 			return
 		}
 	}
-	log.Printf("%d backends loaded.", len(backends))
+
 	return
 }
 
 func (ic *InfluxCluster) loadMeasurements(backends map[string]BackendAPI) (m2bs map[string][]BackendAPI, err error) {
 	m2bs = make(map[string][]BackendAPI)
 
-	m_names, err := ic.client.Keys("m:*").Result()
+	m_map, err := ic.cfgsrc.LoadMeasurements()
 	if err != nil {
-		log.Printf("read redis error: %s", err)
 		return
 	}
 
-	var length int64
-	var bs_names []string
-
-	for _, key := range m_names {
-		length, err = ic.client.LLen(key).Result()
-		if err != nil {
-			return
-		}
-		bs_names, err = ic.client.LRange(key, 0, length).Result()
-		if err != nil {
-			return
-		}
-
+	for name, bs_names := range m_map {
 		var bss []BackendAPI
 		for _, bs_name := range bs_names {
-			bs, ok := backends[bs_name]
+			bs, ok := ic.backends[bs_name]
 			if !ok {
 				err = ErrIllegalConfig
 				log.Fatal(err)
@@ -124,9 +110,8 @@ func (ic *InfluxCluster) loadMeasurements(backends map[string]BackendAPI) (m2bs 
 			}
 			bss = append(bss, bs)
 		}
-		m2bs[key[2:len(key)]] = bss
+		m2bs[name] = bss
 	}
-	log.Printf("%d measurements loaded.", len(m2bs))
 	return
 }
 
@@ -285,9 +270,24 @@ func (ic *InfluxCluster) Write(p []byte) (err error) {
 		ic.WriteRow(line)
 	}
 
+	if len(ic.bas) > 0 {
+		for _, n := range ic.bas {
+			err = n.Write(p)
+			if err != nil {
+				log.Printf("error: %s\n", err)
+			}
+		}
+	}
+
 	return
 }
 
 func (ic *InfluxCluster) Close() (err error) {
+	for name, bs := range ic.backends {
+		err = bs.Close()
+		if err != nil {
+			log.Printf("fail in close backend %s", name)
+		}
+	}
 	return
 }

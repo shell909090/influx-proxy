@@ -46,18 +46,10 @@ func LoadJson(configfile string, cfg interface{}) (err error) {
 	return
 }
 
-type NodeConfig struct {
-	ListenAddr string
-	DB         string
-	Zone       string
-}
+func main() {
+	var err error
+	var cfg Config
 
-var (
-	cfg     Config
-	nodecfg NodeConfig
-)
-
-func LoadConfig() (client *redis.Client, err error) {
 	if ConfigFile != "" {
 		err = LoadJson(ConfigFile, &cfg)
 		if err != nil {
@@ -75,34 +67,19 @@ func LoadConfig() (client *redis.Client, err error) {
 		cfg.Addr = RedisAddr
 	}
 
-	client = redis.NewClient(&cfg.Options)
-	val, err := client.HGetAll("n:" + cfg.Node).Result()
+	rcs := backend.NewRedisConfigSource(&cfg.Options, cfg.Node)
+
+	nodecfg, err := rcs.LoadNode()
 	if err != nil {
-		log.Printf("redis load error: b:%s", cfg.Node)
+		log.Printf("config source load failed.")
 		return
 	}
 
-	err = backend.LoadStructFromMap(val, &nodecfg)
-	if err != nil {
-		log.Printf("redis load error: b:%s", cfg.Node)
-		return
-	}
-	log.Printf("node config loaded.")
-	return
-}
-
-func main() {
-	client, err := LoadConfig()
-	if err != nil {
-		return
-	}
-
-	ic := backend.NewInfluxCluster(client, nodecfg.Zone)
+	ic := backend.NewInfluxCluster(rcs, nodecfg.Zone)
 	ic.LoadConfig()
-	hs := NewHttpService(ic, nodecfg.DB)
 
 	mux := http.NewServeMux()
-	hs.Register(mux)
+	NewHttpService(ic, nodecfg.DB).Register(mux)
 
 	log.Printf("http service start.")
 	err = http.ListenAndServe(nodecfg.ListenAddr, mux)
