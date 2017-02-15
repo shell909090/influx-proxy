@@ -60,6 +60,7 @@ type BackendConfig struct {
 	Interval     int
 	Timeout      int
 	TimeoutQuery int
+	MaxRowLimit  int
 }
 
 type RedisConfigSource struct {
@@ -148,6 +149,9 @@ func (rcs *RedisConfigSource) LoadConfigFromRedis(name string) (cfg *BackendConf
 	}
 	if cfg.TimeoutQuery == 0 {
 		cfg.TimeoutQuery = 60000
+	}
+	if cfg.MaxRowLimit == 0 {
+		cfg.MaxRowLimit = 10000
 	}
 	return
 }

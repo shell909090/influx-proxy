@@ -13,9 +13,10 @@ const (
 
 type Backends struct {
 	*HttpBackend
-	fb       *FileBackend
-	Interval int
-	Timeout  int
+	fb          *FileBackend
+	Interval    int
+	Timeout     int
+	MaxRowLimit int32
 
 	running          bool
 	ticker           *time.Ticker
@@ -38,6 +39,7 @@ func NewBackends(cfg *BackendConfig, name string) (bs *Backends, err error) {
 		ch_write: make(chan []byte, 16),
 
 		rewriter_running: false,
+		MaxRowLimit:      int32(cfg.MaxRowLimit),
 	}
 	bs.fb, err = NewFileBackend(name)
 	if err != nil {
@@ -114,8 +116,12 @@ func (bs *Backends) WriteBuffer(p []byte) {
 		}
 	}
 
-	if bs.ch_timer == nil {
-		bs.ch_timer = time.After(time.Millisecond * time.Duration(bs.Interval))
+	switch {
+	case bs.write_counter >= bs.MaxRowLimit:
+		bs.Flush()
+	case bs.ch_timer == nil:
+		bs.ch_timer = time.After(
+			time.Millisecond * time.Duration(bs.Interval))
 	}
 
 	return
@@ -148,8 +154,17 @@ func (bs *Backends) Flush() {
 		// maybe blocked here, run in another goroutine
 		if bs.HttpBackend.IsActive() {
 			err = bs.HttpBackend.WriteCompressed(p)
-			if err == nil {
+			switch err {
+			case nil:
 				return
+			case ErrBadRequest:
+				log.Printf("bad request, drop all data.")
+				return
+			case ErrNotFound:
+				log.Printf("bad backend, drop all data.")
+				return
+			default:
+				log.Printf("unknown error %s, maybe overloaded.", err)
 			}
 			log.Printf("write http error: %s\n", err)
 		}
@@ -199,8 +214,17 @@ func (bs *Backends) Rewrite() (err error) {
 	}
 
 	err = bs.HttpBackend.WriteCompressed(p)
-	if err != nil {
-		log.Printf("rewrite http error: %s\n", err)
+
+	switch err {
+	case nil:
+	case ErrBadRequest:
+		log.Printf("bad request, drop all data.")
+		err = nil
+	case ErrNotFound:
+		log.Printf("bad backend, drop all data.")
+		err = nil
+	default:
+		log.Printf("unknown error %s, maybe overloaded.", err)
 
 		err = bs.fb.RollbackMeta()
 		if err != nil {
