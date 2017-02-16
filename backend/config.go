@@ -145,13 +145,13 @@ func (rcs *RedisConfigSource) LoadConfigFromRedis(name string) (cfg *BackendConf
 		cfg.Interval = 200
 	}
 	if cfg.Timeout == 0 {
-		cfg.Timeout = 4000
+		cfg.Timeout = 10000
 	}
 	if cfg.TimeoutQuery == 0 {
-		cfg.TimeoutQuery = 60000
+		cfg.TimeoutQuery = 600000
 	}
 	if cfg.MaxRowLimit == 0 {
-		cfg.MaxRowLimit = 10000
+		cfg.MaxRowLimit = 100000
 	}
 	return
 }
