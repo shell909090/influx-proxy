@@ -54,13 +54,15 @@ type NodeConfig struct {
 }
 
 type BackendConfig struct {
-	URL          string
-	DB           string
-	Zone         string
-	Interval     int
-	Timeout      int
-	TimeoutQuery int
-	MaxRowLimit  int
+	URL             string
+	DB              string
+	Zone            string
+	Interval        int
+	Timeout         int
+	TimeoutQuery    int
+	MaxRowLimit     int
+	CheckInterval   int
+	RewriteInterval int
 }
 
 type RedisConfigSource struct {
@@ -152,6 +154,12 @@ func (rcs *RedisConfigSource) LoadConfigFromRedis(name string) (cfg *BackendConf
 	}
 	if cfg.MaxRowLimit == 0 {
 		cfg.MaxRowLimit = 10000
+	}
+	if cfg.CheckInterval == 0 {
+		cfg.CheckInterval = 1000
+	}
+	if cfg.RewriteInterval == 0 {
+		cfg.RewriteInterval = 10000
 	}
 	return
 }

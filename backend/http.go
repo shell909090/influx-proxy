@@ -53,7 +53,7 @@ func NewHttpBackend(cfg *BackendConfig) (hb *HttpBackend) {
 		// client_query: &http.Client{
 		// 	Timeout: time.Millisecond * time.Duration(cfg.TimeoutQuery),
 		// },
-		Interval: cfg.Interval,
+		Interval: cfg.CheckInterval,
 		URL:      cfg.URL,
 		DB:       cfg.DB,
 		Zone:     cfg.Zone,

@@ -13,9 +13,10 @@ const (
 
 type Backends struct {
 	*HttpBackend
-	fb          *FileBackend
-	Interval    int
-	MaxRowLimit int32
+	fb              *FileBackend
+	Interval        int
+	RewriteInterval int
+	MaxRowLimit     int32
 
 	running          bool
 	ticker           *time.Ticker
@@ -31,10 +32,11 @@ func NewBackends(cfg *BackendConfig, name string) (bs *Backends, err error) {
 	bs = &Backends{
 		HttpBackend: NewHttpBackend(cfg),
 		// FIXME: path...
-		Interval: cfg.Interval,
-		running:  true,
-		ticker:   time.NewTicker(time.Millisecond * time.Duration(cfg.Interval)),
-		ch_write: make(chan []byte, 16),
+		Interval:        cfg.Interval,
+		RewriteInterval: cfg.RewriteInterval,
+		running:         true,
+		ticker:          time.NewTicker(time.Millisecond * time.Duration(cfg.RewriteInterval)),
+		ch_write:        make(chan []byte, 16),
 
 		rewriter_running: false,
 		MaxRowLimit:      int32(cfg.MaxRowLimit),
@@ -116,7 +118,6 @@ func (bs *Backends) WriteBuffer(p []byte) {
 
 	switch {
 	case bs.write_counter >= bs.MaxRowLimit:
-		bs.write_counter = 0
 		bs.Flush()
 	case bs.ch_timer == nil:
 		bs.ch_timer = time.After(
@@ -134,6 +135,7 @@ func (bs *Backends) Flush() {
 	p := bs.buffer.Bytes()
 	bs.buffer = nil
 	bs.ch_timer = nil
+	bs.write_counter = 0
 
 	if len(p) == 0 {
 		return
@@ -191,12 +193,12 @@ func (bs *Backends) Idle() {
 func (bs *Backends) RewriteLoop() {
 	for bs.fb.IsData() {
 		if !bs.HttpBackend.IsActive() {
-			time.Sleep(time.Millisecond * time.Duration(bs.Interval))
+			time.Sleep(time.Millisecond * time.Duration(bs.RewriteInterval))
 			continue
 		}
 		err := bs.Rewrite()
 		if err != nil {
-			time.Sleep(time.Millisecond * time.Duration(bs.Interval))
+			time.Sleep(time.Millisecond * time.Duration(bs.RewriteInterval))
 			continue
 		}
 	}
