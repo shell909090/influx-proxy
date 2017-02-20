@@ -15,7 +15,6 @@ type Backends struct {
 	*HttpBackend
 	fb          *FileBackend
 	Interval    int
-	Timeout     int
 	MaxRowLimit int32
 
 	running          bool
@@ -33,9 +32,8 @@ func NewBackends(cfg *BackendConfig, name string) (bs *Backends, err error) {
 		HttpBackend: NewHttpBackend(cfg),
 		// FIXME: path...
 		Interval: cfg.Interval,
-		Timeout:  cfg.Timeout,
 		running:  true,
-		ticker:   time.NewTicker(time.Millisecond * time.Duration(cfg.Timeout)),
+		ticker:   time.NewTicker(time.Millisecond * time.Duration(cfg.Interval)),
 		ch_write: make(chan []byte, 16),
 
 		rewriter_running: false,
@@ -118,6 +116,7 @@ func (bs *Backends) WriteBuffer(p []byte) {
 
 	switch {
 	case bs.write_counter >= bs.MaxRowLimit:
+		bs.write_counter = 0
 		bs.Flush()
 	case bs.ch_timer == nil:
 		bs.ch_timer = time.After(
@@ -192,12 +191,12 @@ func (bs *Backends) Idle() {
 func (bs *Backends) RewriteLoop() {
 	for bs.fb.IsData() {
 		if !bs.HttpBackend.IsActive() {
-			time.Sleep(time.Millisecond * time.Duration(bs.Timeout))
+			time.Sleep(time.Millisecond * time.Duration(bs.Interval))
 			continue
 		}
 		err := bs.Rewrite()
 		if err != nil {
-			time.Sleep(time.Millisecond * time.Duration(bs.Timeout))
+			time.Sleep(time.Millisecond * time.Duration(bs.Interval))
 			continue
 		}
 	}

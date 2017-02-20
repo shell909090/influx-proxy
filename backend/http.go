@@ -36,7 +36,7 @@ func Compress(buf *bytes.Buffer, p []byte) (err error) {
 type HttpBackend struct {
 	client    *http.Client
 	transport http.Transport
-	Timeout   int
+	Interval  int
 	URL       string
 	DB        string
 	Zone      string
@@ -53,12 +53,12 @@ func NewHttpBackend(cfg *BackendConfig) (hb *HttpBackend) {
 		// client_query: &http.Client{
 		// 	Timeout: time.Millisecond * time.Duration(cfg.TimeoutQuery),
 		// },
-		Timeout: cfg.Timeout,
-		URL:     cfg.URL,
-		DB:      cfg.DB,
-		Zone:    cfg.Zone,
-		Active:  true,
-		running: true,
+		Interval: cfg.Interval,
+		URL:      cfg.URL,
+		DB:       cfg.DB,
+		Zone:     cfg.Zone,
+		Active:   true,
+		running:  true,
 	}
 	go hb.CheckActive()
 	return
@@ -71,7 +71,7 @@ func (hb *HttpBackend) CheckActive() {
 	for hb.running {
 		_, err = hb.Ping()
 		hb.Active = (err == nil)
-		time.Sleep(time.Millisecond * time.Duration(hb.Timeout))
+		time.Sleep(time.Millisecond * time.Duration(hb.Interval))
 	}
 }
 
