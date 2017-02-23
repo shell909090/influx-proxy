@@ -1,6 +1,7 @@
 package main
 
 import (
+	"compress/gzip"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -116,7 +117,19 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	p, err := ioutil.ReadAll(req.Body)
+	body := req.Body
+	if req.Header.Get("Content-Encoding") == "gzip" {
+		b, err := gzip.NewReader(req.Body)
+		if err != nil {
+			w.WriteHeader(400)
+			w.Write([]byte("unable to decode gzip body"))
+			return
+		}
+		defer b.Close()
+		body = b
+	}
+
+	p, err := ioutil.ReadAll(body)
 	if err != nil {
 		w.WriteHeader(400)
 		w.Write([]byte(err.Error()))
