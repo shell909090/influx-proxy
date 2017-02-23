@@ -1,7 +1,9 @@
 ### Makefile --- 
 
-## Author: shell@xps13
+## Author: Shell.Xu
 ## Version: $Id: Makefile,v 0.0 2017/01/17 03:44:24 shell Exp $
+## Copyright: 2017, Eleme <zhixiang.xu@ele.me>
+## License: MIT
 ## Keywords: 
 ## X-URL: 
 

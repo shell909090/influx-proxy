@@ -3,8 +3,8 @@
 '''
 @date: 2017-01-18
 @author: Shell.Xu
-@copyright: 2017, Shell.Xu <shell909090@gmail.com>
-@license: BSD-3-clause
+@copyright: 2017, Eleme <zhixiang.xu@ele.me>
+@license: MIT
 '''
 from __future__ import absolute_import, division,\
     print_function, unicode_literals
