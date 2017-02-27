@@ -13,31 +13,56 @@ import getopt
 import redis
 
 
+# backends key use for KEYMAPS, NODES, cache file
+# url: influxdb addr or other http backend which supports influxdb line protocol
+# db: influxdb db 
+# zone: same zone first query
+# interval: default config is 1000ms, wait 1 second write whether point count has bigger than maxrowlimit config
+# timeout: default config is 10000ms, write timeout until 10 seconds
+# timeoutquery: default config is 600000ms, query timeout until 600 seconds
+# maxrowlimit: default config is 10000, wait 10000 points write 
+# checkinterval: default config is 1000ms, check backend active every 1 second
+# rewriteinterval: default config is 10000ms, rewrite every 10 seconds
 BACKENDS = {
     'local': {
-        'url': 'http://localhost:8086',
-        'db': 'test',
-        'interval': 200
+        'url': 'http://localhost:8086', 
+        'db': 'test', 
+        'zone':'local', 
+        'interval': 1000,
+        'timeout': 10000, 
+        'timeoutquery':600000, 
+        'maxrowlimit':10000,  
+        'checkinterval':1000, 
+        'rewriteinterval':10000,
     },
     'local2': {
-        'url': 'http://localhost:8086',
+        'url': 'http://influxdb-test:8086',
         'db': 'test2',
-        'interval': 200
+        'interval': 200,
     },
 }
 
+# measurement:[backends keys], the key must be in the BACKENDS
+# data with the measurement will write to the backends
 KEYMAPS = {
     'cpu': ['local'],
     'temperature': ['local2']
 }
 
+# this config will cover default_node config
+# listenaddr: proxy listen addr
+# db: proxy db, client's db must be same with it
+# zone: use for query
+# nexts: the backends keys, will accept all data, split with ','
 NODES = {
-    'l1': {
+    'l1': { 
+        'listenaddr': '6666',
         'db': 'test',
-        'zone': 'local'
+        'zone': 'local',
     }
 }
 
+# the influxdb default cluster node 
 DEFAULT_NODE = {
     'listenaddr': ':6666'
 }
