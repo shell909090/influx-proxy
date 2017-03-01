@@ -72,12 +72,12 @@ func NewInfluxCluster(cfgsrc *RedisConfigSource, nodecfg *NodeConfig) (ic *Influ
 		bas:    make([]BackendAPI, 0),
 	}
 
-	err := ic.ForbidQuery("select\\s+\\*")
+	err := ic.ForbidQuery("(?i:select\\s+\\*|^\\s*delete|^\\s*drop|^\\s*grant|^\\s*revoke)")
 	if err != nil {
 		panic(err)
 		return
 	}
-	err = ic.EnsureQuery("where.*time")
+	err = ic.EnsureQuery("(?i:where.*time|show.*from)")
 	if err != nil {
 		panic(err)
 		return
