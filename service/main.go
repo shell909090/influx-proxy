@@ -12,21 +12,24 @@ import (
 	"net/http"
 	"os"
 
+	lumberjack "gopkg.in/natefinch/lumberjack.v2"
 	redis "gopkg.in/redis.v5"
 
 	"github.com/shell909090/influx-proxy/backend"
 )
 
 var (
-	ErrConfig  = errors.New("config parse error")
-	ConfigFile string
-	NodeName   string
-	RedisAddr  string
+	ErrConfig   = errors.New("config parse error")
+	ConfigFile  string
+	NodeName    string
+	RedisAddr   string
+	LogFilePath string
 )
 
 func init() {
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds | log.Lshortfile)
 
+	flag.StringVar(&LogFilePath, "log-file-path", "/var/log/influx-proxy.log", "output file")
 	flag.StringVar(&ConfigFile, "config", "", "config file")
 	flag.StringVar(&NodeName, "node", "l1", "node name")
 	flag.StringVar(&RedisAddr, "redis", "localhost:6379", "config file")
@@ -50,7 +53,22 @@ func LoadJson(configfile string, cfg interface{}) (err error) {
 	return
 }
 
+func initLog() {
+	if LogFilePath == "" {
+		log.SetOutput(os.Stdout)
+	} else {
+		log.SetOutput(&lumberjack.Logger{
+			Filename:   LogFilePath,
+			MaxSize:    100,
+			MaxBackups: 5,
+			MaxAge:     7,
+		})
+	}
+}
+
 func main() {
+	initLog()
+
 	var err error
 	var cfg Config
 

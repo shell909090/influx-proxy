@@ -86,16 +86,24 @@ The setup should look like this:
   └──────────┘      └──────────┘
 ```
 
-Commands
+Query Commands
 --------
 
 #### Unsupported commands
 
-The following commands are not available.
+The following commands are forbid.
 
-* `SELECT *` statement
-* `SELECT INTO`  statement
-* `SELECT cpu_load from cpu` statement, must need time ranges.
+* `DELETE` 
+* `DROP`  
+* `GRANT`
+* `REVOKE`
+
+#### Supported commands
+
+Only support match the following commands.
+
+* `* where .* time`
+* `show .* from`
 
 License
 -------

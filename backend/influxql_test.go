@@ -69,7 +69,7 @@ func TestInfluxQL(t *testing.T) {
 	// checkPoint(t, "SHOW SERIES FROM \"telegraf\".\"autogen\".\"cpu\" WHERE cpu = 'cpu8'", "cpu")
 
 	// checkPoint(t, "SHOW TAG KEYS", "cpu")
-	checkPoint(t, "SHOW TAG KEYS FROM \"cpu\"", "cpu")
+	checkPoint(t, "SHOW TAG KEYS FROM cpu", "cpu")
 	checkPoint(t, "SHOW TAG KEYS FROM \"cpu\" WHERE \"region\" = 'uswest'", "cpu")
 	// checkPoint(t, "SHOW TAG KEYS WHERE \"host\" = 'serverA'", "cpu")
 
@@ -77,6 +77,12 @@ func TestInfluxQL(t *testing.T) {
 	checkPoint(t, "SHOW TAG VALUES FROM \"cpu\" WITH KEY = \"region\"", "cpu")
 	// checkPoint(t, "SHOW TAG VALUES WITH KEY !~ /.*c.*/", "cpu")
 	checkPoint(t, "SHOW TAG VALUES FROM \"cpu\" WITH KEY IN (\"region\", \"host\") WHERE \"service\" = 'redis'", "cpu")
+
+	checkPoint(t, "SHOW FIELD KEYS FROM \"1h\".\"cpu\"", "cpu")
+	checkPoint(t, "SHOW FIELD KEYS FROM 1h.cpu", "cpu")
+	checkPoint(t, "SHOW FIELD KEYS FROM \"cpu.load\"", "cpu.load")
+	checkPoint(t, "SHOW FIELD KEYS FROM 1h.\"cpu.load\"", "cpu.load")
+	checkPoint(t, "SHOW FIELD KEYS FROM \"1h\".\"cpu.load\"", "cpu.load")
 }
 
 func checkPoint(t *testing.T, q string, m string) {

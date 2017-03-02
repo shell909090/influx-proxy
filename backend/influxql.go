@@ -56,6 +56,9 @@ func ScanToken(data []byte, atEOF bool) (advance int, token []byte, err error) {
 	start := 0
 	for ; start < len(data) && data[start] == ' '; start++ {
 	}
+	if start == len(data) {
+		return 0, nil, nil
+	}
 
 	switch data[start] {
 	case '"':
@@ -120,18 +123,49 @@ func GetMeasurementFromInfluxQL(q string) (m string, err error) {
 	for scanner.Scan() {
 		tokens = append(tokens, scanner.Text())
 	}
-	// fmt.Printf("%v\n", tokens)
+	//fmt.Printf("%v\n", tokens)
 
 	for i := 0; i < len(tokens); i++ {
 		// fmt.Printf("%v\n", tokens[i])
 		if strings.ToLower(tokens[i]) == "from" {
-			m = tokens[i+1]
-			if m[0] == '"' || m[0] == '\'' {
-				m = m[1 : len(m)-1]
+			if i+1 < len(tokens) {
+				m = getMeasurement(tokens[i+1:])
+				return
 			}
-			return
 		}
 	}
 
 	return "", ErrIllegalQL
+}
+
+func getMeasurement(tokens []string) (m string) {
+	if len(tokens) >= 2 && strings.HasPrefix(tokens[1], ".") {
+		m = tokens[1]
+		m = m[1:]
+		if m[0] == '"' || m[0] == '\'' {
+			m = m[1 : len(m)-1]
+		}
+		return
+	}
+
+	m = tokens[0]
+	if m[0] == '/' {
+		return m
+	}
+
+	if m[0] == '"' || m[0] == '\'' {
+		m = m[1 : len(m)-1]
+		return
+	}
+
+	index := strings.IndexByte(m, '.')
+	if index == -1 {
+		return
+	}
+
+	m = m[index+1:]
+	if m[0] == '"' || m[0] == '\'' {
+		m = m[1 : len(m)-1]
+	}
+	return
 }
