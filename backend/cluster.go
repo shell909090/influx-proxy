@@ -60,6 +60,7 @@ type InfluxCluster struct {
 	lock           sync.RWMutex
 	Zone           string
 	nexts          string
+	query_executor Querier
 	ForbiddenQuery []*regexp.Regexp
 	ObligatedQuery []*regexp.Regexp
 	cfgsrc         *RedisConfigSource
@@ -70,10 +71,11 @@ type InfluxCluster struct {
 
 func NewInfluxCluster(cfgsrc *RedisConfigSource, nodecfg *NodeConfig) (ic *InfluxCluster) {
 	ic = &InfluxCluster{
-		Zone:   nodecfg.Zone,
-		nexts:  nodecfg.Nexts,
-		cfgsrc: cfgsrc,
-		bas:    make([]BackendAPI, 0),
+		Zone:           nodecfg.Zone,
+		nexts:          nodecfg.Nexts,
+		query_executor: &InfluxQLExecutor{},
+		cfgsrc:         cfgsrc,
+		bas:            make([]BackendAPI, 0),
 	}
 
 	err := ic.ForbidQuery("(?i:select\\s+\\*|^\\s*delete|^\\s*drop|^\\s*grant|^\\s*revoke)")
@@ -242,6 +244,11 @@ func (ic *InfluxCluster) Query(w http.ResponseWriter, req *http.Request) (err er
 	if q == "" {
 		w.WriteHeader(400)
 		w.Write([]byte("empty query"))
+		return
+	}
+
+	err = ic.query_executor.Query(w, req)
+	if err == nil {
 		return
 	}
 
