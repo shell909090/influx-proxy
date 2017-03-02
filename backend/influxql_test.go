@@ -76,8 +76,9 @@ func TestInfluxQL(t *testing.T) {
 
 	checkPoint(t, "SHOW FIELD KEYS FROM \"1h\".\"cpu\"", "cpu")
 	checkPoint(t, "SHOW FIELD KEYS FROM 1h.cpu", "cpu")
-	checkPoint(t, "SHOW FIELD KEYS FROM cpu.load", "load")
 	checkPoint(t, "SHOW FIELD KEYS FROM \"cpu.load\"", "cpu.load")
+	checkPoint(t, "SHOW FIELD KEYS FROM 1h.\"cpu.load\"", "cpu.load")
+	checkPoint(t, "SHOW FIELD KEYS FROM \"1h\".\"cpu.load\"", "cpu.load")
 }
 
 func checkPoint(t *testing.T, q string, m string) {

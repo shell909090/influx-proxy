@@ -154,8 +154,12 @@ func getMeasurement(tokens []string) (m string) {
 		return
 	}
 
-	fields := strings.Split(m, ".")
-	m = fields[len(fields)-1]
+	index := strings.IndexByte(m, '.')
+	if index == -1 {
+		return
+	}
+
+	m = m[index+1:]
 	if m[0] == '"' || m[0] == '\'' {
 		m = m[1 : len(m)-1]
 	}
