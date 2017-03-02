@@ -185,6 +185,16 @@ func TestInfluxdbClusterQuery(t *testing.T) {
 		return
 	}
 
+	// test show  measurement
+	q.Set("q", "SHOW measurements ")
+	req, _ = http.NewRequest("GET", "http://localhost:8086/query?"+q.Encode(), nil)
+	req.URL.Query()
+	ic.Query(w, req)
+	if w.status != 200 && w.status != 204 {
+		t.Error("should be return 200 or 204 code")
+		return
+	}
+
 	// test delete clause
 	q.Set("q", " DELETE FROM \"cpu\" WHERE time < '2000-01-01T00:00:00Z'")
 	req, _ = http.NewRequest("GET", "http://localhost:8086/query?"+q.Encode(), nil)

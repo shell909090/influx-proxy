@@ -102,8 +102,9 @@ The following commands are forbid.
 
 Only support match the following commands.
 
-* `* where .* time`
-* `show .* from`
+* `.*where.*time`
+* `show.*from`
+* `show.*measurements`
 
 License
 -------

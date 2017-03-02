@@ -93,10 +93,10 @@ func (hb *HttpBackend) Ping() (version string, err error) {
 
 	version = resp.Header.Get("X-Influxdb-Version")
 
-	log.Print("ping status code: ", resp.StatusCode)
 	if resp.StatusCode == 204 {
 		return
 	}
+	log.Print("write status code: ", resp.StatusCode)
 
 	respbuf, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
@@ -191,10 +191,10 @@ func (hb *HttpBackend) WriteStream(stream io.Reader, compressed bool) (err error
 	}
 	defer resp.Body.Close()
 
-	log.Print("write status code: ", resp.StatusCode)
 	if resp.StatusCode == 204 {
 		return
 	}
+	log.Print("write status code: ", resp.StatusCode)
 
 	respbuf, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
