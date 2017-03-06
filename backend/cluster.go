@@ -262,6 +262,16 @@ func (ic *InfluxCluster) Query(w http.ResponseWriter, req *http.Request) (err er
 
 	ic.lock.RLock()
 	apis, ok := ic.m2bs[key]
+	// match use prefix or suffix
+	if !ok {
+		for k, v := range ic.m2bs {
+			if strings.HasPrefix(key, k) || strings.HasSuffix(key, k) {
+				apis = v
+				ok = true
+				break
+			}
+		}
+	}
 	ic.lock.RUnlock()
 	if !ok {
 		log.Printf("unknown measurement: %s\n", key)
@@ -321,6 +331,16 @@ func (ic *InfluxCluster) WriteRow(line []byte) {
 
 	ic.lock.RLock()
 	bs, ok := ic.m2bs[key]
+	// match use prefix or suffix
+	if !ok {
+		for k, v := range ic.m2bs {
+			if strings.HasPrefix(key, k) || strings.HasSuffix(key, k) {
+				bs = v
+				ok = true
+				break
+			}
+		}
+	}
 	ic.lock.RUnlock()
 	if !ok {
 		log.Printf("new measurement: %s\n", key)
