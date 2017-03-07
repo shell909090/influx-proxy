@@ -78,12 +78,12 @@ func NewInfluxCluster(cfgsrc *RedisConfigSource, nodecfg *NodeConfig) (ic *Influ
 		bas:            make([]BackendAPI, 0),
 	}
 
-	err := ic.ForbidQuery("(?i:select\\s+\\*|^\\s*delete|^\\s*drop|^\\s*grant|^\\s*revoke)")
+	err := ic.ForbidQuery(ForbidCmds)
 	if err != nil {
 		panic(err)
 		return
 	}
-	err = ic.EnsureQuery("(?i:where.*time|show.*from)")
+	err = ic.EnsureQuery(SupportCmds)
 	if err != nil {
 		panic(err)
 		return
@@ -143,8 +143,8 @@ func (ic *InfluxCluster) loadBackends() (backends map[string]BackendAPI, bas []B
 			ba, ok := backends[nextname]
 			if !ok {
 				err = ErrBackendNotExist
-				log.Fatal(err)
-				return
+				log.Println(nextname, err)
+				continue
 			}
 			bas = append(bas, ba)
 		}
@@ -167,8 +167,8 @@ func (ic *InfluxCluster) loadMeasurements(backends map[string]BackendAPI) (m2bs 
 			bs, ok := backends[bs_name]
 			if !ok {
 				err = ErrBackendNotExist
-				log.Fatal(err)
-				return
+				log.Println(bs_name, err)
+				continue
 			}
 			bss = append(bss, bs)
 		}

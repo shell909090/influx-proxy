@@ -8,6 +8,7 @@ package backend
 import (
 	"errors"
 	"net/http"
+	"regexp"
 )
 
 var (
@@ -18,5 +19,15 @@ type InfluxQLExecutor struct {
 }
 
 func (iqe *InfluxQLExecutor) Query(w http.ResponseWriter, req *http.Request) (err error) {
-	return ErrNotClusterQuery
+	q := req.URL.Query().Get("q")
+	// better way??
+	matched, err := regexp.MatchString(ExecutorCmds, q)
+	if err != nil || !matched {
+		return ErrNotClusterQuery
+	}
+
+	w.WriteHeader(200)
+	w.Write([]byte(""))
+
+	return
 }
