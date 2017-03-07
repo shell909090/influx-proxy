@@ -91,7 +91,7 @@ measurements match principle:
 * Exact match first. For instance, we use `cpu.load` for measurement's name. The KEYMAPS has `cpu` and `cpu.load` keys.
 It will use the `cpu.load` corresponding backends.
 
-* Then Prefix or Suffix match. For instance, we use `cpu.load` for measurement's name. The KEYMAPS  only has `cpu` key.
+* Then Prefix match. For instance, we use `cpu.load` for measurement's name. The KEYMAPS  only has `cpu` key.
 It will use the `cpu` corresponding backends.
 
 Query Commands
@@ -110,8 +110,9 @@ The following commands are forbid.
 
 Only support match the following commands.
 
-* `* where .* time`
-* `show .* from`
+* `.*where.*time`
+* `show.*from`
+* `show.*measurements`
 
 License
 -------

@@ -60,6 +60,7 @@ type InfluxCluster struct {
 	lock           sync.RWMutex
 	Zone           string
 	nexts          string
+	query_executor Querier
 	ForbiddenQuery []*regexp.Regexp
 	ObligatedQuery []*regexp.Regexp
 	cfgsrc         *RedisConfigSource
@@ -70,18 +71,19 @@ type InfluxCluster struct {
 
 func NewInfluxCluster(cfgsrc *RedisConfigSource, nodecfg *NodeConfig) (ic *InfluxCluster) {
 	ic = &InfluxCluster{
-		Zone:   nodecfg.Zone,
-		nexts:  nodecfg.Nexts,
-		cfgsrc: cfgsrc,
-		bas:    make([]BackendAPI, 0),
+		Zone:           nodecfg.Zone,
+		nexts:          nodecfg.Nexts,
+		query_executor: &InfluxQLExecutor{},
+		cfgsrc:         cfgsrc,
+		bas:            make([]BackendAPI, 0),
 	}
 
-	err := ic.ForbidQuery("(?i:select\\s+\\*|^\\s*delete|^\\s*drop|^\\s*grant|^\\s*revoke)")
+	err := ic.ForbidQuery(ForbidCmds)
 	if err != nil {
 		panic(err)
 		return
 	}
-	err = ic.EnsureQuery("(?i:where.*time|show.*from)")
+	err = ic.EnsureQuery(SupportCmds)
 	if err != nil {
 		panic(err)
 		return
@@ -141,8 +143,8 @@ func (ic *InfluxCluster) loadBackends() (backends map[string]BackendAPI, bas []B
 			ba, ok := backends[nextname]
 			if !ok {
 				err = ErrBackendNotExist
-				log.Fatal(err)
-				return
+				log.Println(nextname, err)
+				continue
 			}
 			bas = append(bas, ba)
 		}
@@ -165,8 +167,8 @@ func (ic *InfluxCluster) loadMeasurements(backends map[string]BackendAPI) (m2bs 
 			bs, ok := backends[bs_name]
 			if !ok {
 				err = ErrBackendNotExist
-				log.Fatal(err)
-				return
+				log.Println(bs_name, err)
+				continue
 			}
 			bss = append(bss, bs)
 		}
@@ -228,6 +230,24 @@ func (ic *InfluxCluster) CheckQuery(q string) (err error) {
 	return
 }
 
+func (ic *InfluxCluster) GetBackends(key string) (backends []BackendAPI, ok bool) {
+	ic.lock.RLock()
+	defer ic.lock.RUnlock()
+
+	backends, ok = ic.m2bs[key]
+	// match use prefix
+	if !ok {
+		for k, v := range ic.m2bs {
+			if strings.HasPrefix(key, k) {
+				backends = v
+				ok = true
+				break
+			}
+		}
+	}
+	return
+}
+
 func (ic *InfluxCluster) Query(w http.ResponseWriter, req *http.Request) (err error) {
 	switch req.Method {
 	case "GET", "POST":
@@ -242,6 +262,11 @@ func (ic *InfluxCluster) Query(w http.ResponseWriter, req *http.Request) (err er
 	if q == "" {
 		w.WriteHeader(400)
 		w.Write([]byte("empty query"))
+		return
+	}
+
+	err = ic.query_executor.Query(w, req)
+	if err == nil {
 		return
 	}
 
@@ -260,19 +285,7 @@ func (ic *InfluxCluster) Query(w http.ResponseWriter, req *http.Request) (err er
 		return
 	}
 
-	ic.lock.RLock()
-	apis, ok := ic.m2bs[key]
-	// match use prefix or suffix
-	if !ok {
-		for k, v := range ic.m2bs {
-			if strings.HasPrefix(key, k) || strings.HasSuffix(key, k) {
-				apis = v
-				ok = true
-				break
-			}
-		}
-	}
-	ic.lock.RUnlock()
+	apis, ok := ic.GetBackends(key)
 	if !ok {
 		log.Printf("unknown measurement: %s\n", key)
 		w.WriteHeader(400)
@@ -329,19 +342,7 @@ func (ic *InfluxCluster) WriteRow(line []byte) {
 		return
 	}
 
-	ic.lock.RLock()
-	bs, ok := ic.m2bs[key]
-	// match use prefix or suffix
-	if !ok {
-		for k, v := range ic.m2bs {
-			if strings.HasPrefix(key, k) || strings.HasSuffix(key, k) {
-				bs = v
-				ok = true
-				break
-			}
-		}
-	}
-	ic.lock.RUnlock()
+	bs, ok := ic.GetBackends(key)
 	if !ok {
 		log.Printf("new measurement: %s\n", key)
 		// TODO: new measurement?
