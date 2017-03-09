@@ -230,6 +230,24 @@ func (ic *InfluxCluster) CheckQuery(q string) (err error) {
 	return
 }
 
+func (ic *InfluxCluster) GetBackends(key string) (backends []BackendAPI, ok bool) {
+	ic.lock.RLock()
+	defer ic.lock.RUnlock()
+
+	backends, ok = ic.m2bs[key]
+	// match use prefix
+	if !ok {
+		for k, v := range ic.m2bs {
+			if strings.HasPrefix(key, k) {
+				backends = v
+				ok = true
+				break
+			}
+		}
+	}
+	return
+}
+
 func (ic *InfluxCluster) Query(w http.ResponseWriter, req *http.Request) (err error) {
 	switch req.Method {
 	case "GET", "POST":
@@ -267,9 +285,7 @@ func (ic *InfluxCluster) Query(w http.ResponseWriter, req *http.Request) (err er
 		return
 	}
 
-	ic.lock.RLock()
-	apis, ok := ic.m2bs[key]
-	ic.lock.RUnlock()
+	apis, ok := ic.GetBackends(key)
 	if !ok {
 		log.Printf("unknown measurement: %s\n", key)
 		w.WriteHeader(400)
@@ -326,9 +342,7 @@ func (ic *InfluxCluster) WriteRow(line []byte) {
 		return
 	}
 
-	ic.lock.RLock()
-	bs, ok := ic.m2bs[key]
-	ic.lock.RUnlock()
+	bs, ok := ic.GetBackends(key)
 	if !ok {
 		log.Printf("new measurement: %s\n", key)
 		// TODO: new measurement?

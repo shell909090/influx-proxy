@@ -108,11 +108,36 @@ func TestInfluxdbClusterWrite(t *testing.T) {
 		t.Error(err)
 		return
 	}
-	for i := 0; i < 100; i++ {
-		err = ic.Write([]byte("cpu value=3,value2=4 1434055562000010000"))
+	tests := []struct {
+		name string
+		args []byte
+		want error
+	}{
+		{
+			name: "cpu",
+			args: []byte("cpu value=3,value2=4 1434055562000010000"),
+			want: nil,
+		},
+		{
+			name: "cpu.load",
+			args: []byte("cpu.load value=3,value2=4 1434055562000010000"),
+			want: nil,
+		},
+		{
+			name: "load.cpu",
+			args: []byte("load.cpu value=3,value2=4 1434055562000010000"),
+			want: nil,
+		},
+		{
+			name: "test",
+			args: []byte("test value=3,value2=4 1434055562000010000"),
+		},
+	}
+	for _, tt := range tests {
+		err := ic.Write(tt.args)
 		if err != nil {
-			t.Error(err)
-			return
+			t.Error(tt.name, err)
+			continue
 		}
 	}
 	time.Sleep(time.Second)
@@ -146,62 +171,60 @@ func TestInfluxdbClusterQuery(t *testing.T) {
 	q := url.Values{}
 	q.Set("db", "test")
 
-	// test select * clause
-	q.Set("q", "SELECT * from cpu where time > now() - 1m")
-	req, _ := http.NewRequest("GET", "http://localhost:8086/query?"+q.Encode(), nil)
-	req.URL.Query()
-	ic.Query(w, req)
-	if w.status != 400 {
-		t.Error("should be return 400 code")
-		return
+	tests := []struct {
+		name  string
+		query string
+		want  int
+	}{
+		{
+			name:  "cpu",
+			query: "SELECT * from cpu where time > now() - 1m",
+			want:  400,
+		},
+		{
+			name:  "test",
+			query: "SELECT cpu_load from test WHERE time > now() - 1m",
+			want:  400,
+		},
+		{
+			name:  "cpu_load",
+			query: " select cpu_load from cpu WHERE time > now() - 1m",
+			want:  204,
+		},
+		{
+			name:  "cpu.load",
+			query: " select cpu_load from \"cpu.load\" WHERE time > now() - 1m",
+			want:  204,
+		},
+		{
+			name:  "load.cpu",
+			query: " select cpu_load from \"load.cpu\" WHERE time > now() - 1m",
+			want:  400,
+		},
+		{
+			name:  "show_cpu",
+			query: "SHOW tag keys from \"cpu\" ",
+			want:  204,
+		},
+		{
+			name:  "delete_cpu",
+			query: " DELETE FROM \"cpu\" WHERE time < '2000-01-01T00:00:00Z'",
+			want:  400,
+		},
+		{
+			name:  "show_measurements",
+			query: "SHOW measurements ",
+			want:  200,
+		},
 	}
 
-	// test measurement not exist
-	q.Set("q", "SELECT cpu_load from test WHERE time > now() - 1m")
-	req, _ = http.NewRequest("GET", "http://localhost:8086/query?"+q.Encode(), nil)
-	req.URL.Query()
-	ic.Query(w, req)
-	if w.status != 400 {
-		t.Error("should be return 400 code")
-		return
-	}
-
-	// test where time clause
-	q.Set("q", " select cpu_load from cpu WHERE time > now() - 1m")
-	req, _ = http.NewRequest("GET", "http://localhost:8086/query?"+q.Encode(), nil)
-	req.URL.Query()
-	ic.Query(w, req)
-	if w.status != 200 && w.status != 204 {
-		t.Error("should be return 200 or 204 code")
-		return
-	}
-	// test show tag values from measurement
-	q.Set("q", "SHOW tag keys from \"cpu\" ")
-	req, _ = http.NewRequest("GET", "http://localhost:8086/query?"+q.Encode(), nil)
-	req.URL.Query()
-	ic.Query(w, req)
-	if w.status != 200 && w.status != 204 {
-		t.Error("should be return 200 or 204 code")
-		return
-	}
-
-	// test show  measurement
-	q.Set("q", "SHOW measurements ")
-	req, _ = http.NewRequest("GET", "http://localhost:8086/query?"+q.Encode(), nil)
-	req.URL.Query()
-	ic.Query(w, req)
-	if w.status != 200 && w.status != 204 {
-		t.Error("should be return 200 or 204 code")
-		return
-	}
-
-	// test delete clause
-	q.Set("q", " DELETE FROM \"cpu\" WHERE time < '2000-01-01T00:00:00Z'")
-	req, _ = http.NewRequest("GET", "http://localhost:8086/query?"+q.Encode(), nil)
-	req.URL.Query()
-	ic.Query(w, req)
-	if w.status != 400 {
-		t.Error("should be return 400 code")
-		return
+	for _, tt := range tests {
+		q.Set("q", tt.query)
+		req, _ := http.NewRequest("GET", "http://localhost:8086/query?"+q.Encode(), nil)
+		req.URL.Query()
+		ic.Query(w, req)
+		if w.status != tt.want {
+			t.Error(tt.name, err, w.status)
+		}
 	}
 }
