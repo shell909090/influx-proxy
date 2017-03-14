@@ -122,9 +122,13 @@ func (hb *HttpBackend) GetZone() (zone string) {
 // Don't setup Accept-Encoding: gzip. Let real client do so.
 // If real client don't support gzip and we setted, it will be a mistake.
 func (hb *HttpBackend) Query(w http.ResponseWriter, req *http.Request) (err error) {
-	q := req.URL.Query()
-	q.Set("db", hb.DB)
-	req.URL, err = url.Parse(hb.URL + "/query?" + q.Encode())
+	if len(req.Form) == 0 {
+		req.Form = url.Values{}
+	}
+	req.Form.Set("db", hb.DB)
+	req.ContentLength = 0
+
+	req.URL, err = url.Parse(hb.URL + "/query?" + req.Form.Encode())
 	if err != nil {
 		log.Print("internal url parse error: ", err)
 		w.WriteHeader(400)

@@ -258,7 +258,7 @@ func (ic *InfluxCluster) Query(w http.ResponseWriter, req *http.Request) (err er
 	}
 
 	// TODO: all query in q?
-	q := req.URL.Query().Get("q")
+	q := strings.TrimSpace(req.FormValue("q"))
 	if q == "" {
 		w.WriteHeader(400)
 		w.Write([]byte("empty query"))
@@ -371,6 +371,7 @@ func (ic *InfluxCluster) Write(p []byte) (err error) {
 			log.Printf("error: %s\n", err)
 			return
 		case io.EOF, nil:
+			err = nil
 		}
 
 		if len(line) == 0 {

@@ -69,17 +69,10 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
 	defer req.Body.Close()
 	w.Header().Add("X-Influxdb-Version", backend.VERSION)
 
-	q := req.URL.Query()
+	db := req.FormValue("db")
 
 	if hs.db != "" {
-		db, ok := q["db"]
-		if !ok || len(db) != 1 {
-			w.WriteHeader(400)
-			w.Write([]byte("illegal database."))
-			return
-		}
-
-		if db[0] != hs.db {
+		if db != hs.db {
 			w.WriteHeader(404)
 			w.Write([]byte("database not exist."))
 			return
@@ -104,17 +97,10 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	q := req.URL.Query()
+	db := req.URL.Query().Get("db")
 
 	if hs.db != "" {
-		db, ok := q["db"]
-		if !ok || len(db) != 1 {
-			w.WriteHeader(400)
-			w.Write([]byte("illegal database."))
-			return
-		}
-
-		if db[0] != hs.db {
+		if db != hs.db {
 			w.WriteHeader(404)
 			w.Write([]byte("database not exist."))
 			return
