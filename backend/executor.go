@@ -9,6 +9,7 @@ import (
 	"errors"
 	"net/http"
 	"regexp"
+	"strings"
 )
 
 var (
@@ -19,7 +20,7 @@ type InfluxQLExecutor struct {
 }
 
 func (iqe *InfluxQLExecutor) Query(w http.ResponseWriter, req *http.Request) (err error) {
-	q := req.URL.Query().Get("q")
+	q := strings.TrimSpace(req.FormValue("q"))
 	// better way??
 	matched, err := regexp.MatchString(ExecutorCmds, q)
 	if err != nil || !matched {
