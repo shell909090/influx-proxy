@@ -118,6 +118,7 @@ func ScanToken(data []byte, atEOF bool) (advance int, token []byte, err error) {
 func GetMeasurementFromInfluxQL(q string) (m string, err error) {
 	buf := bytes.NewBuffer([]byte(q))
 	scanner := bufio.NewScanner(buf)
+	scanner.Buffer([]byte(q), bufio.MaxScanTokenSize)
 	scanner.Split(ScanToken)
 	var tokens []string
 	for scanner.Scan() {
