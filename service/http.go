@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/pprof"
+	"strings"
 
 	"github.com/shell909090/influx-proxy/backend"
 )
@@ -81,7 +82,8 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
 
 	err := hs.ic.Query(w, req)
 	if err != nil {
-		log.Printf("query error: %s\n", err)
+		q := strings.TrimSpace(req.FormValue("q"))
+		log.Printf("query error: %s,the query is %s,the client is %s\n", err, q, req.RemoteAddr)
 		return
 	}
 	return

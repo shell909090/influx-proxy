@@ -55,6 +55,7 @@ type NodeConfig struct {
 	DB         string
 	Zone       string
 	Nexts      string
+	Interval   int
 }
 
 type BackendConfig struct {
