@@ -220,13 +220,16 @@ func (ic *InfluxCluster) CheckQuery(q string) (err error) {
 			}
 		}
 	}
+
 	if len(ic.ObligatedQuery) != 0 {
 		for _, pq := range ic.ObligatedQuery {
-			if !pq.MatchString(q) {
-				return ErrQueryForbidden
+			if pq.MatchString(q) {
+				return
 			}
 		}
+		return ErrQueryForbidden
 	}
+
 	return
 }
 
@@ -287,7 +290,7 @@ func (ic *InfluxCluster) Query(w http.ResponseWriter, req *http.Request) (err er
 
 	apis, ok := ic.GetBackends(key)
 	if !ok {
-		log.Printf("unknown measurement: %s\n", key)
+		log.Printf("unknown measurement: %s,the query is %s\n", key, q)
 		w.WriteHeader(400)
 		w.Write([]byte("unknown measurement"))
 		return
@@ -322,6 +325,8 @@ func (ic *InfluxCluster) Query(w http.ResponseWriter, req *http.Request) (err er
 		}
 	}
 
+	w.WriteHeader(400)
+	w.Write([]byte("query error"))
 	return
 }
 
