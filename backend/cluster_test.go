@@ -140,6 +140,11 @@ func TestInfluxdbClusterWrite(t *testing.T) {
 			continue
 		}
 	}
+	err = ic.WriteStatistics(*ic.stats)
+	if err != nil {
+		t.Error(err)
+		return
+	}
 	time.Sleep(time.Second)
 }
 func TestInfluxdbClusterPing(t *testing.T) {
@@ -216,6 +221,16 @@ func TestInfluxdbClusterQuery(t *testing.T) {
 			query: "SHOW measurements ",
 			want:  200,
 		},
+		{
+			name:  "cpu.load",
+			query: " select cpu_load from \"cpu.load\" WHERE time > now() - 1m and host =~ /()$/",
+			want:  400,
+		},
+		{
+			name:  "cpu.load",
+			query: " select cpu_load from \"cpu.load\" WHERE time > now() - 1m and host =~ /^()$/",
+			want:  400,
+		},
 	}
 
 	for _, tt := range tests {
@@ -226,5 +241,10 @@ func TestInfluxdbClusterQuery(t *testing.T) {
 		if w.status != tt.want {
 			t.Error(tt.name, err, w.status)
 		}
+	}
+	err = ic.WriteStatistics(*ic.stats)
+	if err != nil {
+		t.Error(err)
+		return
 	}
 }
