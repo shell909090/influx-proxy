@@ -50,15 +50,17 @@ KEYMAPS = {
 }
 
 # this config will cover default_node config
-# listenaddr: proxy listen addr
+# listenaddr: proxy listen addr                
 # db: proxy db, client's db must be same with it
 # zone: use for query
 # nexts: the backends keys, will accept all data, split with ','
 NODES = {
     'l1': { 
-        'listenaddr': '6666',
+        'listenaddr': ':6666',
         'db': 'test',
         'zone': 'local',
+        'interval':10,
+        'softtimeout':60,
     }
 }
 
