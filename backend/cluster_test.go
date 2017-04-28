@@ -216,6 +216,16 @@ func TestInfluxdbClusterQuery(t *testing.T) {
 			query: "SHOW measurements ",
 			want:  200,
 		},
+		{
+			name:  "cpu.load",
+			query: " select cpu_load from \"cpu.load\" WHERE time > now() - 1m and host =~ /()$/",
+			want:  400,
+		},
+		{
+			name:  "cpu.load",
+			query: " select cpu_load from \"cpu.load\" WHERE time > now() - 1m and host =~ /^()$/",
+			want:  400,
+		},
 	}
 
 	for _, tt := range tests {
