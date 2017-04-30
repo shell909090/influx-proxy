@@ -216,3 +216,9 @@ func (fb *FileBackend) RollbackMeta() (err error) {
 	}
 	return
 }
+
+func (fb *FileBackend) Close() {
+	fb.producer.Close()
+	fb.consumer.Close()
+	fb.meta.Close()
+}

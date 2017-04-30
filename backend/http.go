@@ -223,5 +223,6 @@ func (hb *HttpBackend) WriteStream(stream io.Reader, compressed bool) (err error
 
 func (hb *HttpBackend) Close() (err error) {
 	hb.running = false
+	hb.transport.CloseIdleConnections()
 	return
 }
