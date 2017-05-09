@@ -62,6 +62,7 @@ func (bs *Backends) worker() {
 				// closed
 				bs.Flush()
 				bs.HttpBackend.Close()
+				bs.fb.Close()
 				return
 			}
 			bs.WriteBuffer(p)
