@@ -51,12 +51,11 @@ func LoadStructFromMap(data map[string]string, o interface{}) (err error) {
 }
 
 type NodeConfig struct {
-	ListenAddr  string
-	DB          string
-	Zone        string
-	Nexts       string
-	Interval    int
-	SoftTimeout int
+	ListenAddr string
+	DB         string
+	Zone       string
+	Nexts      string
+	Interval   int
 }
 
 type BackendConfig struct {

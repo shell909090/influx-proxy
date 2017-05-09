@@ -14,7 +14,9 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/shell909090/influx-proxy/monitor"
 )
@@ -62,7 +64,6 @@ func TrimRight(p []byte, s []byte) (r []byte) {
 
 type InfluxCluster struct {
 	lock           sync.RWMutex
-	SoftTimeout    int
 	Zone           string
 	nexts          string
 	query_executor Querier
@@ -101,7 +102,6 @@ func NewInfluxCluster(cfgsrc *RedisConfigSource, nodecfg *NodeConfig) (ic *Influ
 		stats:          &Statistics{},
 		counter:        &Statistics{},
 		ticker:         time.NewTicker(10 * time.Second),
-		SoftTimeout:    60,
 		defaultTags:    map[string]string{"addr": nodecfg.ListenAddr},
 	}
 	host, err := os.Hostname()
@@ -111,9 +111,6 @@ func NewInfluxCluster(cfgsrc *RedisConfigSource, nodecfg *NodeConfig) (ic *Influ
 	ic.defaultTags["host"] = host
 	if nodecfg.Interval > 0 {
 		ic.ticker = time.NewTicker(time.Second * time.Duration(nodecfg.Interval))
-	}
-	if nodecfg.SoftTimeout > 0 {
-		ic.SoftTimeout = nodecfg.SoftTimeout
 	}
 
 	err = ic.ForbidQuery(ForbidCmds)
@@ -127,6 +124,7 @@ func NewInfluxCluster(cfgsrc *RedisConfigSource, nodecfg *NodeConfig) (ic *Influ
 		return
 	}
 
+	// feature
 	go ic.statistics()
 	return
 }
@@ -137,9 +135,8 @@ func (ic *InfluxCluster) statistics() {
 		select {
 		case <-ic.ticker.C:
 			ic.Flush()
-			ic.lock.Lock()
-			ic.stats, ic.counter = ic.counter, ic.stats
-			ic.lock.Unlock()
+			ic.counter = (*Statistics)(atomic.SwapPointer((*unsafe.Pointer)(unsafe.Pointer(&ic.stats)),
+				unsafe.Pointer(ic.counter)))
 			err := ic.WriteStatistics()
 			if err != nil {
 				log.Println(err)
@@ -301,9 +298,7 @@ func (ic *InfluxCluster) LoadConfig() (err error) {
 }
 
 func (ic *InfluxCluster) Ping() (version string, err error) {
-	ic.lock.Lock()
-	ic.stats.PingRequests += 1
-	ic.lock.Unlock()
+	atomic.AddInt64(&ic.stats.PingRequests, 1)
 	version = VERSION
 	return
 }
@@ -348,18 +343,9 @@ func (ic *InfluxCluster) GetBackends(key string) (backends []BackendAPI, ok bool
 }
 
 func (ic *InfluxCluster) Query(w http.ResponseWriter, req *http.Request) (err error) {
-	ic.lock.Lock()
-	ic.stats.QueryRequests += 1
-	ic.lock.Unlock()
-	q := strings.TrimSpace(req.FormValue("q"))
+	atomic.AddInt64(&ic.stats.QueryRequests, 1)
 	defer func(start time.Time) {
-		offset := time.Since(start).Nanoseconds()
-		ic.lock.Lock()
-		ic.stats.QueryRequestDuration += offset
-		ic.lock.Unlock()
-		if time.Duration(offset) > time.Second*time.Duration(ic.SoftTimeout) {
-			log.Printf("the query '%s' spend long time,the client is %s\n", q, req.RemoteAddr)
-		}
+		atomic.AddInt64(&ic.stats.QueryRequestDuration, time.Since(start).Nanoseconds())
 	}(time.Now())
 
 	switch req.Method {
@@ -367,19 +353,16 @@ func (ic *InfluxCluster) Query(w http.ResponseWriter, req *http.Request) (err er
 	default:
 		w.WriteHeader(400)
 		w.Write([]byte("illegal method"))
-		ic.lock.Lock()
-		ic.stats.QueryRequestsFail += 1
-		ic.lock.Unlock()
+		atomic.AddInt64(&ic.stats.QueryRequestsFail, 1)
 		return
 	}
 
 	// TODO: all query in q?
+	q := strings.TrimSpace(req.FormValue("q"))
 	if q == "" {
 		w.WriteHeader(400)
 		w.Write([]byte("empty query"))
-		ic.lock.Lock()
-		ic.stats.QueryRequestsFail += 1
-		ic.lock.Unlock()
+		atomic.AddInt64(&ic.stats.QueryRequestsFail, 1)
 		return
 	}
 
@@ -392,9 +375,7 @@ func (ic *InfluxCluster) Query(w http.ResponseWriter, req *http.Request) (err er
 	if err != nil {
 		w.WriteHeader(400)
 		w.Write([]byte("query forbidden"))
-		ic.lock.Lock()
-		ic.stats.QueryRequestsFail += 1
-		ic.lock.Unlock()
+		atomic.AddInt64(&ic.stats.QueryRequestsFail, 1)
 		return
 	}
 
@@ -403,9 +384,7 @@ func (ic *InfluxCluster) Query(w http.ResponseWriter, req *http.Request) (err er
 		log.Printf("can't get measurement: %s\n", q)
 		w.WriteHeader(400)
 		w.Write([]byte("can't get measurement"))
-		ic.lock.Lock()
-		ic.stats.QueryRequestsFail += 1
-		ic.lock.Unlock()
+		atomic.AddInt64(&ic.stats.QueryRequestsFail, 1)
 		return
 	}
 
@@ -414,9 +393,7 @@ func (ic *InfluxCluster) Query(w http.ResponseWriter, req *http.Request) (err er
 		log.Printf("unknown measurement: %s\n", key)
 		w.WriteHeader(400)
 		w.Write([]byte("unknown measurement"))
-		ic.lock.Lock()
-		ic.stats.QueryRequestsFail += 1
-		ic.lock.Unlock()
+		atomic.AddInt64(&ic.stats.QueryRequestsFail, 1)
 		return
 	}
 
@@ -451,18 +428,14 @@ func (ic *InfluxCluster) Query(w http.ResponseWriter, req *http.Request) (err er
 
 	w.WriteHeader(400)
 	w.Write([]byte("query error"))
-	ic.lock.Lock()
-	ic.stats.QueryRequestsFail += 1
-	ic.lock.Unlock()
+	atomic.AddInt64(&ic.stats.QueryRequestsFail, 1)
 	return
 }
 
 // Wrong in one row will not stop others.
 // So don't try to return error, just print it.
 func (ic *InfluxCluster) WriteRow(line []byte) {
-	ic.lock.Lock()
-	ic.stats.PointsWritten += 1
-	ic.lock.Unlock()
+	atomic.AddInt64(&ic.stats.PointsWritten, 1)
 	// maybe trim?
 	line = bytes.TrimRight(line, " \t\r\n")
 
@@ -474,18 +447,14 @@ func (ic *InfluxCluster) WriteRow(line []byte) {
 	key, err := ScanKey(line)
 	if err != nil {
 		log.Printf("scan key error: %s\n", err)
-		ic.lock.Lock()
-		ic.stats.PointsWrittenFail += 1
-		ic.lock.Unlock()
+		atomic.AddInt64(&ic.stats.PointsWrittenFail, 1)
 		return
 	}
 
 	bs, ok := ic.GetBackends(key)
 	if !ok {
 		log.Printf("new measurement: %s\n", key)
-		ic.lock.Lock()
-		ic.stats.PointsWrittenFail += 1
-		ic.lock.Unlock()
+		atomic.AddInt64(&ic.stats.PointsWrittenFail, 1)
 		// TODO: new measurement?
 		return
 	}
@@ -495,9 +464,7 @@ func (ic *InfluxCluster) WriteRow(line []byte) {
 		err = b.Write(line)
 		if err != nil {
 			log.Printf("cluster write fail: %s\n", key)
-			ic.lock.Lock()
-			ic.stats.PointsWrittenFail += 1
-			ic.lock.Unlock()
+			atomic.AddInt64(&ic.stats.PointsWrittenFail, 1)
 			return
 		}
 	}
@@ -505,13 +472,9 @@ func (ic *InfluxCluster) WriteRow(line []byte) {
 }
 
 func (ic *InfluxCluster) Write(p []byte) (err error) {
-	ic.lock.Lock()
-	ic.stats.WriteRequests += 1
-	ic.lock.Unlock()
+	atomic.AddInt64(&ic.stats.WriteRequests, 1)
 	defer func(start time.Time) {
-		ic.lock.Lock()
-		ic.stats.WriteRequestDuration += time.Since(start).Nanoseconds()
-		ic.lock.Unlock()
+		atomic.AddInt64(&ic.stats.WriteRequestDuration, time.Since(start).Nanoseconds())
 	}(time.Now())
 
 	buf := bytes.NewBuffer(p)
@@ -522,9 +485,7 @@ func (ic *InfluxCluster) Write(p []byte) (err error) {
 		switch err {
 		default:
 			log.Printf("error: %s\n", err)
-			ic.lock.Lock()
-			ic.stats.WriteRequestsFail += 1
-			ic.lock.Unlock()
+			atomic.AddInt64(&ic.stats.WriteRequestsFail, 1)
 			return
 		case io.EOF, nil:
 			err = nil
@@ -544,9 +505,7 @@ func (ic *InfluxCluster) Write(p []byte) (err error) {
 			err = n.Write(p)
 			if err != nil {
 				log.Printf("error: %s\n", err)
-				ic.lock.Lock()
-				ic.stats.WriteRequestsFail += 1
-				ic.lock.Unlock()
+				atomic.AddInt64(&ic.stats.WriteRequestsFail, 1)
 			}
 		}
 	}

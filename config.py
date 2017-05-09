@@ -60,7 +60,6 @@ NODES = {
         'db': 'test',
         'zone': 'local',
         'interval':10,
-        'softtimeout':60,
     }
 }
 
