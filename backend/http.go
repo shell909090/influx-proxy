@@ -13,6 +13,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -96,7 +97,7 @@ func (hb *HttpBackend) Ping() (version string, err error) {
 	if resp.StatusCode == 204 {
 		return
 	}
-	log.Print("write status code: ", resp.StatusCode)
+	log.Printf("write status code: %d, the backend is %s\n", resp.StatusCode, hb.URL)
 
 	respbuf, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
@@ -131,31 +132,28 @@ func (hb *HttpBackend) Query(w http.ResponseWriter, req *http.Request) (err erro
 	req.URL, err = url.Parse(hb.URL + "/query?" + req.Form.Encode())
 	if err != nil {
 		log.Print("internal url parse error: ", err)
-		w.WriteHeader(400)
-		w.Write([]byte("internal url parse error"))
 		return
 	}
 
+	q := strings.TrimSpace(req.FormValue("q"))
 	resp, err := hb.transport.RoundTrip(req)
 	if err != nil {
-		log.Print("query error: ", err)
-		w.WriteHeader(400)
-		w.Write([]byte("query error"))
+		log.Printf("query error: %s,the query is %s\n", err, q)
 		hb.Active = false
 		return
 	}
 	defer resp.Body.Close()
 
 	copyHeader(w.Header(), resp.Header)
-	w.WriteHeader(resp.StatusCode)
 
-	_, err = io.Copy(w, resp.Body)
+	p, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Print("copy body error: ", err)
-		w.WriteHeader(400)
-		w.Write([]byte("copy body error"))
+		log.Printf("read body error: %s,the query is %s\n", err, q)
 		return
 	}
+
+	w.WriteHeader(resp.StatusCode)
+	w.Write(p)
 	return
 }
 
@@ -223,5 +221,6 @@ func (hb *HttpBackend) WriteStream(stream io.Reader, compressed bool) (err error
 
 func (hb *HttpBackend) Close() (err error) {
 	hb.running = false
+	hb.transport.CloseIdleConnections()
 	return
 }
