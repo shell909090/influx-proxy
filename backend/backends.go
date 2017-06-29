@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"io"
 	"log"
+	"sync"
 	"time"
 )
 
@@ -29,6 +30,7 @@ type Backends struct {
 	ch_timer         <-chan time.Time
 	write_counter    int32
 	rewriter_running bool
+	wg               sync.WaitGroup
 }
 
 // maybe ch_timer is not the best way.
@@ -61,6 +63,7 @@ func (bs *Backends) worker() {
 			if !ok {
 				// closed
 				bs.Flush()
+				bs.wg.Wait()
 				bs.HttpBackend.Close()
 				bs.fb.Close()
 				return
@@ -70,7 +73,9 @@ func (bs *Backends) worker() {
 		case <-bs.ch_timer:
 			bs.Flush()
 			if !bs.running {
+				bs.wg.Wait()
 				bs.HttpBackend.Close()
+				bs.fb.Close()
 				return
 			}
 
@@ -147,7 +152,9 @@ func (bs *Backends) Flush() {
 	}
 
 	// TODO: limitation
+	bs.wg.Add(1)
 	go func() {
+		defer bs.wg.Done()
 		var buf bytes.Buffer
 		err := Compress(&buf, p)
 		if err != nil {
@@ -197,6 +204,9 @@ func (bs *Backends) Idle() {
 
 func (bs *Backends) RewriteLoop() {
 	for bs.fb.IsData() {
+		if !bs.running {
+			return
+		}
 		if !bs.HttpBackend.IsActive() {
 			time.Sleep(time.Millisecond * time.Duration(bs.RewriteInterval))
 			continue
