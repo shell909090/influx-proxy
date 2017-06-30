@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	lumberjack "gopkg.in/natefinch/lumberjack.v2"
 	redis "gopkg.in/redis.v5"
@@ -104,7 +105,15 @@ func main() {
 	NewHttpService(ic, nodecfg.DB).Register(mux)
 
 	log.Printf("http service start.")
-	err = http.ListenAndServe(nodecfg.ListenAddr, mux)
+	server := &http.Server{
+		Addr:        nodecfg.ListenAddr,
+		Handler:     mux,
+		IdleTimeout: time.Duration(nodecfg.IdleTimeout) * time.Second,
+	}
+	if nodecfg.IdleTimeout <= 0 {
+		server.IdleTimeout = 10 * time.Second
+	}
+	err = server.ListenAndServe()
 	if err != nil {
 		log.Print(err)
 		return

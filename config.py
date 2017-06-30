@@ -54,12 +54,15 @@ KEYMAPS = {
 # db: proxy db, client's db must be same with it
 # zone: use for query
 # nexts: the backends keys, will accept all data, split with ','
+# interval: collect Statistics
+# idletimeout: keep-alives wait time 
 NODES = {
     'l1': { 
         'listenaddr': ':6666',
         'db': 'test',
         'zone': 'local',
         'interval':10,
+        'idletimeout':10,
     }
 }
 
