@@ -69,7 +69,6 @@ func (hs *HttpService) HandlerPing(w http.ResponseWriter, req *http.Request) {
 func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
 	defer req.Body.Close()
 	w.Header().Add("X-Influxdb-Version", backend.VERSION)
-	w.Header().Add("Connection", "close")
 
 	db := req.FormValue("db")
 
