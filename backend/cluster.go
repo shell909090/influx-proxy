@@ -132,16 +132,13 @@ func NewInfluxCluster(cfgsrc *RedisConfigSource, nodecfg *NodeConfig) (ic *Influ
 func (ic *InfluxCluster) statistics() {
 	// how to quit
 	for {
-		select {
-		case <-ic.ticker.C:
-			ic.Flush()
-			ic.counter = (*Statistics)(atomic.SwapPointer((*unsafe.Pointer)(unsafe.Pointer(&ic.stats)),
-				unsafe.Pointer(ic.counter)))
-			err := ic.WriteStatistics()
-			if err != nil {
-				log.Println(err)
-			}
-		default:
+		<-ic.ticker.C
+		ic.Flush()
+		ic.counter = (*Statistics)(atomic.SwapPointer((*unsafe.Pointer)(unsafe.Pointer(&ic.stats)),
+			unsafe.Pointer(ic.counter)))
+		err := ic.WriteStatistics()
+		if err != nil {
+			log.Println(err)
 		}
 	}
 }
