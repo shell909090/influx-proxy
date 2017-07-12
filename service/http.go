@@ -37,6 +37,7 @@ func (hs *HttpService) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/query", hs.HandlerQuery)
 	mux.HandleFunc("/write", hs.HandlerWrite)
 	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
 }
 
 func (hs *HttpService) HandlerReload(w http.ResponseWriter, req *http.Request) {
