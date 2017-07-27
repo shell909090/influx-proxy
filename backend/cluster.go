@@ -404,7 +404,7 @@ func (ic *InfluxCluster) Query(w http.ResponseWriter, req *http.Request) (err er
 		if api.GetZone() != ic.Zone {
 			continue
 		}
-		if !api.IsActive() {
+		if !api.IsActive() || api.IsWriteOnly() {
 			continue
 		}
 		err = api.Query(w, req)

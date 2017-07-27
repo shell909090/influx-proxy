@@ -13,6 +13,7 @@ type Querier interface {
 type BackendAPI interface {
 	Querier
 	IsActive() (b bool)
+	IsWriteOnly() (b bool)
 	Ping() (version string, err error)
 	GetZone() (zone string)
 	Write(p []byte) (err error)
