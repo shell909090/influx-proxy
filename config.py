@@ -57,6 +57,8 @@ KEYMAPS = {
 # nexts: the backends keys, will accept all data, split with ','
 # interval: collect Statistics
 # idletimeout: keep-alives wait time 
+# writetracing: enable logging for the write,default is 0
+# querytracing: enable logging for the query,default is 0
 NODES = {
     'l1': { 
         'listenaddr': ':6666',
@@ -64,6 +66,8 @@ NODES = {
         'zone': 'local',
         'interval':10,
         'idletimeout':10,
+        'writetracing':0,
+        'querytracing':0,
     }
 }
 

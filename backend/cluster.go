@@ -77,6 +77,8 @@ type InfluxCluster struct {
 	counter        *Statistics
 	ticker         *time.Ticker
 	defaultTags    map[string]string
+	WriteTracing   int
+	QueryTracing   int
 }
 
 type Statistics struct {
@@ -103,6 +105,8 @@ func NewInfluxCluster(cfgsrc *RedisConfigSource, nodecfg *NodeConfig) (ic *Influ
 		counter:        &Statistics{},
 		ticker:         time.NewTicker(10 * time.Second),
 		defaultTags:    map[string]string{"addr": nodecfg.ListenAddr},
+		WriteTracing:   nodecfg.WriteTracing,
+		QueryTracing:   nodecfg.QueryTracing,
 	}
 	host, err := os.Hostname()
 	if err != nil {

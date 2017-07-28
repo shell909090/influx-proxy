@@ -72,7 +72,6 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
 	w.Header().Add("X-Influxdb-Version", backend.VERSION)
 
 	db := req.FormValue("db")
-
 	if hs.db != "" {
 		if db != hs.db {
 			w.WriteHeader(404)
@@ -81,12 +80,16 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
+	q := strings.TrimSpace(req.FormValue("q"))
 	err := hs.ic.Query(w, req)
 	if err != nil {
-		q := strings.TrimSpace(req.FormValue("q"))
 		log.Printf("query error: %s,the query is %s,the client is %s\n", err, q, req.RemoteAddr)
 		return
 	}
+	if hs.ic.QueryTracing != 0 {
+		log.Printf("the query is %s,the client is %s\n", q, req.RemoteAddr)
+	}
+
 	return
 }
 
@@ -132,6 +135,9 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
 	err = hs.ic.Write(p)
 	if err == nil {
 		w.WriteHeader(204)
+	}
+	if hs.ic.WriteTracing != 0 {
+		log.Printf("Write body received by handler: %s,the client is %s\n", p, req.RemoteAddr)
 	}
 	return
 }
