@@ -57,8 +57,8 @@ type NodeConfig struct {
 	Nexts        string
 	Interval     int
 	IdleTimeout  int
-	WriteTracing bool
-	QueryTracing bool
+	WriteTracing int
+	QueryTracing int
 }
 
 type BackendConfig struct {

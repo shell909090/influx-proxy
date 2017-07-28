@@ -77,8 +77,8 @@ type InfluxCluster struct {
 	counter        *Statistics
 	ticker         *time.Ticker
 	defaultTags    map[string]string
-	WriteTracing   bool
-	QueryTracing   bool
+	WriteTracing   int
+	QueryTracing   int
 }
 
 type Statistics struct {
