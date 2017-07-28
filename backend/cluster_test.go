@@ -86,6 +86,9 @@ func CreateTestInfluxCluster() (ic *InfluxCluster, err error) {
 	bkcfgs["test1"] = cfg
 	cfg, _ = CreateTestBackendConfig("test2")
 	bkcfgs["test2"] = cfg
+	cfg, _ = CreateTestBackendConfig("write_only")
+	cfg.WriteOnly = true
+	bkcfgs["write_only"] = cfg
 	for name, cfg := range bkcfgs {
 		backends[name], err = NewBackends(cfg, name)
 		if err != nil {
@@ -96,7 +99,8 @@ func CreateTestInfluxCluster() (ic *InfluxCluster, err error) {
 	ic.nexts = "test2"
 	ic.bas = append(ic.bas, backends["test2"])
 	m2bs := make(map[string][]BackendAPI)
-	m2bs["cpu"] = append(m2bs["cpu"], backends["test1"])
+	m2bs["cpu"] = append(m2bs["cpu"], backends["write_only"], backends["test1"])
+	m2bs["write_only"] = append(m2bs["write_only"], backends["write_only"])
 	ic.m2bs = m2bs
 
 	return
@@ -224,6 +228,11 @@ func TestInfluxdbClusterQuery(t *testing.T) {
 		{
 			name:  "cpu.load",
 			query: " select cpu_load from \"cpu.load\" WHERE time > now() - 1m and host =~ /^()$/",
+			want:  400,
+		},
+		{
+			name:  "write.only",
+			query: " select cpu_load from write_only WHERE time > now() - 1m",
 			want:  400,
 		},
 	}

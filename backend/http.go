@@ -47,6 +47,7 @@ type HttpBackend struct {
 	Zone      string
 	Active    bool
 	running   bool
+	WriteOnly bool
 }
 
 func NewHttpBackend(cfg *BackendConfig) (hb *HttpBackend) {
@@ -58,12 +59,13 @@ func NewHttpBackend(cfg *BackendConfig) (hb *HttpBackend) {
 		// client_query: &http.Client{
 		// 	Timeout: time.Millisecond * time.Duration(cfg.TimeoutQuery),
 		// },
-		Interval: cfg.CheckInterval,
-		URL:      cfg.URL,
-		DB:       cfg.DB,
-		Zone:     cfg.Zone,
-		Active:   true,
-		running:  true,
+		Interval:  cfg.CheckInterval,
+		URL:       cfg.URL,
+		DB:        cfg.DB,
+		Zone:      cfg.Zone,
+		Active:    true,
+		running:   true,
+		WriteOnly: cfg.WriteOnly,
 	}
 	go hb.CheckActive()
 	return
@@ -78,6 +80,10 @@ func (hb *HttpBackend) CheckActive() {
 		hb.Active = (err == nil)
 		time.Sleep(time.Millisecond * time.Duration(hb.Interval))
 	}
+}
+
+func (hb *HttpBackend) IsWriteOnly() bool {
+	return hb.WriteOnly
 }
 
 func (hb *HttpBackend) IsActive() bool {
