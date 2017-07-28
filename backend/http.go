@@ -47,7 +47,7 @@ type HttpBackend struct {
 	Zone      string
 	Active    bool
 	running   bool
-	WriteOnly bool
+	WriteOnly int
 }
 
 func NewHttpBackend(cfg *BackendConfig) (hb *HttpBackend) {
@@ -83,7 +83,10 @@ func (hb *HttpBackend) CheckActive() {
 }
 
 func (hb *HttpBackend) IsWriteOnly() bool {
-	return hb.WriteOnly
+	if hb.WriteOnly == 0 {
+		return false
+	}
+	return true
 }
 
 func (hb *HttpBackend) IsActive() bool {

@@ -23,7 +23,7 @@ import redis
 # maxrowlimit: default config is 10000, wait 10000 points write 
 # checkinterval: default config is 1000ms, check backend active every 1 second
 # rewriteinterval: default config is 10000ms, rewrite every 10 seconds
-# writeonly: default false
+# writeonly: default 0
 BACKENDS = {
     'local': {
         'url': 'http://localhost:8086', 

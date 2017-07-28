@@ -69,7 +69,7 @@ type BackendConfig struct {
 	MaxRowLimit     int
 	CheckInterval   int
 	RewriteInterval int
-	WriteOnly       bool
+	WriteOnly       int
 }
 
 type RedisConfigSource struct {
