@@ -192,12 +192,22 @@ func TestInfluxdbClusterQuery(t *testing.T) {
 		},
 		{
 			name:  "cpu_load",
-			query: " select cpu_load from cpu WHERE time > now() - 1m",
+			query: " select cpu_load from cpu WHERE time > now() - 1m ",
+			want:  400,
+		},
+		{
+			name:  "cpu_load",
+			query: " select cpu_load from cpu WHERE time > now() - 1m group by time(10s)",
 			want:  204,
 		},
 		{
 			name:  "cpu.load",
-			query: " select cpu_load from \"cpu.load\" WHERE time > now() - 1m",
+			query: " select cpu_load from \"cpu.load\" WHERE time > now() - 1m GROUP by time(10s)",
+			want:  204,
+		},
+		{
+			name:  "cpu.load",
+			query: " select cpu_load from \"cpu.load\" WHERE time > now() - 1m GROUP    BY  time(10s)",
 			want:  204,
 		},
 		{
