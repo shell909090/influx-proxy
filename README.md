@@ -38,7 +38,9 @@ $ yum install redis
 $ # start redis-server on 6379 port
 $ redis-server --port 6379 &
 $ # Install influxdb-proxy to your $GOPATH/bin
-$ go get -u github.com/shell909090/influx-proxy
+$ go get -u github.com/shell909090/influx-proxy/service
+$ go install github.com/shell909090/influx-proxy/service
+$ mv $GOPATH/bin/service $GOPATH/bin/influxdb-proxy
 $ # Edit config.py and execute it
 $ python config.py
 $ # Start influx-proxy!
