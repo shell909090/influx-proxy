@@ -3,7 +3,7 @@ InfluxDB Proxy
 
 This project adds a basic high availability layer to InfluxDB.
 
-NOTE: influx-proxy must be built with Go 1.5+, don't implement udp.
+NOTE: influx-proxy must be built with Go 1.7+, don't implement udp.
 
 Why
 ---
