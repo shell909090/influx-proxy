@@ -47,7 +47,8 @@ BACKENDS = {
 # data with the measurement will write to the backends
 KEYMAPS = {
     'cpu': ['local'],
-    'temperature': ['local2']
+    'temperature': ['local2'],
+    '_default_': ['local']
 }
 
 # this config will cover default_node config
