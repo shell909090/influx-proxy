@@ -343,6 +343,11 @@ func (ic *InfluxCluster) GetBackends(key string) (backends []BackendAPI, ok bool
 			}
 		}
 	}
+
+	if !ok {
+		backends, ok = ic.m2bs["_default_"]
+	}
+
 	return
 }
 
