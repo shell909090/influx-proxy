@@ -116,7 +116,7 @@ func (fb *FileBackend) Read() (p []byte, err error) {
 }
 
 func (fb *FileBackend) CleanUp() (err error) {
-    _, err = fb.consumer.Seek(0, os.SEEK_SET)
+    _, err = fb.consumer.Seek(0, io.SeekStart)
     if err != nil {
         log.Print("seek consumer error: ", err)
         return
@@ -149,14 +149,14 @@ func (fb *FileBackend) UpdateMeta() (err error) {
     fb.lock.Lock()
     defer fb.lock.Unlock()
 
-    off_producer, err := fb.producer.Seek(0, os.SEEK_CUR)
+    off_producer, err := fb.producer.Seek(0, io.SeekCurrent)
     if err != nil {
         log.Print("OK")
         log.Print("seek producer error: ", err)
         return
     }
 
-    off, err := fb.consumer.Seek(0, os.SEEK_CUR)
+    off, err := fb.consumer.Seek(0, io.SeekCurrent)
     if err != nil {
         log.Print("seek consumer error: ", err)
         return
@@ -170,7 +170,7 @@ func (fb *FileBackend) UpdateMeta() (err error) {
         off = 0
     }
 
-    _, err = fb.meta.Seek(0, os.SEEK_SET)
+    _, err = fb.meta.Seek(0, io.SeekStart)
     if err != nil {
         log.Print("seek meta error: ", err)
         return
@@ -196,7 +196,7 @@ func (fb *FileBackend) RollbackMeta() (err error) {
     fb.lock.Lock()
     defer fb.lock.Unlock()
 
-    _, err = fb.meta.Seek(0, os.SEEK_SET)
+    _, err = fb.meta.Seek(0, io.SeekStart)
     if err != nil {
         log.Print("seek meta error: ", err)
         return
@@ -209,7 +209,7 @@ func (fb *FileBackend) RollbackMeta() (err error) {
         return
     }
 
-    _, err = fb.consumer.Seek(off, os.SEEK_SET)
+    _, err = fb.consumer.Seek(off, io.SeekStart)
     if err != nil {
         log.Print("seek consumer error: ", err)
         return

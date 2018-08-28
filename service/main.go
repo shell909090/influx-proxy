@@ -13,8 +13,8 @@ import (
     "os"
     "time"
 
-    lumberjack "gopkg.in/natefinch/lumberjack.v2"
-    redis "gopkg.in/redis.v5"
+    "gopkg.in/natefinch/lumberjack.v2"
+    "gopkg.in/redis.v5"
 
     "github.com/chengshiwen/influx-proxy/backend"
 )
