@@ -104,8 +104,6 @@ Query Commands
 
 The following commands are forbid.
 
-* `DELETE`
-* `DROP`
 * `GRANT`
 * `REVOKE`
 
@@ -113,8 +111,8 @@ The following commands are forbid.
 
 Only support match the following commands.
 
-* `.*where.*time`
-* `show.*from`
+* `.*from.*`
+* `drop measurement.*`
 * `show.*measurements`
 
 License
