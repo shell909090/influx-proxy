@@ -27,32 +27,18 @@ Requirements
 -----------
 
 * Golang >= 1.7
-* Redis-server
-* Python >= 2.7
 
 Usage
 ------------
 
 ```sh
-$ # install redis-server
-$ yum install redis
-$ # start redis-server on 6379 port
-$ redis-server --port 6379 &
-$ # Install influxdb-proxy to your $GOPATH/bin
+$ # Install influx-proxy to your $GOPATH/bin
 $ go get -u github.com/chengshiwen/influx-proxy/service
 $ go install github.com/chengshiwen/influx-proxy/service
-$ mv $GOPATH/bin/service $GOPATH/bin/influxdb-proxy
-$ # Edit config.py and execute it
-$ python config.py
+$ mv $GOPATH/bin/service $GOPATH/bin/influx-proxy
 $ # Start influx-proxy!
-$ $GOPATH/bin/influxdb-proxy -redis localhost:6379
+$ $GOPATH/bin/influx-proxy -config proxy.json
 ```
-
-Configuration
--------------
-
-Example configuration file is at [config.py](config.py).
-We use config.py to genrate config to redis.
 
 Description
 -----------

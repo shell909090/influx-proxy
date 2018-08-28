@@ -1,4 +1,45 @@
 {
-    "node": "l1",
-    "addr": "localhost:6379"
+    "BACKENDS": {
+        "influxdb-1": {
+            "url": "http://influxdb-1:8086",
+            "db": "test",
+            "zone": "local",
+            "interval": 1000,
+            "timeout": 10000,
+            "timeoutquery": 600000,
+            "maxrowlimit": 10000,
+            "checkinterval": 1000,
+            "rewriteinterval": 10000
+        },
+        "influxdb-2": {
+            "url": "http://influxdb-2:8086",
+            "db": "test",
+            "zone": "local",
+            "interval": 1000,
+            "timeout": 10000,
+            "timeoutquery": 600000,
+            "maxrowlimit": 10000,
+            "checkinterval": 1000,
+            "rewriteinterval": 10000
+        }
+    },
+    "KEYMAPS": {
+        "cpu": ["influxdb-1"],
+        "mem": ["influxdb-2"],
+        "_default_": ["influxdb-1"]
+    },
+    "NODES": {
+        "l1": {
+            "listenaddr": ":7076",
+            "db": "test",
+            "zone": "local",
+            "interval": 10,
+            "idletimeout": 10,
+            "writetracing": 0,
+            "querytracing": 0
+        }
+    },
+    "DEFAULT_NODE": {
+        "listenaddr": ":7076"
+    }
 }

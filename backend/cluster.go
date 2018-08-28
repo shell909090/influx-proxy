@@ -69,7 +69,7 @@ type InfluxCluster struct {
     query_executor Querier
     ForbiddenQuery []*regexp.Regexp
     ObligatedQuery []*regexp.Regexp
-    cfgsrc         *RedisConfigSource
+    cfgsrc         *FileConfigSource
     bas            []BackendAPI
     backends       map[string]BackendAPI
     m2bs           map[string][]BackendAPI // measurements to backends
@@ -94,7 +94,7 @@ type Statistics struct {
     QueryRequestDuration int64
 }
 
-func NewInfluxCluster(cfgsrc *RedisConfigSource, nodecfg *NodeConfig) (ic *InfluxCluster) {
+func NewInfluxCluster(cfgsrc *FileConfigSource, nodecfg *NodeConfig) (ic *InfluxCluster) {
     ic = &InfluxCluster{
         Zone:           nodecfg.Zone,
         nexts:          nodecfg.Nexts,

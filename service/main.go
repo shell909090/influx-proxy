@@ -5,7 +5,6 @@
 package main
 
 import (
-    "encoding/json"
     "errors"
     "flag"
     "log"
@@ -14,7 +13,6 @@ import (
     "time"
 
     "gopkg.in/natefinch/lumberjack.v2"
-    "gopkg.in/redis.v5"
 
     "github.com/chengshiwen/influx-proxy/backend"
 )
@@ -23,7 +21,6 @@ var (
     ErrConfig   = errors.New("config parse error")
     ConfigFile  string
     NodeName    string
-    RedisAddr   string
     LogPath     string
 )
 
@@ -32,26 +29,8 @@ func init() {
 
     flag.StringVar(&ConfigFile, "config", "proxy.json", "proxy config file")
     flag.StringVar(&NodeName, "node", "l1", "node name")
-    flag.StringVar(&RedisAddr, "redis", "localhost:6379", "redis address")
     flag.StringVar(&LogPath, "log-path", "influx-proxy.log", "log file path")
     flag.Parse()
-}
-
-type Config struct {
-    redis.Options
-    Node string
-}
-
-func LoadJson(configfile string, cfg interface{}) (err error) {
-    file, err := os.Open(configfile)
-    if err != nil {
-        return
-    }
-    defer file.Close()
-
-    dec := json.NewDecoder(file)
-    err = dec.Decode(&cfg)
-    return
 }
 
 func initLog() {
@@ -71,34 +50,16 @@ func main() {
     initLog()
 
     var err error
-    var cfg Config
 
-    if ConfigFile != "" {
-        err = LoadJson(ConfigFile, &cfg)
-        if err != nil {
-            log.Print("load config failed: ", err)
-            return
-        }
-        log.Printf("json loaded.")
-    }
+    fcs := backend.NewFileConfigSource(ConfigFile, NodeName)
 
-    if NodeName != "" {
-        cfg.Node = NodeName
-    }
-
-    if RedisAddr != "" {
-        cfg.Addr = RedisAddr
-    }
-
-    rcs := backend.NewRedisConfigSource(&cfg.Options, cfg.Node)
-
-    nodecfg, err := rcs.LoadNode()
+    nodecfg, err := fcs.LoadNode()
     if err != nil {
         log.Printf("config source load failed.")
         return
     }
 
-    ic := backend.NewInfluxCluster(rcs, &nodecfg)
+    ic := backend.NewInfluxCluster(fcs, &nodecfg)
     ic.LoadConfig()
 
     mux := http.NewServeMux()
