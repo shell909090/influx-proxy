@@ -30,8 +30,8 @@ var (
 func init() {
     log.SetFlags(log.LstdFlags | log.Lmicroseconds | log.Lshortfile)
 
-    flag.StringVar(&LogFilePath, "log-file-path", "/var/log/influx-proxy.log", "output file")
-    flag.StringVar(&ConfigFile, "config", "", "config file")
+    flag.StringVar(&LogFilePath, "log-file-path", "influx-proxy.log", "output file")
+    flag.StringVar(&ConfigFile, "config", "proxy.json", "config file")
     flag.StringVar(&NodeName, "node", "l1", "node name")
     flag.StringVar(&RedisAddr, "redis", "localhost:6379", "config file")
     flag.Parse()
