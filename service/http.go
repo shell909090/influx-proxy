@@ -12,7 +12,7 @@ import (
     "net/http/pprof"
     "strings"
 
-    "github.com/shell909090/influx-proxy/backend"
+    "github.com/chengshiwen/influx-proxy/backend"
 )
 
 type HttpService struct {
