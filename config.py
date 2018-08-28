@@ -15,25 +15,25 @@ import redis
 
 # backends key use for KEYMAPS, NODES, cache file
 # url: influxdb addr or other http backend which supports influxdb line protocol
-# db: influxdb db 
+# db: influxdb db
 # zone: same zone first query
 # interval: default config is 1000ms, wait 1 second write whether point count has bigger than maxrowlimit config
 # timeout: default config is 10000ms, write timeout until 10 seconds
 # timeoutquery: default config is 600000ms, query timeout until 600 seconds
-# maxrowlimit: default config is 10000, wait 10000 points write 
+# maxrowlimit: default config is 10000, wait 10000 points write
 # checkinterval: default config is 1000ms, check backend active every 1 second
 # rewriteinterval: default config is 10000ms, rewrite every 10 seconds
 # writeonly: default 0
 BACKENDS = {
     'local': {
-        'url': 'http://localhost:8086', 
-        'db': 'test', 
-        'zone':'local', 
+        'url': 'http://localhost:8086',
+        'db': 'test',
+        'zone':'local',
         'interval': 1000,
-        'timeout': 10000, 
-        'timeoutquery':600000, 
-        'maxrowlimit':10000,  
-        'checkinterval':1000, 
+        'timeout': 10000,
+        'timeoutquery':600000,
+        'maxrowlimit':10000,
+        'checkinterval':1000,
         'rewriteinterval':10000,
     },
     'local2': {
@@ -52,16 +52,16 @@ KEYMAPS = {
 }
 
 # this config will cover default_node config
-# listenaddr: proxy listen addr                
+# listenaddr: proxy listen addr
 # db: proxy db, client's db must be same with it
 # zone: use for query
 # nexts: the backends keys, will accept all data, split with ','
 # interval: collect Statistics
-# idletimeout: keep-alives wait time 
+# idletimeout: keep-alives wait time
 # writetracing: enable logging for the write,default is 0
 # querytracing: enable logging for the query,default is 0
 NODES = {
-    'l1': { 
+    'l1': {
         'listenaddr': ':6666',
         'db': 'test',
         'zone': 'local',
@@ -72,7 +72,7 @@ NODES = {
     }
 }
 
-# the influxdb default cluster node 
+# the influxdb default cluster node
 DEFAULT_NODE = {
     'listenaddr': ':6666'
 }

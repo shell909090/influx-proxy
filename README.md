@@ -8,11 +8,11 @@ NOTE: influx-proxy must be built with Go 1.7+, don't implement udp.
 Why
 ---
 
-We used [InfluxDB Relay](https://github.com/influxdata/influxdb-relay) before, but it doesn't support some demands. 
-We use grafana for visualizing time series data, so we need add datasource for grafana. We need change the datasource config when influxdb is down. 
-We need transfer data across idc, but Relay doesn't support gzip. 
+We used [InfluxDB Relay](https://github.com/influxdata/influxdb-relay) before, but it doesn't support some demands.
+We use grafana for visualizing time series data, so we need add datasource for grafana. We need change the datasource config when influxdb is down.
+We need transfer data across idc, but Relay doesn't support gzip.
 It's inconvenient to analyse data with connecting different influxdb.
-Therefore, we made InfluxDB Proxy. 
+Therefore, we made InfluxDB Proxy.
 
 Features
 --------
@@ -51,7 +51,7 @@ $ $GOPATH/bin/influxdb-proxy -redis localhost:6379
 Configuration
 -------------
 
-Example configuration file is at [config.py](config.py). 
+Example configuration file is at [config.py](config.py).
 We use config.py to genrate config to redis.
 
 Description
@@ -71,19 +71,19 @@ The setup should look like this:
          │               │
          │InfluxDB Proxy │
          |  (only http)  |
-         │               │         
-         └───────────────┘       
+         │               │
+         └───────────────┘
                  │
                  ▼
         ┌─────────────────┐
         │   measurements  │
         └─────────────────┘
-          |              |       
-        ┌─┼──────────────┘       
-        │ └──────────────┐       
-        ▼                ▼       
-  ┌──────────┐      ┌──────────┐  
-  │          │      │          │  
+          |              |
+        ┌─┼──────────────┘
+        │ └──────────────┐
+        ▼                ▼
+  ┌──────────┐      ┌──────────┐
+  │          │      │          │
   │ InfluxDB │      │ InfluxDB │
   │          │      │          │
   └──────────┘      └──────────┘
@@ -104,8 +104,8 @@ Query Commands
 
 The following commands are forbid.
 
-* `DELETE` 
-* `DROP`  
+* `DELETE`
+* `DROP`
 * `GRANT`
 * `REVOKE`
 
@@ -120,5 +120,4 @@ Only support match the following commands.
 License
 -------
 
-MIT. 
-
+MIT.
