@@ -24,16 +24,16 @@ var (
     ConfigFile  string
     NodeName    string
     RedisAddr   string
-    LogFilePath string
+    LogPath     string
 )
 
 func init() {
     log.SetFlags(log.LstdFlags | log.Lmicroseconds | log.Lshortfile)
 
-    flag.StringVar(&LogFilePath, "log-file-path", "influx-proxy.log", "output file")
-    flag.StringVar(&ConfigFile, "config", "proxy.json", "config file")
+    flag.StringVar(&ConfigFile, "config", "proxy.json", "proxy config file")
     flag.StringVar(&NodeName, "node", "l1", "node name")
-    flag.StringVar(&RedisAddr, "redis", "localhost:6379", "config file")
+    flag.StringVar(&RedisAddr, "redis", "localhost:6379", "redis address")
+    flag.StringVar(&LogPath, "log-path", "influx-proxy.log", "log file path")
     flag.Parse()
 }
 
@@ -55,11 +55,11 @@ func LoadJson(configfile string, cfg interface{}) (err error) {
 }
 
 func initLog() {
-    if LogFilePath == "" {
+    if LogPath == "" {
         log.SetOutput(os.Stdout)
     } else {
         log.SetOutput(&lumberjack.Logger{
-            Filename:   LogFilePath,
+            Filename:   LogPath,
             MaxSize:    100,
             MaxBackups: 5,
             MaxAge:     7,
