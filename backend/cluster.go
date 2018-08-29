@@ -162,7 +162,7 @@ func (ic *InfluxCluster) Flush() {
 
 func (ic *InfluxCluster) WriteStatistics() (err error) {
     metric := &monitor.Metric{
-        Name: "influxdb.cluster",
+        Name: "influxdb.cluster.statistics",
         Tags: ic.defaultTags,
         Fields: map[string]interface{}{
             "statQueryRequest":         ic.counter.QueryRequests,
