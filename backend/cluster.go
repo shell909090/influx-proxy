@@ -161,10 +161,10 @@ func (ic *InfluxCluster) Flush() {
 }
 
 func (ic *InfluxCluster) WriteStatistics() (err error) {
-	metric := &monitor.Metric{
-		Name: "influxdb.cluster",
-		Tags: ic.defaultTags,
-		Fields: map[string]interface{}{
+	line, err := monitor.DataToLine(
+		"influxdb.cluster",
+		ic.defaultTags,
+		map[string]interface{}{
 			"statQueryRequest":         ic.counter.QueryRequests,
 			"statQueryRequestFail":     ic.counter.QueryRequestsFail,
 			"statWriteRequest":         ic.counter.WriteRequests,
@@ -176,12 +176,32 @@ func (ic *InfluxCluster) WriteStatistics() (err error) {
 			"statQueryRequestDuration": ic.counter.QueryRequestDuration,
 			"statWriteRequestDuration": ic.counter.WriteRequestDuration,
 		},
-		Time: time.Now(),
-	}
-	line, err := metric.ParseToLine()
+		time.Now())
 	if err != nil {
 		return
 	}
+
+	// metric := &monitor.Metric{
+	// 	Name: "influxdb.cluster",
+	// 	Tags: ic.defaultTags,
+	// 	Fields: map[string]interface{}{
+	// 		"statQueryRequest":         ic.counter.QueryRequests,
+	// 		"statQueryRequestFail":     ic.counter.QueryRequestsFail,
+	// 		"statWriteRequest":         ic.counter.WriteRequests,
+	// 		"statWriteRequestFail":     ic.counter.WriteRequestsFail,
+	// 		"statPingRequest":          ic.counter.PingRequests,
+	// 		"statPingRequestFail":      ic.counter.PingRequestsFail,
+	// 		"statPointsWritten":        ic.counter.PointsWritten,
+	// 		"statPointsWrittenFail":    ic.counter.PointsWrittenFail,
+	// 		"statQueryRequestDuration": ic.counter.QueryRequestDuration,
+	// 		"statWriteRequestDuration": ic.counter.WriteRequestDuration,
+	// 	},
+	// 	Time: time.Now(),
+	// }
+	// line, err := metric.ParseToLine()
+	// if err != nil {
+	// 	return
+	// }
 	return ic.Write([]byte(line + "\n"))
 }
 
