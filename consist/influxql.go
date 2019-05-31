@@ -2,7 +2,7 @@
 // Use of this source code is governed by a MIT
 // license that can be found in the LICENSE file.
 
-package backend
+package consist
 
 import (
     "bufio"
@@ -52,14 +52,16 @@ func ScanToken(data []byte, atEOF bool) (advance int, token []byte, err error) {
     if atEOF && len(data) == 0 {
         return 0, nil, nil
     }
-
+    
     start := 0
     for ; start < len(data) && data[start] == ' '; start++ {
+        //fmt.Println("start->",start, data[start])
     }
+    
     if start == len(data) {
         return 0, nil, nil
     }
-
+    
     switch data[start] {
     case '"':
         advance, token, err = FindEndWithQuote(data, start, '"')
@@ -103,15 +105,14 @@ func ScanToken(data []byte, atEOF bool) (advance int, token []byte, err error) {
         } else {
             advance += start
         }
-
+        
     }
     if err != nil {
         log.Printf("scan token error: %s\n", err)
         return
     }
-
+    
     token = data[start:advance]
-    // fmt.Printf("%s (%d, %d) = %s\n", data, start, advance, token)
     return
 }
 
@@ -124,10 +125,8 @@ func GetMeasurementFromInfluxQL(q string) (m string, err error) {
     for scanner.Scan() {
         tokens = append(tokens, scanner.Text())
     }
-    // fmt.Printf("%v\n", tokens)
-
+    
     for i := 0; i < len(tokens); i++ {
-        // fmt.Printf("%v\n", tokens[i])
         if strings.ToLower(tokens[i]) == "from" || strings.ToLower(tokens[i]) == "measurement" {
             if i+1 < len(tokens) {
                 m = getMeasurement(tokens[i+1:])
@@ -135,7 +134,7 @@ func GetMeasurementFromInfluxQL(q string) (m string, err error) {
             }
         }
     }
-
+    
     return "", ErrIllegalQL
 }
 
@@ -144,29 +143,29 @@ func getMeasurement(tokens []string) (m string) {
         m = tokens[1]
         m = m[1:]
         if m[0] == '"' || m[0] == '\'' {
-            m = m[1 : len(m)-1]
+            m = m[1: len(m)-1]
         }
         return
     }
-
+    
     m = tokens[0]
     if m[0] == '/' {
         return m
     }
-
+    
     if m[0] == '"' || m[0] == '\'' {
-        m = m[1 : len(m)-1]
+        m = m[1: len(m)-1]
         return
     }
-
+    
     index := strings.IndexByte(m, '.')
     if index == -1 {
         return
     }
-
+    
     m = m[index+1:]
     if m[0] == '"' || m[0] == '\'' {
-        m = m[1 : len(m)-1]
+        m = m[1: len(m)-1]
     }
     return
 }

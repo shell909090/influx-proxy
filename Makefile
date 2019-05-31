@@ -11,16 +11,16 @@ all: build
 
 build:
 	mkdir -p bin
-	go build -o bin/influx-proxy github.com/chengshiwen/influx-proxy/service
+	go build -o bin/influx-proxy github.com/chengshiwen/influx-proxy
 
-test:
-	go test -v github.com/chengshiwen/influx-proxy/backend
+linux:
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o bin/influx-proxy -ldflags "-s" github.com/chengshiwen/influx-proxy
 
-bench:
-	go test -bench=. github.com/chengshiwen/influx-proxy/backend
+run:
+	go run main.go
 
 clean:
-	rm -rf bin
+	rm -rf bin log
 
 
 ### Makefile ends here
