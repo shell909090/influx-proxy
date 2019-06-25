@@ -24,6 +24,7 @@ var (
 	ConfigFile  string
 	NodeName    string
 	RedisAddr   string
+	RedisPwd    string
 	LogFilePath string
 )
 
@@ -33,7 +34,8 @@ func init() {
 	flag.StringVar(&LogFilePath, "log-file-path", "/var/log/influx-proxy.log", "output file")
 	flag.StringVar(&ConfigFile, "config", "", "config file")
 	flag.StringVar(&NodeName, "node", "l1", "node name")
-	flag.StringVar(&RedisAddr, "redis", "localhost:6379", "config file")
+	flag.StringVar(&RedisAddr, "redis", "localhost:6379", "redis address")
+	flag.StringVar(&RedisPwd, "redisPwd", "", "redis password")
 	flag.Parse()
 }
 
@@ -88,6 +90,10 @@ func main() {
 
 	if RedisAddr != "" {
 		cfg.Addr = RedisAddr
+	}
+
+	if RedisPwd != "" {
+		cfg.Password = RedisPwd
 	}
 
 	rcs := backend.NewRedisConfigSource(&cfg.Options, cfg.Node)
