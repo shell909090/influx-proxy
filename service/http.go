@@ -11,7 +11,7 @@ import (
 	"net/http"
 	"net/http/pprof"
 	"strings"
-
+	
 	"github.com/shell909090/influx-proxy/backend"
 )
 
@@ -102,8 +102,13 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
 		w.Write([]byte("method not allow."))
 		return
 	}
+	query := req.URL.Query()
+	db := query.Get("db")
+	rp := query.Get("rp")
+	precision := query.Get("precision")
 
-	db := req.URL.Query().Get("db")
+	// "|"作为分隔符与line进行拼接, 在backend/http.go中进行拆开
+	optionParams := "rp=" + rp + "&precision=" + precision + "|"
 
 	if hs.db != "" {
 		if db != hs.db {
@@ -132,7 +137,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	err = hs.ic.Write(p)
+	err = hs.ic.Write(p, optionParams)
 	if err == nil {
 		w.WriteHeader(204)
 	}
