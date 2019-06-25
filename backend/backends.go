@@ -155,18 +155,10 @@ func (bs *Backends) Flush() {
 	bs.wg.Add(1)
 	go func() {
 		defer bs.wg.Done()
-		var buf bytes.Buffer
-		err := Compress(&buf, p)
-		if err != nil {
-			log.Printf("write file error: %s\n", err)
-			return
-		}
-
-		p = buf.Bytes()
-
+		
 		// maybe blocked here, run in another goroutine
 		if bs.HttpBackend.IsActive() {
-			err = bs.HttpBackend.WriteCompressed(p)
+			err := bs.HttpBackend.Write(p)
 			switch err {
 			case nil:
 				return
@@ -182,7 +174,7 @@ func (bs *Backends) Flush() {
 			log.Printf("write http error: %s\n", err)
 		}
 
-		err = bs.fb.Write(p)
+		err := bs.fb.Write(p)
 		if err != nil {
 			log.Printf("write file error: %s\n", err)
 		}
@@ -229,7 +221,7 @@ func (bs *Backends) Rewrite() (err error) {
 		return
 	}
 
-	err = bs.HttpBackend.WriteCompressed(p)
+	err = bs.HttpBackend.Write(p)
 
 	switch err {
 	case nil:

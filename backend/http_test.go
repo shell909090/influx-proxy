@@ -42,7 +42,7 @@ func TestHttpBackendWrite(t *testing.T) {
 	hb := NewHttpBackend(cfg)
 	defer hb.Close()
 
-	err := hb.Write([]byte("cpu,host=server01,region=uswest value=1 1434055562000000000\ncpu value=3,value2=4 1434055562000010000"))
+	err := hb.Write([]byte("rp=one_week&precision=s|cpu,host=server01,region=uswest value=1 1434055562000000000\nrp=one_week&precision=s|cpu value=3,value2=4 1434055562000010000"))
 	if err != nil {
 		t.Errorf("error: %s", err)
 		return

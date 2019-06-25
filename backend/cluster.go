@@ -182,7 +182,7 @@ func (ic *InfluxCluster) WriteStatistics() (err error) {
 	if err != nil {
 		return
 	}
-	return ic.Write([]byte(line + "\n"))
+	return ic.Write([]byte(line + "\n"), "")
 }
 
 func (ic *InfluxCluster) ForbidQuery(s string) (err error) {
@@ -443,7 +443,7 @@ func (ic *InfluxCluster) Query(w http.ResponseWriter, req *http.Request) (err er
 
 // Wrong in one row will not stop others.
 // So don't try to return error, just print it.
-func (ic *InfluxCluster) WriteRow(line []byte) {
+func (ic *InfluxCluster) WriteRow(line []byte, optionParams string) {
 	atomic.AddInt64(&ic.stats.PointsWritten, 1)
 	// maybe trim?
 	line = bytes.TrimRight(line, " \t\r\n")
@@ -470,6 +470,7 @@ func (ic *InfluxCluster) WriteRow(line []byte) {
 
 	// don't block here for a lont time, we just have one worker.
 	for _, b := range bs {
+		line = append([]byte(optionParams), line...)
 		err = b.Write(line)
 		if err != nil {
 			log.Printf("cluster write fail: %s\n", key)
@@ -480,7 +481,7 @@ func (ic *InfluxCluster) WriteRow(line []byte) {
 	return
 }
 
-func (ic *InfluxCluster) Write(p []byte) (err error) {
+func (ic *InfluxCluster) Write(p []byte, optionParams string) (err error) {
 	atomic.AddInt64(&ic.stats.WriteRequests, 1)
 	defer func(start time.Time) {
 		atomic.AddInt64(&ic.stats.WriteRequestDuration, time.Since(start).Nanoseconds())
@@ -503,8 +504,7 @@ func (ic *InfluxCluster) Write(p []byte) (err error) {
 		if len(line) == 0 {
 			break
 		}
-
-		ic.WriteRow(line)
+		ic.WriteRow(line, optionParams)
 	}
 
 	ic.lock.RLock()

@@ -166,28 +166,78 @@ func (hb *HttpBackend) Query(w http.ResponseWriter, req *http.Request) (err erro
 	return
 }
 
+func ScanParams(pointbuf []byte) (params string, point []byte) {
+	buflen := len(pointbuf)
+
+	for i := 0; i < buflen; i++ {
+		if pointbuf[i] == '|' {
+			return string(pointbuf[:i]), pointbuf[i+1:]
+		}
+	}
+	return "", pointbuf
+}
+
 func (hb *HttpBackend) Write(p []byte) (err error) {
-	var buf bytes.Buffer
-	err = Compress(&buf, p)
-	if err != nil {
-		log.Print("compress error: ", err)
-		return
+	buf := bytes.NewBuffer(p)
+	bufMap := make(map[string]*bytes.Buffer) 
+
+	for {
+		line, _ := buf.ReadBytes('\n')
+		if len(line) ==0 {
+			break
+		}
+		optionParams, point:= ScanParams(line)
+		
+		if (bufMap[optionParams] == nil) {
+			bufMap[optionParams] = &bytes.Buffer{}
+		}
+		bufMap[optionParams].Write(point)
 	}
 
-	log.Printf("http backend write %s", hb.DB)
-	err = hb.WriteStream(&buf, true)
+	for optionParams, buffer := range(bufMap) {
+		p := buffer.Bytes()
+		var buf bytes.Buffer
+		err := Compress(&buf, p)
+		if err != nil {
+			log.Printf("write file error: %s\n", err)
+			continue
+		}
+		err = hb.WriteStream(&buf, true, optionParams)
+	}
 	return
 }
+
 
 func (hb *HttpBackend) WriteCompressed(p []byte) (err error) {
 	buf := bytes.NewBuffer(p)
-	err = hb.WriteStream(buf, true)
+	err = hb.WriteStream(buf, true, "")
 	return
 }
 
-func (hb *HttpBackend) WriteStream(stream io.Reader, compressed bool) (err error) {
+func parseParamString(optionParams string) (result map[string]string) {
+	result = make(map[string]string)
+
+	entrys := strings.Split(optionParams, "&")
+	
+	for _, entry := range(entrys){
+	   pair := strings.Split(entry, "=")
+	   if pair[1] != "" {
+	       result[pair[0]] = pair[1]
+	   }
+	}
+	return
+}
+
+func (hb *HttpBackend) WriteStream(stream io.Reader, compressed bool, optionParams string) (err error) {
 	q := url.Values{}
 	q.Set("db", hb.DB)
+
+	if (optionParams != "") {
+		paramsObject := parseParamString(optionParams)
+		for key, value := range(paramsObject){
+			q.Set(key, value)
+		}
+	}
 
 	req, err := http.NewRequest("POST", hb.URL+"/write?"+q.Encode(), stream)
 	if compressed {

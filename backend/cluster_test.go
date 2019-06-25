@@ -138,7 +138,7 @@ func TestInfluxdbClusterWrite(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		err := ic.Write(tt.args)
+		err := ic.Write(tt.args, "rp=one_week&precision=s|")
 		if err != nil {
 			t.Error(tt.name, err)
 			continue
