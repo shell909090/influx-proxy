@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"gopkg.in/redis.v5"
+	redis "gopkg.in/redis.v5"
 )
 
 const (
@@ -91,7 +91,7 @@ func NewRedisConfigSource(options *redis.Options, node string) (rcs *RedisConfig
 func (rcs *RedisConfigSource) LoadNode() (nodecfg NodeConfig, err error) {
 	val, err := rcs.client.HGetAll("default_node").Result()
 	if err != nil {
-		log.Printf("redis load error: b:%s", rcs.node)
+		log.Printf("redis load error: default_node")
 		return
 	}
 
@@ -194,5 +194,10 @@ func (rcs *RedisConfigSource) LoadMeasurements() (m_map map[string][]string, err
 		}
 	}
 	log.Printf("%d measurements loaded from redis.", len(m_map))
+	return
+}
+
+func (rcs *RedisConfigSource) LoadWriteThroughConfig() (wt_map map[string]string, err error) {
+	wt_map, err = rcs.client.HGetAll("write_through").Result()
 	return
 }

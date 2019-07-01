@@ -4,7 +4,15 @@
 
 package backend
 
-import "net/http"
+import (
+	"net/http"
+	"net/url"
+)
+
+type Record struct {
+	Params *url.Values
+	Body   []byte
+}
 
 type Querier interface {
 	Query(w http.ResponseWriter, req *http.Request) (err error)
@@ -16,6 +24,6 @@ type BackendAPI interface {
 	IsWriteOnly() (b bool)
 	Ping() (version string, err error)
 	GetZone() (zone string)
-	Write(p []byte) (err error)
+	Write(*Record) (err error)
 	Close() (err error)
 }

@@ -17,8 +17,6 @@ import (
 	"sync/atomic"
 	"time"
 	"unsafe"
-
-	"github.com/shell909090/influx-proxy/monitor"
 )
 
 var (
@@ -161,25 +159,25 @@ func (ic *InfluxCluster) Flush() {
 }
 
 func (ic *InfluxCluster) WriteStatistics() (err error) {
-	line, err := monitor.DataToLine(
-		"influxdb.cluster",
-		ic.defaultTags,
-		map[string]interface{}{
-			"statQueryRequest":         ic.counter.QueryRequests,
-			"statQueryRequestFail":     ic.counter.QueryRequestsFail,
-			"statWriteRequest":         ic.counter.WriteRequests,
-			"statWriteRequestFail":     ic.counter.WriteRequestsFail,
-			"statPingRequest":          ic.counter.PingRequests,
-			"statPingRequestFail":      ic.counter.PingRequestsFail,
-			"statPointsWritten":        ic.counter.PointsWritten,
-			"statPointsWrittenFail":    ic.counter.PointsWrittenFail,
-			"statQueryRequestDuration": ic.counter.QueryRequestDuration,
-			"statWriteRequestDuration": ic.counter.WriteRequestDuration,
-		},
-		time.Now())
-	if err != nil {
-		return
-	}
+	// line, err := monitor.DataToLine(
+	// 	"influxdb.cluster",
+	// 	ic.defaultTags,
+	// 	map[string]interface{}{
+	// 		"statQueryRequest":         ic.counter.QueryRequests,
+	// 		"statQueryRequestFail":     ic.counter.QueryRequestsFail,
+	// 		"statWriteRequest":         ic.counter.WriteRequests,
+	// 		"statWriteRequestFail":     ic.counter.WriteRequestsFail,
+	// 		"statPingRequest":          ic.counter.PingRequests,
+	// 		"statPingRequestFail":      ic.counter.PingRequestsFail,
+	// 		"statPointsWritten":        ic.counter.PointsWritten,
+	// 		"statPointsWrittenFail":    ic.counter.PointsWrittenFail,
+	// 		"statQueryRequestDuration": ic.counter.QueryRequestDuration,
+	// 		"statWriteRequestDuration": ic.counter.WriteRequestDuration,
+	// 	},
+	// 	time.Now())
+	// if err != nil {
+	// 	return
+	// }
 
 	// metric := &monitor.Metric{
 	// 	Name: "influxdb.cluster",
@@ -202,7 +200,10 @@ func (ic *InfluxCluster) WriteStatistics() (err error) {
 	// if err != nil {
 	// 	return
 	// }
-	return ic.Write([]byte(line + "\n"))
+
+	// FIXME
+	// return ic.Write([]byte(line + "\n"))
+	return
 }
 
 func (ic *InfluxCluster) ForbidQuery(s string) (err error) {
@@ -463,7 +464,7 @@ func (ic *InfluxCluster) Query(w http.ResponseWriter, req *http.Request) (err er
 
 // Wrong in one row will not stop others.
 // So don't try to return error, just print it.
-func (ic *InfluxCluster) WriteRow(line []byte) {
+func (ic *InfluxCluster) WriteRow(rec *Record, line []byte) {
 	atomic.AddInt64(&ic.stats.PointsWritten, 1)
 	// maybe trim?
 	line = bytes.TrimRight(line, " \t\r\n")
@@ -471,6 +472,11 @@ func (ic *InfluxCluster) WriteRow(line []byte) {
 	// empty line, ignore it.
 	if len(line) == 0 {
 		return
+	}
+
+	new_rec := &Record{
+		Params: rec.Params,
+		Body:   line,
 	}
 
 	key, err := ScanKey(line)
@@ -490,7 +496,7 @@ func (ic *InfluxCluster) WriteRow(line []byte) {
 
 	// don't block here for a lont time, we just have one worker.
 	for _, b := range bs {
-		err = b.Write(line)
+		err = b.Write(new_rec)
 		if err != nil {
 			log.Printf("cluster write fail: %s\n", key)
 			atomic.AddInt64(&ic.stats.PointsWrittenFail, 1)
@@ -500,13 +506,13 @@ func (ic *InfluxCluster) WriteRow(line []byte) {
 	return
 }
 
-func (ic *InfluxCluster) Write(p []byte) (err error) {
+func (ic *InfluxCluster) Write(rec *Record) (err error) {
 	atomic.AddInt64(&ic.stats.WriteRequests, 1)
 	defer func(start time.Time) {
 		atomic.AddInt64(&ic.stats.WriteRequestDuration, time.Since(start).Nanoseconds())
 	}(time.Now())
 
-	buf := bytes.NewBuffer(p)
+	buf := bytes.NewBuffer(rec.Body)
 
 	var line []byte
 	for {
@@ -524,14 +530,14 @@ func (ic *InfluxCluster) Write(p []byte) (err error) {
 			break
 		}
 
-		ic.WriteRow(line)
+		ic.WriteRow(rec, line)
 	}
 
 	ic.lock.RLock()
 	defer ic.lock.RUnlock()
 	if len(ic.bas) > 0 {
 		for _, n := range ic.bas {
-			err = n.Write(p)
+			err = n.Write(rec)
 			if err != nil {
 				log.Printf("error: %s\n", err)
 				atomic.AddInt64(&ic.stats.WriteRequestsFail, 1)

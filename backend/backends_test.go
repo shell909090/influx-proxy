@@ -5,6 +5,7 @@
 package backend
 
 import (
+	"net/url"
 	"testing"
 	"time"
 )
@@ -19,13 +20,24 @@ func TestCache(t *testing.T) {
 	}
 	defer bs.Close()
 
-	err = bs.Write([]byte("cpu,host=server01,region=uswest value=1 1434055562000000000"))
+	params := &url.Values{}
+	params.Add("rp", "two_hours")
+
+	err = bs.Write(
+		&Record{
+			Params: params,
+			Body:   []byte("cpu,host=server01,region=uswest value=1 1434055562000000000"),
+		})
 	if err != nil {
 		t.Errorf("error: %s", err)
 		return
 	}
 
-	err = bs.Write([]byte("cpu value=3,value2=4 1434055562000010000"))
+	err = bs.Write(
+		&Record{
+			Params: params,
+			Body:   []byte("cpu value=3,value2=4 1434055562000010000"),
+		})
 	if err != nil {
 		t.Errorf("error: %s", err)
 		return

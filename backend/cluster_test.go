@@ -112,20 +112,25 @@ func TestInfluxdbClusterWrite(t *testing.T) {
 		t.Error(err)
 		return
 	}
+	params := &url.Values{}
+	params.Add("rp", "two_hours")
 	tests := []struct {
-		name string
-		args []byte
-		want error
+		name   string
+		params *url.Values
+		args   []byte
+		want   error
 	}{
 		{
-			name: "cpu",
-			args: []byte("cpu value=3,value2=4 1434055562000010000"),
-			want: nil,
+			name:   "cpu",
+			params: params,
+			args:   []byte("cpu value=3,value2=4 1434055562000010000"),
+			want:   nil,
 		},
 		{
-			name: "cpu.load",
-			args: []byte("cpu.load value=3,value2=4 1434055562000010000"),
-			want: nil,
+			name:   "cpu.load",
+			params: params,
+			args:   []byte("cpu.load value=3,value2=4 1434055562000010000"),
+			want:   nil,
 		},
 		{
 			name: "load.cpu",
@@ -138,7 +143,7 @@ func TestInfluxdbClusterWrite(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		err := ic.Write(tt.args)
+		err := ic.Write(&Record{Params: tt.params, Body: tt.args})
 		if err != nil {
 			t.Error(tt.name, err)
 			continue
@@ -146,6 +151,7 @@ func TestInfluxdbClusterWrite(t *testing.T) {
 	}
 	time.Sleep(time.Second)
 }
+
 func TestInfluxdbClusterPing(t *testing.T) {
 	ic, err := CreateTestInfluxCluster()
 	if err != nil {

@@ -78,6 +78,12 @@ DEFAULT_NODE = {
 }
 
 
+WRITE_THROUGH = {
+    'rp': '',
+    'precision': '',
+}
+
+
 def cleanups(client, parttens):
     for p in parttens:
         for key in client.keys(p):
@@ -111,9 +117,11 @@ def main():
         port=int(optdict.get('-p', '6379')),
         db=int(optdict.get('-d', '0')))
 
-    cleanups(client, ['default_node', 'b:*', 'm:*', 'n:*'])
+    cleanups(client, ['default_node', 'write_config',
+                      'b:*', 'm:*', 'n:*'])
 
     write_config(client, DEFAULT_NODE, "default_node")
+    write_config(client, WRITE_THROUGH, "write_through")
     write_configs(client, BACKENDS, 'b:')
     write_configs(client, NODES, 'n:')
     write_configs(client, KEYMAPS, 'm:')

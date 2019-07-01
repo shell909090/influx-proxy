@@ -10,6 +10,7 @@ import (
 	"flag"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"time"
 
@@ -24,6 +25,7 @@ var (
 	ConfigFile  string
 	NodeName    string
 	RedisAddr   string
+	RedisPwd    string
 	LogFilePath string
 )
 
@@ -33,7 +35,8 @@ func init() {
 	flag.StringVar(&LogFilePath, "log-file-path", "/var/log/influx-proxy.log", "output file")
 	flag.StringVar(&ConfigFile, "config", "", "config file")
 	flag.StringVar(&NodeName, "node", "l1", "node name")
-	flag.StringVar(&RedisAddr, "redis", "localhost:6379", "config file")
+	flag.StringVar(&RedisAddr, "redis", "localhost:6379", "redis address")
+	flag.StringVar(&RedisPwd, "redisPwd", "", "redis password")
 	flag.Parse()
 }
 
@@ -90,6 +93,10 @@ func main() {
 		cfg.Addr = RedisAddr
 	}
 
+	if RedisPwd != "" {
+		cfg.Password = RedisPwd
+	}
+
 	rcs := backend.NewRedisConfigSource(&cfg.Options, cfg.Node)
 
 	nodecfg, err := rcs.LoadNode()
@@ -102,7 +109,14 @@ func main() {
 	ic.LoadConfig()
 
 	mux := http.NewServeMux()
-	NewHttpService(ic, nodecfg.DB).Register(mux)
+	svc := NewHttpService(ic, nodecfg.DB)
+	svc.Register(mux)
+
+	wt_map, err := rcs.LoadWriteThroughConfig()
+	if err == nil && len(wt_map) > 0 {
+		svc.write_through = wt_map
+		svc.params_cache = make(map[string]*url.Values, 0)
+	}
 
 	log.Printf("http service start.")
 	server := &http.Server{

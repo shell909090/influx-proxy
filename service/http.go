@@ -10,20 +10,26 @@ import (
 	"log"
 	"net/http"
 	"net/http/pprof"
+	"net/url"
 	"strings"
+	"sync"
 
 	"github.com/shell909090/influx-proxy/backend"
 )
 
 type HttpService struct {
-	db string
-	ic *backend.InfluxCluster
+	db            string
+	ic            *backend.InfluxCluster
+	cache_lock    sync.RWMutex
+	write_through map[string]string
+	params_cache  map[string]*url.Values
 }
 
 func NewHttpService(ic *backend.InfluxCluster, db string) (hs *HttpService) {
 	hs = &HttpService{
-		db: db,
-		ic: ic,
+		db:            db,
+		ic:            ic,
+		write_through: nil,
 	}
 	if hs.db != "" {
 		log.Print("http database: ", hs.db)
@@ -103,7 +109,9 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	db := req.URL.Query().Get("db")
+	// WARNING: don't modify query
+	query := req.URL.Query()
+	db := query.Get("db")
 
 	if hs.db != "" {
 		if db != hs.db {
@@ -132,12 +140,47 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	err = hs.ic.Write(p)
+	rec := &backend.Record{
+		Body: p,
+	}
+	if hs.write_through != nil {
+		rec.Params = hs.PickParams(&query)
+	}
+
+	err = hs.ic.Write(rec)
 	if err == nil {
 		w.WriteHeader(204)
 	}
 	if hs.ic.WriteTracing != 0 {
 		log.Printf("Write body received by handler: %s,the client is %s\n", p, req.RemoteAddr)
+	}
+	return
+}
+
+func (hs *HttpService) PickParams(query *url.Values) (p *url.Values) {
+	var tmp *url.Values
+	tmp = &url.Values{}
+	for k, _ := range hs.write_through {
+		if _, ok := (*query)[k]; ok {
+			// This is why query shouldn't been modified.
+			(*tmp)[k] = (*query)[k]
+		}
+	}
+
+	if len(*tmp) == 0 {
+		return nil
+	}
+
+	// TODO: is Encode stable?
+	s := tmp.Encode()
+	hs.cache_lock.RLock()
+	p, ok := hs.params_cache[s]
+	hs.cache_lock.RUnlock()
+	if !ok {
+		hs.cache_lock.Lock()
+		hs.params_cache[s] = tmp
+		hs.cache_lock.Unlock()
+		p = tmp
 	}
 	return
 }

@@ -25,7 +25,7 @@ type Backends struct {
 
 	running          bool
 	ticker           *time.Ticker
-	ch_write         chan []byte
+	ch_write         chan *Record
 	buffer           *bytes.Buffer
 	ch_timer         <-chan time.Time
 	write_counter    int32
@@ -42,7 +42,7 @@ func NewBackends(cfg *BackendConfig, name string) (bs *Backends, err error) {
 		RewriteInterval: cfg.RewriteInterval,
 		running:         true,
 		ticker:          time.NewTicker(time.Millisecond * time.Duration(cfg.RewriteInterval)),
-		ch_write:        make(chan []byte, 16),
+		ch_write:        make(chan *Record, 16),
 
 		rewriter_running: false,
 		MaxRowLimit:      int32(cfg.MaxRowLimit),
@@ -59,7 +59,7 @@ func NewBackends(cfg *BackendConfig, name string) (bs *Backends, err error) {
 func (bs *Backends) worker() {
 	for bs.running {
 		select {
-		case p, ok := <-bs.ch_write:
+		case rec, ok := <-bs.ch_write:
 			if !ok {
 				// closed
 				bs.Flush()
@@ -68,7 +68,7 @@ func (bs *Backends) worker() {
 				bs.fb.Close()
 				return
 			}
-			bs.WriteBuffer(p)
+			bs.WriteBuffer(rec)
 
 		case <-bs.ch_timer:
 			bs.Flush()
@@ -85,12 +85,12 @@ func (bs *Backends) worker() {
 	}
 }
 
-func (bs *Backends) Write(p []byte) (err error) {
+func (bs *Backends) Write(rec *Record) (err error) {
 	if !bs.running {
 		return io.ErrClosedPipe
 	}
 
-	bs.ch_write <- p
+	bs.ch_write <- rec
 	return
 }
 
@@ -100,7 +100,10 @@ func (bs *Backends) Close() (err error) {
 	return
 }
 
-func (bs *Backends) WriteBuffer(p []byte) {
+func (bs *Backends) WriteBuffer(rec *Record) {
+	// FIXME:
+	p := rec.Body
+
 	bs.write_counter++
 
 	if bs.buffer == nil {
