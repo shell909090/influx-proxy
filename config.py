@@ -48,7 +48,7 @@ BACKENDS = {
 KEYMAPS = {
     'cpu': ['local'],
     'temperature': ['local2'],
-    '_default_': ['local']
+    '_default_': ['local', 'local2']
 }
 
 # this config will cover default_node config
