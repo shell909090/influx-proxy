@@ -45,7 +45,7 @@ $ mv $GOPATH/bin/service $GOPATH/bin/influxdb-proxy
 $ # Edit config.py and execute it
 $ python config.py
 $ # Start influx-proxy!
-$ $GOPATH/bin/influxdb-proxy -redis localhost:6379
+$ $GOPATH/bin/influxdb-proxy -redis localhost:6379 [--redis-pwd xxx --redis-db 0]
 ```
 
 Configuration
