@@ -100,8 +100,9 @@ def write_config(client, d, name):
 
 
 def main():
-    optlist, args = getopt.getopt('d:hH:p:', sys.argv[1:])
+    optlist, args = getopt.getopt(sys.argv[1:], 'd:hH:p:P:')
     optdict = dict(optlist)
+
     if '-h' in optdict:
         print(main.__doc__)
         return
@@ -109,7 +110,9 @@ def main():
     client = redis.StrictRedis(
         host=optdict.get('-H', 'localhost'),
         port=int(optdict.get('-p', '6379')),
-        db=int(optdict.get('-d', '0')))
+        db=int(optdict.get('-d', '0')),
+        password=optdict.get('-P', '')
+    )
 
     cleanups(client, ['default_node', 'b:*', 'm:*', 'n:*'])
 
