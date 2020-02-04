@@ -33,7 +33,7 @@ type Proxy struct {
 }
 
 // LineData 数据传输形式
-type LineReq struct {
+type LineData struct {
     Line      []byte `json:"line"`      // 二进制数据
     Precision string `json:"precision"` // influxDb时间单位
     Db        string `json:"db"`
@@ -117,28 +117,28 @@ func (proxy *Proxy) GetMachines(dbMeasure string) []*Backend {
 }
 
 // WriteData 写入数据操作
-func (proxy *Proxy) WriteData(reqData *LineReq) error {
+func (proxy *Proxy) WriteData(data *LineData) error {
     // 根据 Precision 对line做相应的调整
-    reqData.Line = LineToNano(reqData.Line, reqData.Precision)
+    data.Line = LineToNano(data.Line, data.Precision)
 
     // 得到对象将要存储的多个备份节点
-    dbMeasure := reqData.Db + "," + reqData.Measure
+    dbMeasure := data.Db + "," + data.Measure
     backendS := proxy.GetMachines(dbMeasure)
     if len(backendS) < 1 {
-        util.CustomLog.Errorf("reqData:%v err:GetMachines length is 0", reqData)
+        util.CustomLog.Errorf("request data:%v err:GetMachines length is 0", data)
         return mconst.LengthNilErr
     }
 
     // 对象如果不是以\n结束的，则加上\n
-    if reqData.Line[len(reqData.Line)-1] != '\n' {
-        reqData.Line = bytes.Join([][]byte{reqData.Line, []byte("\n")}, []byte(""))
+    if data.Line[len(data.Line)-1] != '\n' {
+        data.Line = bytes.Join([][]byte{data.Line, []byte("\n")}, []byte(""))
     }
 
     // 顺序存储到多个备份节点上
     for _, backend := range backendS {
-        err := backend.WriteDataToBuffer(reqData, proxy.BackendBufferMaxNum)
+        err := backend.WriteDataToBuffer(data, proxy.BackendBufferMaxNum)
         if err != nil {
-            util.CustomLog.Errorf("backend:%+v reqData:%+v err:%+v", backend.Url, reqData, err)
+            util.CustomLog.Errorf("backend:%+v request data:%+v err:%+v", backend.Url, data, err)
             return err
         }
     }

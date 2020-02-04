@@ -208,17 +208,17 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
         measure := lineList[0]
         measures := bytes.Split(measure, []byte(","))
 
-        // 构建一个请求对象
-        reqData := &consist.LineReq{
+        // 构建一个数据对象
+        data := &consist.LineData{
             Precision: precision,
             Line:      line,
             Db:        db,
             Measure:   string(measures[0]),
         }
         // 写入buffer
-        err = hs.WriteData(reqData)
+        err = hs.WriteData(data)
         if err != nil {
-            util.CustomLog.Errorf("reqData:%+v err:%+v", reqData, err)
+            util.CustomLog.Errorf("request data:%+v err:%+v", data, err)
             w.WriteHeader(mconst.BadRequest)
             w.Write([]byte(err.Error()))
             return

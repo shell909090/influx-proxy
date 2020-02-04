@@ -317,13 +317,13 @@ func (backend *Backend) syncFileDataToDb() {
 }
 
 // WriteDataToDb 写入对应backend的buffer中
-func (backend *Backend) WriteDataToBuffer(lineData *LineReq, backendBufferMaxNum int) error {
-    db := lineData.Db
+func (backend *Backend) WriteDataToBuffer(data *LineData, backendBufferMaxNum int) error {
+    db := data.Db
     //获取当前实例中对应db的锁
     backend.LockDbMap[db].Lock()
     defer backend.LockDbMap[db].Unlock()
     //写数据并判断阈值
-    backend.BufferMap[db].Buffer.Write(lineData.Line)
+    backend.BufferMap[db].Buffer.Write(data.Line)
     backend.BufferMap[db].Counter++
 
     if backend.BufferMap[db].Counter > backendBufferMaxNum {
