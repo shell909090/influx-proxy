@@ -11,7 +11,7 @@ const (
     CheckPingTimeOut   = 10
     AwaitActiveTimeOut = 10
     SyncFileData       = 5
-    Version            = "2.0"
+    Version            = "3.0.1"
 )
 
 var (
@@ -43,7 +43,6 @@ var (
     FormatNilErr = errors.New("format error")
     LengthNilErr = errors.New("length is zero")
 )
-
 
 var (
     ForbidCmds   = "(?i:^\\s*grant|^\\s*revoke|\\(\\)\\$)"

@@ -15,8 +15,6 @@ import (
     "time"
 )
 
-const VERSION = "3.0.1"
-
 var (
     ProxyFile       string
     Version         bool
@@ -29,7 +27,7 @@ func main() {
     flag.BoolVar(&Version, "version", false, "proxy version")
     flag.Parse()
     if Version {
-        fmt.Printf("Version:    %s\n", VERSION)
+        fmt.Printf("Version:    %s\n", mconst.Version)
         fmt.Printf("Git commit: %s\n", GitCommit)
         fmt.Printf("Go version: %s\n", runtime.Version())
         fmt.Printf("Build time: %s\n", BuildTime)

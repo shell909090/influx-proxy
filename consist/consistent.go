@@ -173,11 +173,11 @@ func (c *Consistent) GetTwo(name string) (string, string, error) {
     key := c.hashKey(name)
     i := c.search(key)
     a := c.circle[c.sortedHashes[i]]
-    
+
     if c.count == 1 {
         return a, "", nil
     }
-    
+
     start := i
     var b string
     for i = start + 1; i != start; i++ {
@@ -196,15 +196,15 @@ func (c *Consistent) GetTwo(name string) (string, string, error) {
 func (c *Consistent) GetN(name string, n int) ([]string, error) {
     c.RLock()
     defer c.RUnlock()
-    
+
     if len(c.circle) == 0 {
         return nil, ErrEmptyCircle
     }
-    
+
     if c.count < int64(n) {
         n = int(c.count)
     }
-    
+
     var (
         key   = c.hashKey(name)
         i     = c.search(key)
@@ -212,13 +212,13 @@ func (c *Consistent) GetN(name string, n int) ([]string, error) {
         res   = make([]string, 0, n)
         elem  = c.circle[c.sortedHashes[i]]
     )
-    
+
     res = append(res, elem)
-    
+
     if len(res) == n {
         return res, nil
     }
-    
+
     for i = start + 1; i != start; i++ {
         if i >= len(c.sortedHashes) {
             i = 0
@@ -231,7 +231,7 @@ func (c *Consistent) GetN(name string, n int) ([]string, error) {
             break
         }
     }
-    
+
     return res, nil
 }
 

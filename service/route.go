@@ -22,8 +22,8 @@ type HttpService struct {
 
 // Register 注册http方法
 func (hs *HttpService) Register(mux *http.ServeMux) {
-    mux.HandleFunc("/encryption",hs.HandlerEncryption)
-    mux.HandleFunc("/decryption",hs.HandlerDencryption)
+    mux.HandleFunc("/encryption", hs.HandlerEncryption)
+    mux.HandleFunc("/decryption", hs.HandlerDencryption)
     mux.HandleFunc("/query", hs.HandlerQuery)
     mux.HandleFunc("/write", hs.HandlerWrite)
     mux.HandleFunc("/clear_measure", hs.HandlerClearMeasure)
@@ -39,9 +39,8 @@ func (hs *HttpService)HandlerEncryption(w http.ResponseWriter, req *http.Request
         w.Write([]byte("method not allow."))
         return
     }
-
-    ctx:=req.URL.Query().Get("ctx")
-    passord:=  consist.AesEncrypt(ctx,consist.KEY)
+    ctx := req.URL.Query().Get("ctx")
+    passord := consist.AesEncrypt(ctx, consist.KEY)
     w.WriteHeader(200)
     w.Write([]byte(passord))
 }
@@ -53,9 +52,9 @@ func (hs *HttpService)HandlerDencryption(w http.ResponseWriter, req *http.Reques
         w.Write([]byte("method not allow."))
         return
     }
-    key:=req.URL.Query().Get("key")
-    ctx:=req.URL.Query().Get("ctx")
-    passord:=  consist.AesDecrypt(ctx,key)
+    key := req.URL.Query().Get("key")
+    ctx := req.URL.Query().Get("ctx")
+    passord := consist.AesDecrypt(ctx, key)
     w.WriteHeader(200)
     w.Write([]byte(passord))
 }
@@ -65,15 +64,15 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
     hs.WriteHeader(w, req)
     w.Header().Add("X-Influxdb-Version", mconst.Version)
-    
+
     // 验证密码
-    ok:=hs.checkAuth(req)
+    ok := hs.checkAuth(req)
     if !ok{
         w.WriteHeader(401)
         w.Write([]byte("auth failed"))
         return
     }
-    
+
     // 检查请求方法
     if !util.IncludeString([]string{mconst.Post, mconst.Get}, req.Method) {
         util.CustomLog.Errorf("method:%+v", req.Method)
@@ -81,7 +80,7 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
         w.Write([]byte("illegal method\n"))
         return
     }
-    
+
     // 检查查询语句
     q := strings.TrimSpace(req.FormValue("q"))
     if q == "" {
@@ -90,24 +89,23 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
         w.Write([]byte("empty query\n"))
         return
     }
-    
+
     // 选出一个状态良好的cluster
-    var circle *consist.CirCle
+    var circle *consist.Circle
     for {
-        randClusterPos := rand.Intn(len(hs.CircleS))
-        circle = hs.CircleS[randClusterPos]
+        randClusterPos := rand.Intn(len(hs.Circles))
+        circle = hs.Circles[randClusterPos]
         status := circle.CheckStatus()
         if status {
             break
         }
-        
         time.Sleep(time.Microsecond)
     }
-    
+
     // 筛选出 show 操作
     matched := MatchShow(q)
     if matched {
-        body, err := circle.QueryShow(req, circle.BackendS)
+        body, err := circle.QueryShow(req, circle.Backends)
         if err != nil {
             util.CustomLog.Errorf("query:%+v err:%+v", q, err)
             w.WriteHeader(mconst.BadRequest)
@@ -118,7 +116,7 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
         w.Write(body)
         return
     }
-    
+
     // 过滤查询语句
     err := hs.CheckQuery(q)
     if err != nil {
@@ -126,6 +124,7 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
         w.Write([]byte(err.Error()))
         return
     }
+
     // 执行查询
     resp, e := circle.Query(req)
     if e != nil {
@@ -143,7 +142,7 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
 func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
     hs.WriteHeader(w, req)
-    
+
     ok := hs.checkAuth(req)
     if !ok{
         w.WriteHeader(401)
@@ -158,7 +157,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
         w.Write(mconst.Code2Message[mconst.MethodNotAllow])
         return
     }
-    
+
     // precision默认为ns
     precision := req.URL.Query().Get("precision")
     if precision == "" {
@@ -171,7 +170,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
         w.Write(mconst.Code2Message[mconst.BadRequest])
         return
     }
-    
+
     body := req.Body
     // 压缩请求数据
     if req.Header.Get("Content-Encoding") == "gzip" {
@@ -193,7 +192,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
         w.Write([]byte(err.Error()))
         return
     }
-    
+
     // 多个对象，遍历每一个对象
     arr := bytes.Split(p, []byte("\n"))
     for _, line := range arr {
@@ -208,7 +207,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
         }
         measure := lineList[0]
         measures := bytes.Split(measure, []byte(","))
-        
+
         // 构建一个请求对象
         reqData := &consist.LineReq{
             Precision: precision,
@@ -217,7 +216,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
             Measure:   string(measures[0]),
         }
         // 写入buffer
-        err = hs.Restore(reqData)
+        err = hs.WriteData(reqData)
         if err != nil {
             util.CustomLog.Errorf("reqData:%+v err:%+v", reqData, err)
             w.WriteHeader(mconst.BadRequest)
@@ -232,7 +231,6 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
 func (hs *HttpService) HandlerClearMeasure(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
     hs.WriteHeader(w, req)
-    
     if req.Method != mconst.Post {
         util.CustomLog.Errorf("req.Method:%+v err:nil", req.Method)
         w.WriteHeader(mconst.MethodNotAllow)
@@ -242,7 +240,7 @@ func (hs *HttpService) HandlerClearMeasure(w http.ResponseWriter, req *http.Requ
     db := req.FormValue("db")
     dbs := strings.Split(db, ",")
     circleNum, e := strconv.Atoi(req.FormValue("circle_num"))
-    if e != nil || circleNum >= len(hs.CircleS) || len(dbs) == 0 {
+    if e != nil || circleNum >= len(hs.Circles) || len(dbs) == 0 {
         w.WriteHeader(mconst.BadRequest)
         w.Write([]byte(e.Error()))
         return
@@ -252,7 +250,7 @@ func (hs *HttpService) HandlerClearMeasure(w http.ResponseWriter, req *http.Requ
     w.WriteHeader(mconst.Success)
     w.Write(mconst.Code2Message[mconst.Success])
     return
-    
+
 }
 
 func (hs *HttpService) WriteHeader(w http.ResponseWriter, req *http.Request) {
@@ -273,7 +271,7 @@ func (hs *HttpService) checkAuth(r *http.Request) bool {
     if ok && consist.AesEncrypt(userName, consist.KEY) == hs.ProxyUsername && consist.AesEncrypt(password, consist.KEY) == hs.ProxyPassword {
         return true
     }
-    
+
     userName, password = r.URL.Query().Get("u"), r.URL.Query().Get("p")
     if consist.AesEncrypt(userName, consist.KEY) == hs.ProxyUsername && consist.AesEncrypt(password, consist.KEY) == hs.ProxyPassword  {
         return true

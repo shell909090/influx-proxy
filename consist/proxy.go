@@ -19,7 +19,7 @@ import (
 
 // Proxy 集群
 type Proxy struct {
-    CircleS                []*CirCle            `json:"circles"` // 集群列表
+    Circles                []*Circle            `json:"circles"` // 集群列表
     ForbiddenQuery         []*regexp.Regexp     `json:"forbidden_query"`
     ObligatedQuery         []*regexp.Regexp     `json:"obligated_query"`
     ListenAddr             string               `json:"listen_addr"`   // 服务监听的端口
@@ -44,8 +44,7 @@ type LineReq struct {
 func NewProxy(file string) *Proxy {
     proxy := loadProxyJson(file)
     util.CheckPathAndCreate(proxy.FailDataDir)
-    
-    for circleNum, circle := range proxy.CircleS {
+    for circleNum, circle := range proxy.Circles {
         circle.CircleNum = circleNum
         proxy.initCircle(circle)
     }
@@ -62,37 +61,36 @@ func loadProxyJson(file string) *Proxy {
     }
     dec := json.NewDecoder(f)
     err = dec.Decode(proxy)
-    
     return proxy
 }
 
 // initCircle 初始化哈希环
-func (proxy *Proxy) initCircle(circle *CirCle) {
+func (proxy *Proxy) initCircle(circle *Circle) {
     circle.Router = New()
     circle.Router.NumberOfReplicas = proxy.NumberOfReplicas
     circle.UrlToMap = make(map[string]*Backend)
     circle.BackendWgMap = make(map[string]*sync.WaitGroup)
-    for _, backend := range circle.BackendS {
+    for _, backend := range circle.Backends {
         circle.BackendWgMap[backend.Url] = &sync.WaitGroup{}
         proxy.initBackend(circle, backend)
     }
 }
 
-func (proxy *Proxy) initBackend(circle *CirCle, backend *Backend) {
+func (proxy *Proxy) initBackend(circle *Circle, backend *Backend) {
     circle.Router.Add(backend.Url)
     circle.UrlToMap[backend.Url] = backend
-    
-    backend.BufferMap = make(map[string]*BufferAndLen)
+
+    backend.BufferMap = make(map[string]*BufferCounter)
     backend.LockDbMap = make(map[string]*sync.RWMutex)
     backend.LockFile = &sync.RWMutex{}
     backend.Client = &http.Client{}
     backend.Active = true
     backend.CreateCacheFile(proxy.FailDataDir)
     backend.Transport = new(http.Transport)
-    
+
     for _, db := range proxy.DbList {
         backend.LockDbMap[db] = new(sync.RWMutex)
-        backend.BufferMap[db] = &BufferAndLen{Buffer: &bytes.Buffer{}}
+        backend.BufferMap[db] = &BufferCounter{Buffer: &bytes.Buffer{}}
     }
     go backend.CheckActive()
     go backend.CheckBufferAndSync(proxy.SyncDataTimeOut)
@@ -102,7 +100,7 @@ func (proxy *Proxy) initBackend(circle *CirCle, backend *Backend) {
 // GetMachines 获取数据对应的三台备份物理主机
 func (proxy *Proxy) GetMachines(dbMeasure string) []*Backend {
     machines := make([]*Backend, 0)
-    for circleNum, circle := range proxy.CircleS {
+    for circleNum, circle := range proxy.Circles {
         backendUrl, err := circle.Router.Get(dbMeasure)
         if err != nil {
             util.CustomLog.Errorf("circleNum:%v dbMeasure:%+v err:%v", circleNum, dbMeasure, err)
@@ -118,10 +116,11 @@ func (proxy *Proxy) GetMachines(dbMeasure string) []*Backend {
     return machines
 }
 
-// Restore 存储数组操作
-func (proxy *Proxy) Restore(reqData *LineReq) error {
+// WriteData 写入数据操作
+func (proxy *Proxy) WriteData(reqData *LineReq) error {
     // 根据 Precision 对line做相应的调整
     reqData.Line = LineToNano(reqData.Line, reqData.Precision)
+
     // 得到对象将要存储的多个备份节点
     dbMeasure := reqData.Db + "," + reqData.Measure
     backendS := proxy.GetMachines(dbMeasure)
@@ -129,12 +128,12 @@ func (proxy *Proxy) Restore(reqData *LineReq) error {
         util.CustomLog.Errorf("reqData:%v err:GetMachines length is 0", reqData)
         return mconst.LengthNilErr
     }
-    
+
     // 对象如果不是以\n结束的，则加上\n
     if reqData.Line[len(reqData.Line)-1] != '\n' {
         reqData.Line = bytes.Join([][]byte{reqData.Line, []byte("\n")}, []byte(""))
     }
-    
+
     // 顺序存储到多个备份节点上
     for _, backend := range backendS {
         err := backend.WriteDataToBuffer(reqData, proxy.BackendBufferMaxNum)
@@ -147,7 +146,7 @@ func (proxy *Proxy) Restore(reqData *LineReq) error {
 }
 
 func (proxy *Proxy) AddBackend(circleNum int) ([]*Backend, error) {
-    circle := proxy.CircleS[circleNum]
+    circle := proxy.Circles[circleNum]
     var res []*Backend
     for _, v := range circle.UrlToMap {
         res = append(res, v)
@@ -155,15 +154,15 @@ func (proxy *Proxy) AddBackend(circleNum int) ([]*Backend, error) {
     return res, nil
 }
 
-func (proxy *Proxy) DeleteBackend(backendUrlS []string, circleNum int) ([]*Backend, error) {
+func (proxy *Proxy) DeleteBackend(backendUrls []string, circleNum int) ([]*Backend, error) {
     var res []*Backend
-    for _, v := range backendUrlS {
+    for _, v := range backendUrls {
         res = append(res, &Backend{Url: v, Client: &http.Client{}, Transport: new(http.Transport)})
     }
     return res, nil
 }
 
-func GetMeasurementList(circle *CirCle, req *http.Request, backends []*Backend) []string {
+func GetMeasurementList(circle *Circle, req *http.Request, backends []*Backend) []string {
     p, _ := circle.QueryShow(req, backends)
     res, _ := GetSeriesArray(p)
     var databases []string
@@ -183,7 +182,7 @@ func (proxy *Proxy) ForbidQuery(s string) (err error) {
     if err != nil {
         return
     }
-    
+
     proxy.ForbiddenQuery = append(proxy.ForbiddenQuery, r)
     return
 }
@@ -193,7 +192,7 @@ func (proxy *Proxy) EnsureQuery(s string) (err error) {
     if err != nil {
         return
     }
-    
+
     proxy.ObligatedQuery = append(proxy.ObligatedQuery, r)
     return
 }
@@ -206,7 +205,7 @@ func (proxy *Proxy) CheckQuery(q string) error {
             }
         }
     }
-    
+
     if len(proxy.ObligatedQuery) != 0 {
         for _, pq := range proxy.ObligatedQuery {
             if pq.MatchString(q) {
@@ -215,23 +214,22 @@ func (proxy *Proxy) CheckQuery(q string) error {
         }
         return errors.New("query forbidden")
     }
-    
+
     return nil
 }
 
 func (proxy *Proxy) ClearMeasure(dbs []string, circleNum int) error {
-    circle := proxy.CircleS[circleNum]
-    for _, backend := range circle.BackendS {
+    circle := proxy.Circles[circleNum]
+    for _, backend := range circle.Backends {
         go proxy.clearMeasure(circle, dbs, backend)
     }
     return nil
 }
 
-func (proxy *Proxy) clearMeasure(circle *CirCle, dbs []string, backend *Backend) {
-
+func (proxy *Proxy) clearMeasure(circle *Circle, dbs []string, backend *Backend) {
     for _, db := range dbs {
         // 单独出一个接口 删除接口
-        //deleet old measure
+        // deleet old measure
         req := &http.Request{Form: url.Values{"q": []string{"show measurements"}, "db": []string{db}}}
         measures := GetMeasurementList(circle, req, []*Backend{backend})
         fmt.Printf("len-->%d db-->%+v\n", len(measures), db)
@@ -242,7 +240,7 @@ func (proxy *Proxy) clearMeasure(circle *CirCle, dbs []string, backend *Backend)
                 util.CustomLog.Errorf("err:%+v")
                 continue
             }
-            
+
             if targetBackendUrl != backend.Url {
                 fmt.Printf("src:%+v target:%+v \n", backend.Url, targetBackendUrl)
                 delMeasureReq := &http.Request{
@@ -255,7 +253,6 @@ func (proxy *Proxy) clearMeasure(circle *CirCle, dbs []string, backend *Backend)
                     continue
                 }
             }
-            
         }
     }
 }

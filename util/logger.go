@@ -12,7 +12,6 @@ var (
 
 func init() {
     CheckPathAndCreate("log")
-    
     CustomLog = newLogger(os.Stdout)
 }
 

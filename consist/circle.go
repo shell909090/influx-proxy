@@ -7,24 +7,24 @@ import (
     "sync"
 )
 
-type CirCle struct {
-    Router         *Consistent                `json:"router"`     // 一般情况下使用 NewRouter
-    BackendS       []*Backend                 `json:"backends"`
+type Circle struct {
+    Router         *Consistent                `json:"router"`
+    Backends       []*Backend                 `json:"backends"`
     UrlToMap       map[string]*Backend        `json:"url_to_map"`
     BackendWgMap   map[string]*sync.WaitGroup `json:"backend_wg_map"`
     CircleNum      int                        `json:"circle_num"`
 }
 
-func (circle *CirCle) CheckStatus() bool {
+func (circle *Circle) CheckStatus() bool {
     res := true
-    for _, backend := range circle.BackendS {
+    for _, backend := range circle.Backends {
         res = res && backend.Active
     }
     return res
 }
 
-// 执行  show 查询操作
-func (circle *CirCle) QueryShow(req *http.Request, backendS []*Backend) ([]byte, error) {
+// 执行 show 查询操作
+func (circle *Circle) QueryShow(req *http.Request, backendS []*Backend) ([]byte, error) {
     res := make([][]byte, 0)
     // 在环内的所有数据库实例上执行show，在聚合在一起
     for _, backend := range backendS {
@@ -38,7 +38,7 @@ func (circle *CirCle) QueryShow(req *http.Request, backendS []*Backend) ([]byte,
         }
     }
     q := req.Form.Get("q")
-    
+
     // 针对measurements 和 databases 执行不同的聚合过程
     if strings.Contains(q, "measurements") || strings.Contains(q, "databases") {
         return circle.showMeasurements(res)
@@ -47,9 +47,8 @@ func (circle *CirCle) QueryShow(req *http.Request, backendS []*Backend) ([]byte,
     }
 }
 
-func (circle *CirCle) showMeasurements(bodys [][]byte) (fBody []byte, err error) {
+func (circle *Circle) showMeasurements(bodys [][]byte) (fBody []byte, err error) {
     measureMap := make(map[string]*seri)
-    
     for _, body := range bodys {
         sSs, Err := GetSeriesArray(body)
         if Err != nil {
@@ -64,9 +63,6 @@ func (circle *CirCle) showMeasurements(bodys [][]byte) (fBody []byte, err error)
                     continue
                 }
                 measure := measurement[0].(string)
-                if strings.Contains(measure, "influxdb.cluster") {
-                    continue
-                }
                 measureMap[measure] = s
             }
         }
@@ -84,10 +80,9 @@ func (circle *CirCle) showMeasurements(bodys [][]byte) (fBody []byte, err error)
         return
     }
     return
-    
 }
 
-func (circle *CirCle) showTagFieldkey(bodys [][]byte) (fBody []byte, err error) {
+func (circle *Circle) showTagFieldkey(bodys [][]byte) (fBody []byte, err error) {
     seriesMap := make(map[string]*seri)
     for _, body := range bodys {
         sSs, Err := GetSeriesArray(body)
@@ -97,13 +92,10 @@ func (circle *CirCle) showTagFieldkey(bodys [][]byte) (fBody []byte, err error) 
             return
         }
         for _, s := range sSs {
-            if strings.Contains(s.Name, "influxdb.cluster") {
-                continue
-            }
             seriesMap[s.Name] = s
         }
     }
-    
+
     var series []*seri
     for _, item := range seriesMap {
         series = append(series, item)
@@ -113,10 +105,9 @@ func (circle *CirCle) showTagFieldkey(bodys [][]byte) (fBody []byte, err error) 
         util.CustomLog.Errorf("err:%+v", err)
     }
     return
-    
 }
 
-func (circle *CirCle) Query(req *http.Request) ([]byte, error) {
+func (circle *Circle) Query(req *http.Request) ([]byte, error) {
     // 得到dbMeasure
     q := req.FormValue("q")
     measure, e := GetMeasurementFromInfluxQL(q)
@@ -125,7 +116,7 @@ func (circle *CirCle) Query(req *http.Request) ([]byte, error) {
     }
     db := req.FormValue("db")
     dbMeasure := db + "," + measure
-    
+
     // 得到目标数据库
     backUrl, e := circle.Router.Get(dbMeasure)
     if e != nil {

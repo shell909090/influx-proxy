@@ -1,8 +1,3 @@
-/*
-code from www.361way.com
-mail:itybku@139.com
-desc:aes加密之一
-*/
 package consist
 
 import (
@@ -11,7 +6,6 @@ import (
     "crypto/cipher"
     "encoding/base64"
 )
-
 
 func AesEncrypt(orig string, key string) string {
     if len(orig)==0{
@@ -34,6 +28,7 @@ func AesEncrypt(orig string, key string) string {
     blockMode.CryptBlocks(cryted, origData)
     return base64.StdEncoding.EncodeToString(cryted)
 }
+
 func AesDecrypt(cryted string, key string) string {
     // 转成字节数组
     if len(cryted)!=24 ||len(key)!=24{
@@ -56,14 +51,12 @@ func AesDecrypt(cryted string, key string) string {
     return string(orig)
 }
 
-//补码
 func PKCS7Padding(ciphertext []byte, blocksize int) []byte {
     padding := blocksize - len(ciphertext)%blocksize
     padtext := bytes.Repeat([]byte{byte(padding)}, padding)
     return append(ciphertext, padtext...)
 }
 
-//去码
 func PKCS7UnPadding(origData []byte) []byte {
     length := len(origData)
     unpadding := int(origData[length-1])
