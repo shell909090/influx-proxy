@@ -22,6 +22,7 @@ Features
 * Filter some dangerous influxql.
 * Transparent for client, like cluster for client.
 * Cache data to file when write failed, then rewrite.
+* Support sharding with consistent hash.
 
 Requirements
 -----------
@@ -33,9 +34,8 @@ Usage
 
 ```sh
 $ # Install influx-proxy to your $GOPATH/bin
-$ go get -u github.com/chengshiwen/influx-proxy/service
-$ go install github.com/chengshiwen/influx-proxy/service
-$ mv $GOPATH/bin/service $GOPATH/bin/influx-proxy
+$ go get -u github.com/chengshiwen/influx-proxy
+$ go install github.com/chengshiwen/influx-proxy
 $ # Start influx-proxy!
 $ $GOPATH/bin/influx-proxy -config proxy.json
 ```
@@ -43,7 +43,7 @@ $ $GOPATH/bin/influx-proxy -config proxy.json
 Description
 -----------
 
-The architecture is fairly simple, one InfluxDB Proxy process and two or more InfluxDB processes. The Proxy should point HTTP requests with measurements to the two InfluxDB servers.
+The architecture is fairly simple, one InfluxDB Proxy process and two or more InfluxDB processes. The Proxy should point HTTP requests with db and measurement to the two InfluxDB servers.
 
 The setup should look like this:
 
@@ -62,7 +62,8 @@ The setup should look like this:
                  │
                  ▼
         ┌─────────────────┐
-        │   measurements  │
+        │  db,measurement │
+        │ consistent hash │
         └─────────────────┘
           |              |
         ┌─┼──────────────┘
@@ -74,14 +75,6 @@ The setup should look like this:
   │          │      │          │
   └──────────┘      └──────────┘
 ```
-
-measurements match principle:
-
-* Exact match first. For instance, we use `cpu.load` for measurement's name. The KEYMAPS has `cpu` and `cpu.load` keys.
-It will use the `cpu.load` corresponding backends.
-
-* Then Prefix match. For instance, we use `cpu.load` for measurement's name. The KEYMAPS  only has `cpu` key.
-It will use the `cpu` corresponding backends.
 
 Query Commands
 --------
