@@ -6,21 +6,38 @@ package main
 
 import (
     "flag"
+    "fmt"
     "github.com/chengshiwen/influx-proxy/consist"
     "github.com/chengshiwen/influx-proxy/mconst"
     "github.com/chengshiwen/influx-proxy/service"
     "net/http"
+    "runtime"
     "time"
 )
 
+const VERSION = "3.0.1"
+
 var (
-    ConsistentFILE  string
+    ProxyFile       string
+    Version         bool
+    GitCommit       string
+    BuildTime       string
 )
 
 func main() {
-    flag.StringVar(&ConsistentFILE, "proxy", "proxy.json", "proxy file")
+    flag.StringVar(&ProxyFile, "proxy", "proxy.json", "proxy config file")
+    flag.BoolVar(&Version, "version", false, "proxy version")
     flag.Parse()
-    proxy := consist.NewProxy(ConsistentFILE)
+    if Version {
+        fmt.Printf("Version:    %s\n", VERSION)
+        fmt.Printf("Git commit: %s\n", GitCommit)
+        fmt.Printf("Go version: %s\n", runtime.Version())
+        fmt.Printf("Build time: %s\n", BuildTime)
+        fmt.Printf("OS/Arch:    %s/%s\n", runtime.GOOS, runtime.GOARCH)
+        return
+    }
+
+    proxy := consist.NewProxy(ProxyFile)
     httpServer := service.HttpService{Proxy: proxy}
     mux := http.NewServeMux()
     httpServer.Register(mux)
