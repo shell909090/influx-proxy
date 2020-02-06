@@ -246,7 +246,7 @@ func (proxy *Proxy) clearMeasure(circle *Circle, dbs []string, backend *Backend)
                     Form:   url.Values{"q": []string{fmt.Sprintf("drop measurement \"%s\" ", measure)}, "db": []string{db}},
                     Header: http.Header{"User-Agent": []string{"curl/7.54.0"}, "Accept": []string{"*/*"}},
                 }
-                _, e := backend.QueryShow(delMeasureReq)
+                _, e := backend.Query(delMeasureReq)
                 if e != nil {
                     util.Log.Errorf("err:%+v", e)
                     continue

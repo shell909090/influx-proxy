@@ -39,7 +39,7 @@ func (hs *HttpService)HandlerEncryption(w http.ResponseWriter, req *http.Request
         return
     }
     ctx := req.URL.Query().Get("ctx")
-    passord := consist.AesEncrypt(ctx, consist.KEY)
+    passord := util.AesEncrypt(ctx, consist.KEY)
     w.WriteHeader(200)
     w.Write([]byte(passord))
 }
@@ -53,7 +53,7 @@ func (hs *HttpService)HandlerDencryption(w http.ResponseWriter, req *http.Reques
     }
     key := req.URL.Query().Get("key")
     ctx := req.URL.Query().Get("ctx")
-    passord := consist.AesDecrypt(ctx, key)
+    passord := util.AesDecrypt(ctx, key)
     w.WriteHeader(200)
     w.Write([]byte(passord))
 }
@@ -285,12 +285,12 @@ func MatchShow(q string) bool {
 
 func (hs *HttpService) checkAuth(r *http.Request) bool {
     userName, password, ok := r.BasicAuth()
-    if ok && consist.AesEncrypt(userName, consist.KEY) == hs.ProxyUsername && consist.AesEncrypt(password, consist.KEY) == hs.ProxyPassword {
+    if ok && util.AesEncrypt(userName, consist.KEY) == hs.ProxyUsername && util.AesEncrypt(password, consist.KEY) == hs.ProxyPassword {
         return true
     }
 
     userName, password = r.URL.Query().Get("u"), r.URL.Query().Get("p")
-    if consist.AesEncrypt(userName, consist.KEY) == hs.ProxyUsername && consist.AesEncrypt(password, consist.KEY) == hs.ProxyPassword  {
+    if util.AesEncrypt(userName, consist.KEY) == hs.ProxyUsername && util.AesEncrypt(password, consist.KEY) == hs.ProxyPassword  {
         return true
     }
     return false

@@ -409,7 +409,7 @@ func (backend *Backend) WriteStream(db string, stream io.Reader) error {
     q.Set("db", db)
     req, err := http.NewRequest("POST", backend.Url+"/write?"+q.Encode(), stream)
     req.Header.Add("Content-Encoding", "gzip")
-    req.SetBasicAuth(AesDecrypt(backend.Username,KEY),AesDecrypt(backend.Password,KEY))
+    req.SetBasicAuth(util.AesDecrypt(backend.Username, KEY), util.AesDecrypt(backend.Password, KEY))
     resp, err := backend.Client.Do(req)
     if err != nil {
         fmt.Printf("backend.Client.Do err:%+v\n", err)
@@ -447,12 +447,12 @@ func Compress(buf *bytes.Buffer, p []byte) (err error) {
 }
 
 // 发送http查询数据
-func (backend *Backend) QueryShow(req *http.Request) ([]byte, error) {
+func (backend *Backend) Query(req *http.Request) ([]byte, error) {
     var err error
     req.Form.Del("u")
     req.Form.Del("p")
     req, err = http.NewRequest("POST", backend.Url+"/query?"+req.Form.Encode(), nil)
-    req.SetBasicAuth(AesDecrypt(backend.Username, KEY), AesDecrypt(backend.Password, KEY))
+    req.SetBasicAuth(util.AesDecrypt(backend.Username, KEY), util.AesDecrypt(backend.Password, KEY))
     resp, err := backend.Client.Do(req)
     defer resp.Body.Close()
     if err != nil {

@@ -28,7 +28,7 @@ func (circle *Circle) QueryShow(req *http.Request, backends []*Backend) ([]byte,
     res := make([][]byte, 0)
     // 在环内的所有数据库实例上执行show，在聚合在一起
     for _, backend := range backends {
-        body, err := backend.QueryShow(req)
+        body, err := backend.Query(req)
         if err != nil {
             util.Log.Errorf("req:%+v err:%+v", req, err)
             return nil, err
@@ -123,5 +123,5 @@ func (circle *Circle) Query(req *http.Request) ([]byte, error) {
         return nil, e
     }
     backend := circle.UrlToMap[backendUrl]
-    return backend.QueryShow(req)
+    return backend.Query(req)
 }

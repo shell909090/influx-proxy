@@ -1,4 +1,4 @@
-package consist
+package util
 
 import (
     "bytes"
