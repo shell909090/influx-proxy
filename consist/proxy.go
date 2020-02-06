@@ -97,12 +97,12 @@ func (proxy *Proxy) initBackend(circle *Circle, backend *Backend) {
 }
 
 // GetMachines 获取数据对应的三台备份物理主机
-func (proxy *Proxy) GetMachines(dbMeasure string) []*Backend {
+func (proxy *Proxy) GetMachines(key string) []*Backend {
     machines := make([]*Backend, 0)
     for circleNum, circle := range proxy.Circles {
-        backendUrl, err := circle.Router.Get(dbMeasure)
+        backendUrl, err := circle.Router.Get(key)
         if err != nil {
-            util.Log.Errorf("circleNum:%v dbMeasure:%+v err:%v", circleNum, dbMeasure, err)
+            util.Log.Errorf("circleNum:%v key:%+v err:%v", circleNum, key, err)
             continue
         }
         backend, ok := circle.UrlToMap[backendUrl]
@@ -121,9 +121,9 @@ func (proxy *Proxy) WriteData(data *LineData) error {
     data.Line = LineToNano(data.Line, data.Precision)
 
     // 得到对象将要存储的多个备份节点
-    dbMeasure := data.Db + "," + data.Measure
-    backendS := proxy.GetMachines(dbMeasure)
-    if len(backendS) < 1 {
+    key := data.Db + "," + data.Measure
+    backends := proxy.GetMachines(key)
+    if len(backends) < 1 {
         util.Log.Errorf("request data:%v err:GetMachines length is 0", data)
         return util.LengthNilErr
     }
@@ -134,7 +134,7 @@ func (proxy *Proxy) WriteData(data *LineData) error {
     }
 
     // 顺序存储到多个备份节点上
-    for _, backend := range backendS {
+    for _, backend := range backends {
         err := backend.WriteDataToBuffer(data, proxy.BackendBufferMaxNum)
         if err != nil {
             util.Log.Errorf("backend:%+v request data:%+v err:%+v", backend.Url, data, err)
@@ -233,8 +233,8 @@ func (proxy *Proxy) clearMeasure(circle *Circle, dbs []string, backend *Backend)
         measures := GetMeasurementList(circle, req, []*Backend{backend})
         fmt.Printf("len-->%d db-->%+v\n", len(measures), db)
         for _, measure := range measures {
-            dbMeasure := db + "," + measure
-            targetBackendUrl, err := circle.Router.Get(dbMeasure)
+            key := db + "," + measure
+            targetBackendUrl, err := circle.Router.Get(key)
             if err != nil {
                 util.Log.Errorf("err:%+v")
                 continue

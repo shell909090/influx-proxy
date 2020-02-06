@@ -24,10 +24,10 @@ func (circle *Circle) CheckStatus() bool {
 }
 
 // 执行 show 查询操作
-func (circle *Circle) QueryShow(req *http.Request, backendS []*Backend) ([]byte, error) {
+func (circle *Circle) QueryShow(req *http.Request, backends []*Backend) ([]byte, error) {
     res := make([][]byte, 0)
     // 在环内的所有数据库实例上执行show，在聚合在一起
-    for _, backend := range backendS {
+    for _, backend := range backends {
         body, err := backend.QueryShow(req)
         if err != nil {
             util.Log.Errorf("req:%+v err:%+v", req, err)
@@ -108,20 +108,20 @@ func (circle *Circle) showTagFieldkey(bodies [][]byte) (fBody []byte, err error)
 }
 
 func (circle *Circle) Query(req *http.Request) ([]byte, error) {
-    // 得到dbMeasure
+    // 得到key
     q := req.FormValue("q")
-    measure, e := GetMeasurementFromInfluxQL(q)
+    measurement, e := GetMeasurementFromInfluxQL(q)
     if e != nil {
         return nil, e
     }
     db := req.FormValue("db")
-    dbMeasure := db + "," + measure
+    key := db + "," + measurement
 
     // 得到目标数据库
-    backUrl, e := circle.Router.Get(dbMeasure)
+    backendUrl, e := circle.Router.Get(key)
     if e != nil {
         return nil, e
     }
-    backend := circle.UrlToMap[backUrl]
+    backend := circle.UrlToMap[backendUrl]
     return backend.QueryShow(req)
 }
