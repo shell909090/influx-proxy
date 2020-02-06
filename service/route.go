@@ -4,7 +4,6 @@ import (
     "bytes"
     "compress/gzip"
     "github.com/chengshiwen/influx-proxy/consist"
-    "github.com/chengshiwen/influx-proxy/mconst"
     "github.com/chengshiwen/influx-proxy/util"
     "io/ioutil"
     "math/rand"
@@ -63,7 +62,7 @@ func (hs *HttpService)HandlerDencryption(w http.ResponseWriter, req *http.Reques
 func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
     hs.WriteHeader(w, req)
-    w.Header().Add("X-Influxdb-Version", mconst.Version)
+    w.Header().Add("X-Influxdb-Version", util.Version)
 
     // 验证密码
     ok := hs.checkAuth(req)
@@ -74,9 +73,9 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     }
 
     // 检查请求方法
-    if !util.IncludeString([]string{mconst.Post, mconst.Get}, req.Method) {
+    if !util.IncludeString([]string{util.Post, util.Get}, req.Method) {
         util.CustomLog.Errorf("method:%+v", req.Method)
-        w.WriteHeader(mconst.BadRequest)
+        w.WriteHeader(util.BadRequest)
         w.Write([]byte("illegal method\n"))
         return
     }
@@ -85,7 +84,7 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     q := strings.TrimSpace(req.FormValue("q"))
     if q == "" {
         util.CustomLog.Errorf("query:%+v", q)
-        w.WriteHeader(mconst.BadRequest)
+        w.WriteHeader(util.BadRequest)
         w.Write([]byte("empty query\n"))
         return
     }
@@ -108,11 +107,11 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
         body, err := circle.QueryShow(req, circle.Backends)
         if err != nil {
             util.CustomLog.Errorf("query:%+v err:%+v", q, err)
-            w.WriteHeader(mconst.BadRequest)
+            w.WriteHeader(util.BadRequest)
             w.Write([]byte(err.Error()))
             return
         }
-        w.WriteHeader(mconst.Success)
+        w.WriteHeader(util.Success)
         w.Write(body)
         return
     }
@@ -120,7 +119,7 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     // 过滤查询语句
     err := hs.CheckQuery(q)
     if err != nil {
-        w.WriteHeader(mconst.BadRequest)
+        w.WriteHeader(util.BadRequest)
         w.Write([]byte(err.Error()))
         return
     }
@@ -129,11 +128,11 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     resp, e := circle.Query(req)
     if e != nil {
         util.CustomLog.Errorf("err:%+v", e)
-        w.WriteHeader(mconst.BadRequest)
+        w.WriteHeader(util.BadRequest)
         w.Write([]byte(e.Error()))
         return
     }
-    w.WriteHeader(mconst.Success)
+    w.WriteHeader(util.Success)
     w.Write(resp)
     return
 }
@@ -151,10 +150,10 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
     }
 
     // 判断http方法
-    if req.Method != mconst.Post {
+    if req.Method != util.Post {
         util.CustomLog.Errorf("req.Method:%+v err:nil", req.Method)
-        w.WriteHeader(mconst.MethodNotAllow)
-        w.Write(mconst.Code2Message[mconst.MethodNotAllow])
+        w.WriteHeader(util.MethodNotAllow)
+        w.Write(util.Code2Message[util.MethodNotAllow])
         return
     }
 
@@ -166,8 +165,8 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
     // db必须要给出
     db := req.URL.Query().Get("db")
     if db == "" {
-        w.WriteHeader(mconst.BadRequest)
-        w.Write(mconst.Code2Message[mconst.BadRequest])
+        w.WriteHeader(util.BadRequest)
+        w.Write(util.Code2Message[util.BadRequest])
         return
     }
 
@@ -178,7 +177,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
         defer b.Close()
         if err != nil {
             util.CustomLog.Errorf("err:%+v", err)
-            w.WriteHeader(mconst.BadRequest)
+            w.WriteHeader(util.BadRequest)
             w.Write([]byte(err.Error()))
             return
         }
@@ -188,7 +187,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
     p, err := ioutil.ReadAll(body)
     if err != nil {
         util.CustomLog.Errorf("err:%+v", err)
-        w.WriteHeader(mconst.BadRequest)
+        w.WriteHeader(util.BadRequest)
         w.Write([]byte(err.Error()))
         return
     }
@@ -202,8 +201,8 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
         }
         lineList := bytes.Split(line, []byte(" "))
         if len(lineList) < 2 {
-            w.WriteHeader(mconst.BadRequest)
-            w.Write(mconst.Code2Message[mconst.BadRequest])
+            w.WriteHeader(util.BadRequest)
+            w.Write(util.Code2Message[util.BadRequest])
         }
         measure := lineList[0]
         measures := bytes.Split(measure, []byte(","))
@@ -219,42 +218,42 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
         err = hs.WriteData(data)
         if err != nil {
             util.CustomLog.Errorf("request data:%+v err:%+v", data, err)
-            w.WriteHeader(mconst.BadRequest)
+            w.WriteHeader(util.BadRequest)
             w.Write([]byte(err.Error()))
             return
         }
     }
-    w.WriteHeader(mconst.SuccessNoResp)
+    w.WriteHeader(util.SuccessNoResp)
     return
 }
 
 func (hs *HttpService) HandlerClearMeasure(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
     hs.WriteHeader(w, req)
-    if req.Method != mconst.Post {
+    if req.Method != util.Post {
         util.CustomLog.Errorf("req.Method:%+v err:nil", req.Method)
-        w.WriteHeader(mconst.MethodNotAllow)
-        w.Write(mconst.Code2Message[mconst.MethodNotAllow])
+        w.WriteHeader(util.MethodNotAllow)
+        w.Write(util.Code2Message[util.MethodNotAllow])
         return
     }
     db := req.FormValue("db")
     dbs := strings.Split(db, ",")
     circleNum, e := strconv.Atoi(req.FormValue("circle_num"))
     if e != nil || circleNum >= len(hs.Circles) || len(dbs) == 0 {
-        w.WriteHeader(mconst.BadRequest)
+        w.WriteHeader(util.BadRequest)
         w.Write([]byte(e.Error()))
         return
     }
     go hs.ClearMeasure(dbs, circleNum)
 
-    w.WriteHeader(mconst.Success)
-    w.Write(mconst.Code2Message[mconst.Success])
+    w.WriteHeader(util.Success)
+    w.Write(util.Code2Message[util.Success])
     return
 
 }
 
 func (hs *HttpService) WriteHeader(w http.ResponseWriter, req *http.Request) {
-    w.Header().Add("X-Influxdb-Version", mconst.Version)
+    w.Header().Add("X-Influxdb-Version", util.Version)
 }
 
 func MatchShow(q string) bool {

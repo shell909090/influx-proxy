@@ -5,7 +5,6 @@ import (
     "compress/gzip"
     "encoding/binary"
     "fmt"
-    "github.com/chengshiwen/influx-proxy/mconst"
     "github.com/chengshiwen/influx-proxy/util"
     "io"
     "io/ioutil"
@@ -251,7 +250,7 @@ func (backend *Backend) CleanUp() (err error) {
 func (backend *Backend) CheckBufferAndSync(syncDataTimeOut time.Duration) {
     for {
         select {
-        case <-time.After(syncDataTimeOut * time.Second):
+        case <- time.After(syncDataTimeOut * time.Second):
             for db := range backend.BufferMap {
                 if backend.BufferMap[db].Counter > 0 {
                     backend.LockDbMap[db].Lock()
@@ -269,7 +268,7 @@ func (backend *Backend) CheckBufferAndSync(syncDataTimeOut time.Duration) {
 func (backend *Backend) SyncFileData() {
     for {
         select {
-        case <-time.After(mconst.SyncFileData * time.Second):
+        case <- time.After(util.SyncFileData * time.Second):
             backend.syncFileDataToDb()
         }
     }
@@ -293,7 +292,7 @@ func (backend *Backend) checkBufferAndSync(db string) error {
 func (backend *Backend) syncFileDataToDb() {
     for backend.IsData() {
         if !backend.Active {
-            time.Sleep(time.Second * mconst.AwaitActiveTimeOut)
+            time.Sleep(time.Second * util.AwaitActiveTimeOut)
             continue
         }
 
@@ -340,7 +339,7 @@ func (backend *Backend) WriteDataToBuffer(data *LineData, backendBufferMaxNum in
 func (backend *Backend) WriteDataToDb(db string) error {
     // 没有数据返回nil error
     if backend.BufferMap[db].Buffer.Len() == 0 {
-        return mconst.LengthNilErr
+        return util.LengthNilErr
     }
 
     // 对应实例的机器如果存活，则写入数据库
@@ -366,7 +365,7 @@ func (backend *Backend) WriteDataToDb(db string) error {
 func (backend *Backend) CheckActive() {
     for {
         backend.Active = backend.Ping()
-        time.Sleep(mconst.CheckPingTimeOut * time.Second)
+        time.Sleep(util.CheckPingTimeOut * time.Second)
     }
 }
 

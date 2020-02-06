@@ -1,4 +1,4 @@
-package mconst
+package util
 
 import (
     "github.com/pkg/errors"

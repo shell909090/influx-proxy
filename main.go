@@ -8,7 +8,7 @@ import (
     "flag"
     "fmt"
     "github.com/chengshiwen/influx-proxy/consist"
-    "github.com/chengshiwen/influx-proxy/mconst"
+    "github.com/chengshiwen/influx-proxy/util"
     "github.com/chengshiwen/influx-proxy/service"
     "net/http"
     "runtime"
@@ -27,7 +27,7 @@ func main() {
     flag.BoolVar(&Version, "version", false, "proxy version")
     flag.Parse()
     if Version {
-        fmt.Printf("Version:    %s\n", mconst.Version)
+        fmt.Printf("Version:    %s\n", util.Version)
         fmt.Printf("Git commit: %s\n", GitCommit)
         fmt.Printf("Go version: %s\n", runtime.Version())
         fmt.Printf("Build time: %s\n", BuildTime)
@@ -43,7 +43,7 @@ func main() {
     server := &http.Server{
         Addr:        proxy.ListenAddr,
         Handler:     mux,
-        IdleTimeout: mconst.IdleTimeOut * time.Second,
+        IdleTimeout: util.IdleTimeOut * time.Second,
     }
     err := server.ListenAndServe()
     if err != nil {

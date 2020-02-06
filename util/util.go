@@ -1,10 +1,25 @@
 package util
 
-import (
-    "os"
-)
+import "os"
 
-// PathExists 检查目录是否存在
+func IncludeString(arr []string, t string) bool {
+    for _, v := range arr {
+        if v == t {
+            return true
+        }
+    }
+    return false
+}
+
+func IncludeInt(arr []int, t int) bool {
+    for _, v := range arr {
+        if v == t {
+            return true
+        }
+    }
+    return false
+}
+
 func PathExists(path string) (bool, error) {
     _, err := os.Stat(path)
     if err == nil {

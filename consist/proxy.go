@@ -5,7 +5,6 @@ import (
     "encoding/json"
     "errors"
     "fmt"
-    "github.com/chengshiwen/influx-proxy/mconst"
     "github.com/chengshiwen/influx-proxy/util"
     "github.com/influxdata/influxdb/models"
     "net/http"
@@ -126,7 +125,7 @@ func (proxy *Proxy) WriteData(data *LineData) error {
     backendS := proxy.GetMachines(dbMeasure)
     if len(backendS) < 1 {
         util.CustomLog.Errorf("request data:%v err:GetMachines length is 0", data)
-        return mconst.LengthNilErr
+        return util.LengthNilErr
     }
 
     // 对象如果不是以\n结束的，则加上\n
