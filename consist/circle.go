@@ -47,9 +47,9 @@ func (circle *Circle) QueryShow(req *http.Request, backendS []*Backend) ([]byte,
     }
 }
 
-func (circle *Circle) showMeasurements(bodys [][]byte) (fBody []byte, err error) {
+func (circle *Circle) showMeasurements(bodies [][]byte) (fBody []byte, err error) {
     measureMap := make(map[string]*seri)
-    for _, body := range bodys {
+    for _, body := range bodies {
         sSs, Err := GetSeriesArray(body)
         if Err != nil {
             util.Log.Errorf("err:%+v", Err)
@@ -82,9 +82,9 @@ func (circle *Circle) showMeasurements(bodys [][]byte) (fBody []byte, err error)
     return
 }
 
-func (circle *Circle) showTagFieldkey(bodys [][]byte) (fBody []byte, err error) {
+func (circle *Circle) showTagFieldkey(bodies [][]byte) (fBody []byte, err error) {
     seriesMap := make(map[string]*seri)
-    for _, body := range bodys {
+    for _, body := range bodies {
         sSs, Err := GetSeriesArray(body)
         if Err != nil {
             util.Log.Errorf("err:%+v", Err)

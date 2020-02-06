@@ -2,7 +2,7 @@ package util
 
 import "os"
 
-func IncludeString(arr []string, t string) bool {
+func ContainString(arr []string, t string) bool {
     for _, v := range arr {
         if v == t {
             return true
@@ -11,7 +11,7 @@ func IncludeString(arr []string, t string) bool {
     return false
 }
 
-func IncludeInt(arr []int, t int) bool {
+func ContainInt(arr []int, t int) bool {
     for _, v := range arr {
         if v == t {
             return true

@@ -452,7 +452,7 @@ func (backend *Backend) QueryShow(req *http.Request) ([]byte, error) {
     req.Form.Del("u")
     req.Form.Del("p")
     req, err = http.NewRequest("POST", backend.Url+"/query?"+req.Form.Encode(), nil)
-    req.SetBasicAuth(AesDecrypt(backend.Username,KEY),AesDecrypt(backend.Password,KEY))
+    req.SetBasicAuth(AesDecrypt(backend.Username, KEY), AesDecrypt(backend.Password, KEY))
     resp, err := backend.Client.Do(req)
     defer resp.Body.Close()
     if err != nil {

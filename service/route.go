@@ -73,10 +73,23 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     }
 
     // 检查请求方法
-    if !util.IncludeString([]string{util.Post, util.Get}, req.Method) {
+    if !util.ContainString([]string{util.Post, util.Get}, req.Method) {
         util.Log.Errorf("method:%+v", req.Method)
         w.WriteHeader(util.BadRequest)
         w.Write([]byte("illegal method\n"))
+        return
+    }
+
+    // db必须要给出
+    db := req.URL.Query().Get("db")
+    if db == "" {
+        w.WriteHeader(util.BadRequest)
+        w.Write(util.Code2Message[util.BadRequest])
+        return
+    }
+    if !util.ContainString(hs.DbList, db) {
+        w.WriteHeader(util.BadRequest)
+        w.Write([]byte("database not found"))
         return
     }
 
@@ -167,6 +180,11 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
     if db == "" {
         w.WriteHeader(util.BadRequest)
         w.Write(util.Code2Message[util.BadRequest])
+        return
+    }
+    if !util.ContainString(hs.DbList, db) {
+        w.WriteHeader(util.BadRequest)
+        w.Write([]byte("database not found"))
         return
     }
 
