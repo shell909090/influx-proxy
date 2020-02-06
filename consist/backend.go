@@ -47,24 +47,24 @@ func (backend *Backend) CreateCacheFile(failDataDir string) {
     fileNamePrefix := filepath.Join(failDataDir, backend.Name)
     backend.FileProducer, err = os.OpenFile(fileNamePrefix+".dat", os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
     if err != nil {
-        util.CustomLog.Errorf("backend_url:%+v err:%+v", backend.Url, err)
+        util.Log.Errorf("backend_url:%+v err:%+v", backend.Url, err)
         panic(err)
     }
     _, err = backend.FileProducer.Seek(0, io.SeekEnd)
     if err != nil {
-        util.CustomLog.Errorf("backend_url:%+v err:%+v", backend.Url, err)
+        util.Log.Errorf("backend_url:%+v err:%+v", backend.Url, err)
         panic(err)
     }
 
     backend.FileConsumer, err = os.OpenFile(fileNamePrefix+".dat", os.O_RDONLY, 0644)
     if err != nil {
-        util.CustomLog.Errorf("backend_url:%+v err:%+v", backend.Url, err)
+        util.Log.Errorf("backend_url:%+v err:%+v", backend.Url, err)
         panic(err)
     }
 
     backend.FileConsumerPos, err = os.OpenFile(fileNamePrefix+".rec", os.O_RDWR|os.O_CREATE, 0644)
     if err != nil {
-        util.CustomLog.Errorf("backend_url:%+v err:%+v", backend.Url, err)
+        util.Log.Errorf("backend_url:%+v err:%+v", backend.Url, err)
         panic(err)
     }
 
@@ -75,20 +75,20 @@ func (backend *Backend) CreateCacheFile(failDataDir string) {
 func (backend *Backend) ReadConsumerPos() error {
     _, err := backend.FileConsumerPos.Seek(0, io.SeekStart)
     if err != nil {
-        util.CustomLog.Errorf("err:%+v", err)
+        util.Log.Errorf("err:%+v", err)
         return err
     }
 
     var off int64
     err = binary.Read(backend.FileConsumerPos, binary.BigEndian, &off)
     if err != nil {
-        util.CustomLog.Errorf("err:%+v", err)
+        util.Log.Errorf("err:%+v", err)
         return err
     }
 
     _, err = backend.FileConsumer.Seek(off, io.SeekStart)
     if err != nil {
-        util.CustomLog.Errorf("err:%+v", err)
+        util.Log.Errorf("err:%+v", err)
         return err
     }
     return nil
@@ -97,20 +97,20 @@ func (backend *Backend) ReadConsumerPos() error {
 func (backend *Backend) UpdateConsumerPos() error {
     producerOffset, err := backend.FileProducer.Seek(0, io.SeekCurrent)
     if err != nil {
-        util.CustomLog.Errorf("err:%+v", err)
+        util.Log.Errorf("err:%+v", err)
         return err
     }
 
     consumerOffset, err := backend.FileConsumer.Seek(0, io.SeekCurrent)
     if err != nil {
-        util.CustomLog.Errorf("err:%+v", err)
+        util.Log.Errorf("err:%+v", err)
         return err
     }
 
     if producerOffset == consumerOffset {
         err = backend.CleanUp()
         if err != nil {
-            util.CustomLog.Errorf("err:%+v", err)
+            util.Log.Errorf("err:%+v", err)
             return err
         }
         consumerOffset = 0
@@ -118,19 +118,19 @@ func (backend *Backend) UpdateConsumerPos() error {
 
     _, err = backend.FileConsumerPos.Seek(0, io.SeekStart)
     if err != nil {
-        util.CustomLog.Errorf("err:%+v", err)
+        util.Log.Errorf("err:%+v", err)
         return err
     }
 
     err = binary.Write(backend.FileConsumerPos, binary.BigEndian, &consumerOffset)
     if err != nil {
-        util.CustomLog.Errorf("err:%+v", err)
+        util.Log.Errorf("err:%+v", err)
         return err
     }
 
     err = backend.FileConsumerPos.Sync()
     if err != nil {
-        util.CustomLog.Errorf("err:%+v", err)
+        util.Log.Errorf("err:%+v", err)
         return err
     }
 
@@ -144,12 +144,12 @@ func (backend *Backend) WriteToFile(db string, p []byte) error {
 
     err := backend.WriteLengthAndData(p, true)
     if err != nil {
-        util.CustomLog.Errorf("db:%+v data_length:%+v err:%+v", db, len(p), err)
+        util.Log.Errorf("db:%+v data_length:%+v err:%+v", db, len(p), err)
         return err
     }
     err = backend.WriteLengthAndData([]byte(db), false)
     if err != nil {
-        util.CustomLog.Errorf("db:%+v data_length:%+v err:%+v", db, len(p), err)
+        util.Log.Errorf("db:%+v data_length:%+v err:%+v", db, len(p), err)
         return err
     }
     return nil
@@ -162,7 +162,7 @@ func (backend *Backend) WriteLengthAndData(p []byte, compress bool) error {
     if compress {
         err = Compress(&buf, p)
         if err != nil {
-            util.CustomLog.Errorf("Compress_err:%+v", err)
+            util.Log.Errorf("Compress_err:%+v", err)
             return err
         }
         p = buf.Bytes()
@@ -171,22 +171,22 @@ func (backend *Backend) WriteLengthAndData(p []byte, compress bool) error {
     var length = uint32(len(p))
     err = binary.Write(backend.FileProducer, binary.BigEndian, length)
     if err != nil {
-        util.CustomLog.Errorf("data_length:%+v err:%+v", length, err)
+        util.Log.Errorf("data_length:%+v err:%+v", length, err)
         return err
     }
     n, err := backend.FileProducer.Write(p)
     if err != nil {
-        util.CustomLog.Errorf("data_length:%+v err:%+v", length, err)
+        util.Log.Errorf("data_length:%+v err:%+v", length, err)
         return err
     }
     if n != len(p) {
-        util.CustomLog.Errorf("data_length:%+v success_write:%+v", length, n)
+        util.Log.Errorf("data_length:%+v success_write:%+v", length, n)
         return io.ErrShortWrite
     }
 
     err = backend.FileProducer.Sync()
     if err != nil {
-        util.CustomLog.Errorf("Sync err:%+V", err)
+        util.Log.Errorf("Sync err:%+V", err)
         return err
     }
     return nil
@@ -212,14 +212,14 @@ func (backend *Backend) Read() ([]byte, error) {
 
     err := binary.Read(backend.FileConsumer, binary.BigEndian, &length)
     if err != nil {
-        util.CustomLog.Errorf("err:%+v", err)
+        util.Log.Errorf("err:%+v", err)
         return nil, err
     }
     p := make([]byte, length)
 
     _, err = io.ReadFull(backend.FileConsumer, p)
     if err != nil {
-        util.CustomLog.Errorf("err:%+v", err)
+        util.Log.Errorf("err:%+v", err)
         return p, err
     }
     return p, nil
@@ -229,18 +229,18 @@ func (backend *Backend) Read() ([]byte, error) {
 func (backend *Backend) CleanUp() (err error) {
     _, err = backend.FileConsumer.Seek(0, io.SeekStart)
     if err != nil {
-        util.CustomLog.Errorf("err:%+v", err)
+        util.Log.Errorf("err:%+v", err)
         return err
     }
 
     err = backend.FileProducer.Truncate(0)
     if err != nil {
-        util.CustomLog.Errorf("err:%+v", err)
+        util.Log.Errorf("err:%+v", err)
         return err
     }
     _, err = backend.FileProducer.Seek(0, io.SeekStart)
     if err != nil {
-        util.CustomLog.Errorf("err:%+v", err)
+        util.Log.Errorf("err:%+v", err)
         return err
     }
     return
@@ -256,7 +256,7 @@ func (backend *Backend) CheckBufferAndSync(syncDataTimeOut time.Duration) {
                     backend.LockDbMap[db].Lock()
                     err := backend.checkBufferAndSync(db)
                     if err != nil {
-                        util.CustomLog.Errorf("checkBufferAndSync db:%+v err:%+v", db, err)
+                        util.Log.Errorf("checkBufferAndSync db:%+v err:%+v", db, err)
                     }
                     backend.LockDbMap[db].Unlock()
                 }
@@ -276,10 +276,10 @@ func (backend *Backend) SyncFileData() {
 
 // 达到数量或者超时清空buffer到数据库
 func (backend *Backend) checkBufferAndSync(db string) error {
-    util.CustomLog.Debugf("url:%+v db:%+v Counter%+v", backend.Url, db, backend.BufferMap[db].Counter)
+    util.Log.Debugf("url:%+v db:%+v Counter%+v", backend.Url, db, backend.BufferMap[db].Counter)
     err := backend.WriteDataToDb(db)
     if err != nil {
-        util.CustomLog.Errorf("db:%+v err:%+v", db, err)
+        util.Log.Errorf("db:%+v err:%+v", db, err)
         return err
     }
 
@@ -299,16 +299,16 @@ func (backend *Backend) syncFileDataToDb() {
         // ?????
         p, err := backend.Read()
         if err != nil {
-            util.CustomLog.Errorf("err:%+v", err)
+            util.Log.Errorf("err:%+v", err)
         }
         db, err := backend.Read()
         if err != nil {
-            util.CustomLog.Errorf("err:%+v", err)
+            util.Log.Errorf("err:%+v", err)
         }
 
         err = backend.Write(string(db), p, false)
         if err != nil {
-            util.CustomLog.Errorf("err:%+v", err)
+            util.Log.Errorf("err:%+v", err)
 
         }
         backend.UpdateConsumerPos()
@@ -328,7 +328,7 @@ func (backend *Backend) WriteDataToBuffer(data *LineData, backendBufferMaxNum in
     if backend.BufferMap[db].Counter > backendBufferMaxNum {
         err := backend.checkBufferAndSync(db)
         if err != nil {
-            util.CustomLog.Errorf("db:%+v err:%+v", db, err)
+            util.Log.Errorf("db:%+v err:%+v", db, err)
             return err
         }
     }
@@ -347,7 +347,7 @@ func (backend *Backend) WriteDataToDb(db string) error {
     if backend.Active {
         err := backend.Write(db, byteData, true)
         if err != nil {
-            util.CustomLog.Errorf("db:%+v err:%+v", db, err)
+            util.Log.Errorf("db:%+v err:%+v", db, err)
             return err
         }
     }
@@ -355,7 +355,7 @@ func (backend *Backend) WriteDataToDb(db string) error {
     // 写入数据库失败，则写到文件中，等待同步
     err := backend.WriteToFile(db, byteData)
     if err != nil {
-        util.CustomLog.Errorf("db:%+v err:%+v", db, err)
+        util.Log.Errorf("db:%+v err:%+v", db, err)
         return err
     }
     return nil
@@ -391,7 +391,7 @@ func (backend *Backend) Write(db string, p []byte, compress bool) error {
         buf = &bytes.Buffer{}
         err = Compress(buf, p)
         if err != nil {
-            util.CustomLog.Errorf("err:%+v", err)
+            util.Log.Errorf("err:%+v", err)
             return err
         }
     } else {
@@ -423,7 +423,7 @@ func (backend *Backend) WriteStream(db string, stream io.Reader) error {
     }
     _, err = ioutil.ReadAll(resp.Body)
     if err != nil {
-        util.CustomLog.Errorf("err:%+v", err)
+        util.Log.Errorf("err:%+v", err)
         return err
     }
     return nil
@@ -435,12 +435,12 @@ func Compress(buf *bytes.Buffer, p []byte) (err error) {
     defer zip.Close()
     n, err := zip.Write(p)
     if err != nil {
-        util.CustomLog.Errorf("err:%+v", err)
+        util.Log.Errorf("err:%+v", err)
         return
     }
     if n != len(p) {
         err = io.ErrShortWrite
-        util.CustomLog.Errorf("err:%+v", err)
+        util.Log.Errorf("err:%+v", err)
         return
     }
     return
@@ -456,7 +456,7 @@ func (backend *Backend) QueryShow(req *http.Request) ([]byte, error) {
     resp, err := backend.Client.Do(req)
     defer resp.Body.Close()
     if err != nil {
-        util.CustomLog.Errorf("err:%+v", err)
+        util.Log.Errorf("err:%+v", err)
         return nil, err
     }
     res, err := ioutil.ReadAll(resp.Body)

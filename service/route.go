@@ -74,7 +74,7 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
 
     // 检查请求方法
     if !util.IncludeString([]string{util.Post, util.Get}, req.Method) {
-        util.CustomLog.Errorf("method:%+v", req.Method)
+        util.Log.Errorf("method:%+v", req.Method)
         w.WriteHeader(util.BadRequest)
         w.Write([]byte("illegal method\n"))
         return
@@ -83,7 +83,7 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     // 检查查询语句
     q := strings.TrimSpace(req.FormValue("q"))
     if q == "" {
-        util.CustomLog.Errorf("query:%+v", q)
+        util.Log.Errorf("query:%+v", q)
         w.WriteHeader(util.BadRequest)
         w.Write([]byte("empty query\n"))
         return
@@ -106,7 +106,7 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     if matched {
         body, err := circle.QueryShow(req, circle.Backends)
         if err != nil {
-            util.CustomLog.Errorf("query:%+v err:%+v", q, err)
+            util.Log.Errorf("query:%+v err:%+v", q, err)
             w.WriteHeader(util.BadRequest)
             w.Write([]byte(err.Error()))
             return
@@ -127,7 +127,7 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     // 执行查询
     resp, e := circle.Query(req)
     if e != nil {
-        util.CustomLog.Errorf("err:%+v", e)
+        util.Log.Errorf("err:%+v", e)
         w.WriteHeader(util.BadRequest)
         w.Write([]byte(e.Error()))
         return
@@ -151,7 +151,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
 
     // 判断http方法
     if req.Method != util.Post {
-        util.CustomLog.Errorf("req.Method:%+v err:nil", req.Method)
+        util.Log.Errorf("req.Method:%+v err:nil", req.Method)
         w.WriteHeader(util.MethodNotAllow)
         w.Write(util.Code2Message[util.MethodNotAllow])
         return
@@ -176,7 +176,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
         b, err := gzip.NewReader(body)
         defer b.Close()
         if err != nil {
-            util.CustomLog.Errorf("err:%+v", err)
+            util.Log.Errorf("err:%+v", err)
             w.WriteHeader(util.BadRequest)
             w.Write([]byte(err.Error()))
             return
@@ -186,7 +186,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
     // 读出请求数据
     p, err := ioutil.ReadAll(body)
     if err != nil {
-        util.CustomLog.Errorf("err:%+v", err)
+        util.Log.Errorf("err:%+v", err)
         w.WriteHeader(util.BadRequest)
         w.Write([]byte(err.Error()))
         return
@@ -217,7 +217,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
         // 写入buffer
         err = hs.WriteData(data)
         if err != nil {
-            util.CustomLog.Errorf("request data:%+v err:%+v", data, err)
+            util.Log.Errorf("request data:%+v err:%+v", data, err)
             w.WriteHeader(util.BadRequest)
             w.Write([]byte(err.Error()))
             return
@@ -231,7 +231,7 @@ func (hs *HttpService) HandlerClearMeasure(w http.ResponseWriter, req *http.Requ
     defer req.Body.Close()
     hs.WriteHeader(w, req)
     if req.Method != util.Post {
-        util.CustomLog.Errorf("req.Method:%+v err:nil", req.Method)
+        util.Log.Errorf("req.Method:%+v err:nil", req.Method)
         w.WriteHeader(util.MethodNotAllow)
         w.Write(util.Code2Message[util.MethodNotAllow])
         return
@@ -259,7 +259,7 @@ func (hs *HttpService) WriteHeader(w http.ResponseWriter, req *http.Request) {
 func MatchShow(q string) bool {
     res, err := regexp.MatchString("^show", q)
     if err != nil {
-        util.CustomLog.Errorf("query:%+v err:%+v", q, err)
+        util.Log.Errorf("query:%+v err:%+v", q, err)
         return false
     }
     return res

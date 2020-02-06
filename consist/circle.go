@@ -30,7 +30,7 @@ func (circle *Circle) QueryShow(req *http.Request, backendS []*Backend) ([]byte,
     for _, backend := range backendS {
         body, err := backend.QueryShow(req)
         if err != nil {
-            util.CustomLog.Errorf("req:%+v err:%+v", req, err)
+            util.Log.Errorf("req:%+v err:%+v", req, err)
             return nil, err
         }
         if body != nil {
@@ -52,14 +52,14 @@ func (circle *Circle) showMeasurements(bodys [][]byte) (fBody []byte, err error)
     for _, body := range bodys {
         sSs, Err := GetSeriesArray(body)
         if Err != nil {
-            util.CustomLog.Errorf("err:%+v", Err)
+            util.Log.Errorf("err:%+v", Err)
             err = Err
             return
         }
         for _, s := range sSs {
             for _, measurement := range s.Values {
                 if len(measurement) < 1 {
-                    util.CustomLog.Errorf("length of measurement:%+v measurement:%+v", len(measurement), measurement)
+                    util.Log.Errorf("length of measurement:%+v measurement:%+v", len(measurement), measurement)
                     continue
                 }
                 measure := measurement[0].(string)
@@ -76,7 +76,7 @@ func (circle *Circle) showMeasurements(bodys [][]byte) (fBody []byte, err error)
     serie.Values = measures
     fBody, err = GetJsonBodyfromSeries([]*seri{serie})
     if err != nil {
-        util.CustomLog.Errorf("err:%+v", err)
+        util.Log.Errorf("err:%+v", err)
         return
     }
     return
@@ -87,7 +87,7 @@ func (circle *Circle) showTagFieldkey(bodys [][]byte) (fBody []byte, err error) 
     for _, body := range bodys {
         sSs, Err := GetSeriesArray(body)
         if Err != nil {
-            util.CustomLog.Errorf("err:%+v", Err)
+            util.Log.Errorf("err:%+v", Err)
             err = Err
             return
         }
@@ -102,7 +102,7 @@ func (circle *Circle) showTagFieldkey(bodys [][]byte) (fBody []byte, err error) 
     }
     fBody, err = GetJsonBodyfromSeries(series)
     if err != nil {
-        util.CustomLog.Errorf("err:%+v", err)
+        util.Log.Errorf("err:%+v", err)
     }
     return
 }

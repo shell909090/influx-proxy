@@ -102,12 +102,12 @@ func (proxy *Proxy) GetMachines(dbMeasure string) []*Backend {
     for circleNum, circle := range proxy.Circles {
         backendUrl, err := circle.Router.Get(dbMeasure)
         if err != nil {
-            util.CustomLog.Errorf("circleNum:%v dbMeasure:%+v err:%v", circleNum, dbMeasure, err)
+            util.Log.Errorf("circleNum:%v dbMeasure:%+v err:%v", circleNum, dbMeasure, err)
             continue
         }
         backend, ok := circle.UrlToMap[backendUrl]
         if !ok {
-            util.CustomLog.Errorf("circleNum:%v UrlToMap:%+v err:%+v", circleNum, circle.UrlToMap, err)
+            util.Log.Errorf("circleNum:%v UrlToMap:%+v err:%+v", circleNum, circle.UrlToMap, err)
             continue
         }
         machines = append(machines, backend)
@@ -124,7 +124,7 @@ func (proxy *Proxy) WriteData(data *LineData) error {
     dbMeasure := data.Db + "," + data.Measure
     backendS := proxy.GetMachines(dbMeasure)
     if len(backendS) < 1 {
-        util.CustomLog.Errorf("request data:%v err:GetMachines length is 0", data)
+        util.Log.Errorf("request data:%v err:GetMachines length is 0", data)
         return util.LengthNilErr
     }
 
@@ -137,7 +137,7 @@ func (proxy *Proxy) WriteData(data *LineData) error {
     for _, backend := range backendS {
         err := backend.WriteDataToBuffer(data, proxy.BackendBufferMaxNum)
         if err != nil {
-            util.CustomLog.Errorf("backend:%+v request data:%+v err:%+v", backend.Url, data, err)
+            util.Log.Errorf("backend:%+v request data:%+v err:%+v", backend.Url, data, err)
             return err
         }
     }
@@ -236,7 +236,7 @@ func (proxy *Proxy) clearMeasure(circle *Circle, dbs []string, backend *Backend)
             dbMeasure := db + "," + measure
             targetBackendUrl, err := circle.Router.Get(dbMeasure)
             if err != nil {
-                util.CustomLog.Errorf("err:%+v")
+                util.Log.Errorf("err:%+v")
                 continue
             }
 
@@ -248,7 +248,7 @@ func (proxy *Proxy) clearMeasure(circle *Circle, dbs []string, backend *Backend)
                 }
                 _, e := backend.QueryShow(delMeasureReq)
                 if e != nil {
-                    util.CustomLog.Errorf("err:%+v", e)
+                    util.Log.Errorf("err:%+v", e)
                     continue
                 }
             }

@@ -62,7 +62,7 @@ func GetJsonBodyfromSeries(series []*seri) (body []byte, err error) {
         Results: []*statement{&tmpstatement},
     })
     if err != nil {
-        util.CustomLog.Errorf("err:%+v", err)
+        util.Log.Errorf("err:%+v", err)
         return nil,err
     }
     body = append(body, '\n')
