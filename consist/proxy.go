@@ -6,7 +6,7 @@ import (
     "errors"
     "fmt"
     "github.com/chengshiwen/influx-proxy/util"
-    "github.com/influxdata/influxdb/models"
+    "github.com/influxdata/influxdb1-client/models"
     "net/http"
     "net/url"
     "os"
