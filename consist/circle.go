@@ -24,9 +24,9 @@ func (circle *Circle) CheckStatus() bool {
 }
 
 // 执行 show 查询操作
-func (circle *Circle) QueryShow(req *http.Request, backends []*Backend) ([]byte, error) {
-    res := make([][]byte, 0)
-    // 在环内的所有数据库实例上执行show，在聚合在一起
+func (circle *Circle) QueryCluster(req *http.Request, backends []*Backend) ([]byte, error) {
+    bodies := make([][]byte, 0)
+    // 在环内的所有数据库实例上执行查询，再聚合在一起
     for _, backend := range backends {
         body, err := backend.Query(req)
         if err != nil {
@@ -34,64 +34,71 @@ func (circle *Circle) QueryShow(req *http.Request, backends []*Backend) ([]byte,
             return nil, err
         }
         if body != nil {
-            res = append(res, body)
+            bodies = append(bodies, body)
         }
     }
-    q := req.Form.Get("q")
 
-    // 针对measurements 和 databases 执行不同的聚合过程
-    if strings.Contains(q, "measurements") || strings.Contains(q, "databases") {
-        return circle.showMeasurements(res)
-    } else {
-        return circle.showTagFieldkey(res)
+    // 针对集群语句特征执行不同的聚合过程
+    q := strings.ToLower(strings.TrimSpace(req.FormValue("q")))
+    if strings.HasPrefix(q, "show") {
+        if strings.Contains(q, "databases") || strings.Contains(q, "series") || strings.Contains(q, "measurements") {
+            return circle.reduceByValues(bodies)
+        } else if strings.Contains(q, "keys") {
+            return circle.reduceBySeries(bodies)
+        }
     }
+    return nil, nil
 }
 
-func (circle *Circle) showMeasurements(bodies [][]byte) (fBody []byte, err error) {
-    measureMap := make(map[string]*seri)
+func (circle *Circle) reduceByValues(bodies [][]byte) (rBody []byte, err error) {
+    valuesMap := make(map[string]*seri)
     for _, body := range bodies {
-        sSs, Err := GetSeriesArray(body)
-        if Err != nil {
-            util.Log.Errorf("err:%+v", Err)
-            err = Err
+        _series, _err := GetSeriesArray(body)
+        if _err != nil {
+            util.Log.Errorf("err:%+v", _err)
+            err = _err
             return
         }
-        for _, s := range sSs {
-            for _, measurement := range s.Values {
-                if len(measurement) < 1 {
-                    util.Log.Errorf("length of measurement:%+v measurement:%+v", len(measurement), measurement)
+        for _, s := range _series {
+            for _, value := range s.Values {
+                if len(value) < 1 {
+                    util.Log.Errorf("value length:%+v value:%+v", len(value), value)
                     continue
                 }
-                measure := measurement[0].(string)
-                measureMap[measure] = s
+                key := value[0].(string)
+                valuesMap[key] = s
             }
         }
     }
     serie := &seri{}
-    var measures [][]interface{}
-    for measure, s := range measureMap {
-        measures = append(measures, []interface{}{measure})
+    var values [][]interface{}
+    for v, s := range valuesMap {
+        values = append(values, []interface{}{v})
         serie = s
     }
-    serie.Values = measures
-    fBody, err = GetJsonBodyfromSeries([]*seri{serie})
-    if err != nil {
-        util.Log.Errorf("err:%+v", err)
-        return
+    serie.Values = values
+    if len(values) > 0 {
+        rBody, err = GetJsonBodyfromSeries([]*seri{serie})
+        if err != nil {
+            util.Log.Errorf("err:%+v", err)
+            return
+        }
+    } else {
+        rBody, _ = GetJsonBodyfromSeries(nil)
     }
     return
 }
 
-func (circle *Circle) showTagFieldkey(bodies [][]byte) (fBody []byte, err error) {
+func (circle *Circle) reduceBySeries(bodies [][]byte) (rBody []byte, err error) {
     seriesMap := make(map[string]*seri)
     for _, body := range bodies {
-        sSs, Err := GetSeriesArray(body)
-        if Err != nil {
-            util.Log.Errorf("err:%+v", Err)
-            err = Err
+        _series, _err := GetSeriesArray(body)
+        if _err != nil {
+            util.Log.Errorf("err:%+v", _err)
+            err = _err
             return
         }
-        for _, s := range sSs {
+        for _, s := range _series {
             seriesMap[s.Name] = s
         }
     }
@@ -100,7 +107,7 @@ func (circle *Circle) showTagFieldkey(bodies [][]byte) (fBody []byte, err error)
     for _, item := range seriesMap {
         series = append(series, item)
     }
-    fBody, err = GetJsonBodyfromSeries(series)
+    rBody, err = GetJsonBodyfromSeries(series)
     if err != nil {
         util.Log.Errorf("err:%+v", err)
     }

@@ -9,7 +9,6 @@ import (
     "math/rand"
     "net/http"
     "net/http/pprof"
-    "regexp"
     "strconv"
     "strings"
     "time"
@@ -80,19 +79,6 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
         return
     }
 
-    // db必须要给出
-    db := req.URL.Query().Get("db")
-    if db == "" {
-        w.WriteHeader(util.BadRequest)
-        w.Write(util.Code2Message[util.BadRequest])
-        return
-    }
-    if !util.ContainString(hs.DbList, db) {
-        w.WriteHeader(util.BadRequest)
-        w.Write([]byte("database not found"))
-        return
-    }
-
     // 检查查询语句
     q := strings.TrimSpace(req.FormValue("q"))
     if q == "" {
@@ -114,26 +100,25 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
         time.Sleep(time.Microsecond)
     }
 
-    // 筛选出 show 操作
-    matched := MatchShow(q)
-    if matched {
-        body, err := circle.QueryShow(req, circle.Backends)
-        if err != nil {
-            util.Log.Errorf("query:%+v err:%+v", q, err)
-            w.WriteHeader(util.BadRequest)
-            w.Write([]byte(err.Error()))
+    // 检查带measurement的查询语句
+    err := hs.CheckMeasurementQuery(q)
+    if err != nil {
+        // 检查集群查询语句，如show measurements
+        err = hs.CheckClusterQuery(q)
+        if err == nil {
+            body, err := circle.QueryCluster(req, circle.Backends)
+            if err != nil {
+                util.Log.Errorf("query cluster:%+v err:%+v", q, err)
+                w.WriteHeader(util.BadRequest)
+                w.Write([]byte(err.Error()))
+                return
+            }
+            w.WriteHeader(util.Success)
+            w.Write(body)
             return
         }
-        w.WriteHeader(util.Success)
-        w.Write(body)
-        return
-    }
-
-    // 过滤查询语句
-    err := hs.CheckQuery(q)
-    if err != nil {
-        w.WriteHeader(util.BadRequest)
-        w.Write([]byte(err.Error()))
+        w.WriteHeader(400)
+        w.Write([]byte("query forbidden"))
         return
     }
 
@@ -267,20 +252,10 @@ func (hs *HttpService) HandlerClearMeasure(w http.ResponseWriter, req *http.Requ
     w.WriteHeader(util.Success)
     w.Write(util.Code2Message[util.Success])
     return
-
 }
 
 func (hs *HttpService) WriteHeader(w http.ResponseWriter, req *http.Request) {
     w.Header().Add("X-Influxdb-Version", util.Version)
-}
-
-func MatchShow(q string) bool {
-    res, err := regexp.MatchString("^show", q)
-    if err != nil {
-        util.Log.Errorf("query:%+v err:%+v", q, err)
-        return false
-    }
-    return res
 }
 
 func (hs *HttpService) checkAuth(r *http.Request) bool {

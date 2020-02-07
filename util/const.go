@@ -46,6 +46,6 @@ var (
 
 var (
     ForbidCmds   = "(?i:^\\s*grant|^\\s*revoke|\\(\\)\\$)"
-    SupportCmds  = "(?i:from|drop\\s*measurement)"
-    ExecutorCmds = "(?i:show\\s*measurements|show\\s*tag\\s*keys|show\\s*series|show\\s*field\\s*keys)"
+    SupportCmds  = "(?i:from|drop\\s+measurement)"
+    ClusterCmds  = "(?i:show\\s+databases|show\\s+series|show\\s+measurements|show\\s+tag\\s+keys|show\\s+field\\s+keys)"
 )

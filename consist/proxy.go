@@ -21,6 +21,7 @@ type Proxy struct {
     Circles                []*Circle            `json:"circles"` // 集群列表
     ForbiddenQuery         []*regexp.Regexp     `json:"forbidden_query"`
     ObligatedQuery         []*regexp.Regexp     `json:"obligated_query"`
+    ClusteredQuery         []*regexp.Regexp     `json:"clustered_query"`
     ListenAddr             string               `json:"listen_addr"`   // 服务监听的端口
     FailDataDir            string               `json:"fail_data_dir"` // 写缓存文件目录
     DbList                 []string             `json:"db_list"`
@@ -47,6 +48,9 @@ func NewProxy(file string) *Proxy {
         circle.CircleNum = circleNum
         proxy.initCircle(circle)
     }
+    proxy.ForbidQuery(util.ForbidCmds)
+    proxy.EnsureQuery(util.SupportCmds)
+    proxy.ClusterQuery(util.ClusterCmds)
     return proxy
 }
 
@@ -162,7 +166,7 @@ func (proxy *Proxy) DeleteBackend(backendUrls []string, circleNum int) ([]*Backe
 }
 
 func GetMeasurementList(circle *Circle, req *http.Request, backends []*Backend) []string {
-    p, _ := circle.QueryShow(req, backends)
+    p, _ := circle.QueryCluster(req, backends)
     res, _ := GetSeriesArray(p)
     var databases []string
     for _, v := range res {
@@ -176,27 +180,24 @@ func GetMeasurementList(circle *Circle, req *http.Request, backends []*Backend) 
     return databases
 }
 
-func (proxy *Proxy) ForbidQuery(s string) (err error) {
-    r, err := regexp.Compile(s)
-    if err != nil {
-        return
-    }
-
+func (proxy *Proxy) ForbidQuery(s string) {
+    r, _ := regexp.Compile(s)
     proxy.ForbiddenQuery = append(proxy.ForbiddenQuery, r)
     return
 }
 
-func (proxy *Proxy) EnsureQuery(s string) (err error) {
-    r, err := regexp.Compile(s)
-    if err != nil {
-        return
-    }
-
+func (proxy *Proxy) EnsureQuery(s string) {
+    r, _ := regexp.Compile(s)
     proxy.ObligatedQuery = append(proxy.ObligatedQuery, r)
     return
 }
+func (proxy *Proxy) ClusterQuery(s string) {
+    r, _ := regexp.Compile(s)
+    proxy.ClusteredQuery = append(proxy.ClusteredQuery, r)
+    return
+}
 
-func (proxy *Proxy) CheckQuery(q string) error {
+func (proxy *Proxy) CheckMeasurementQuery(q string) error {
     if len(proxy.ForbiddenQuery) != 0 {
         for _, fq := range proxy.ForbiddenQuery {
             if fq.MatchString(q) {
@@ -207,6 +208,19 @@ func (proxy *Proxy) CheckQuery(q string) error {
 
     if len(proxy.ObligatedQuery) != 0 {
         for _, pq := range proxy.ObligatedQuery {
+            if pq.MatchString(q) {
+                return nil
+            }
+        }
+        return errors.New("query forbidden")
+    }
+
+    return nil
+}
+
+func (proxy *Proxy) CheckClusterQuery(q string) error {
+    if len(proxy.ClusteredQuery) != 0 {
+        for _, pq := range proxy.ClusteredQuery {
             if pq.MatchString(q) {
                 return nil
             }
