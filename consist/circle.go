@@ -8,7 +8,7 @@ import (
 )
 
 type Circle struct {
-    Router         *Consistent                `json:"router"`
+    Router         *util.Consistent           `json:"router"`
     Backends       []*Backend                 `json:"backends"`
     UrlToMap       map[string]*Backend        `json:"url_to_map"`
     BackendWgMap   map[string]*sync.WaitGroup `json:"backend_wg_map"`

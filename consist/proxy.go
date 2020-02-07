@@ -65,7 +65,7 @@ func loadProxyJson(file string) *Proxy {
 
 // initCircle 初始化哈希环
 func (proxy *Proxy) initCircle(circle *Circle) {
-    circle.Router = New()
+    circle.Router = util.NewConsistent()
     circle.Router.NumberOfReplicas = proxy.NumberOfReplicas
     circle.UrlToMap = make(map[string]*Backend)
     circle.BackendWgMap = make(map[string]*sync.WaitGroup)

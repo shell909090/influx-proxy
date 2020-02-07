@@ -18,7 +18,7 @@
 //
 // Read more about consistent hashing on wikipedia:  http://en.wikipedia.org/wiki/Consistent_hashing
 //
-package consist
+package util
 
 import (
     "errors"
@@ -56,7 +56,7 @@ type Consistent struct {
 // New creates a new Consistent object with a default setting of 20 replicas for each entry.
 //
 // To change the number of replicas, set NumberOfReplicas before adding entries.
-func New() *Consistent {
+func NewConsistent() *Consistent {
     c := new(Consistent)
     c.NumberOfReplicas = 20
     c.circle = make(map[uint32]string)
@@ -246,7 +246,7 @@ func (c *Consistent) hashKey(key string) uint32 {
 
 func (c *Consistent) updateSortedHashes() {
     hashes := c.sortedHashes[:0]
-    //reallocate if we're holding on to too much (1/4th)
+    // reallocate if we're holding on to too much (1/4th)
     if cap(c.sortedHashes)/(c.NumberOfReplicas*4) > len(c.circle) {
         hashes = nil
     }
