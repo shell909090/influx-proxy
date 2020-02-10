@@ -1,18 +1,31 @@
 package consist
 
 import (
+    "fmt"
     "github.com/chengshiwen/influx-proxy/util"
     "net/http"
+    "net/url"
+    "strconv"
     "strings"
     "sync"
+    "time"
 )
 
 type Circle struct {
     Router         *util.Consistent           `json:"router"`
     Backends       []*Backend                 `json:"backends"`
-    UrlToMap       map[string]*Backend        `json:"url_to_map"`
+    UrlToBackend   map[string]*Backend        `json:"url_to_backend"`
     BackendWgMap   map[string]*sync.WaitGroup `json:"backend_wg_map"`
     CircleNum      int                        `json:"circle_num"`
+    ReadyMigrating bool                       `json:"ready_migrating"` // bool: 准备迁移标志，false: 取消准备迁移标志
+    IsMigrating    bool                       `json:"is_migrating"`    // true: 正在迁移 false: 未在迁移
+    WgMigrate      *sync.WaitGroup            `json:"wg_migrate"`
+    StatusLock     *sync.RWMutex              `json:"status_lock"`
+}
+
+type MigrateFlagStatus struct {
+    ReadyMigratingFlag bool `json:"ready_migrating_flag"`
+    IsMigratingFlag    bool `json:"is_migrating_flag"`
 }
 
 func (circle *Circle) CheckStatus() bool {
@@ -129,6 +142,121 @@ func (circle *Circle) Query(req *http.Request) ([]byte, error) {
     if e != nil {
         return nil, e
     }
-    backend := circle.UrlToMap[backendUrl]
+    backend := circle.UrlToBackend[backendUrl]
     return backend.Query(req)
+}
+
+func (circle *Circle) Migrate(srcBackend *Backend, dstBackend *Backend, db, measure string) error {
+    dataReq := &http.Request{
+        Form:   url.Values{"q": []string{fmt.Sprintf("select * from \"%s\"", measure)}, "db": []string{db}},
+        Header: http.Header{"User-Agent": []string{"curl/7.54.0"}, "Accept": []string{"*/*"}},
+    }
+    res, err := srcBackend.Query(dataReq)
+    if err != nil {
+        return err
+    }
+
+    series, err := GetSeriesArray(res)
+    if err != nil {
+        return err
+    }
+    if len(series) < 1 {
+        return nil
+    }
+    columns := series[0].Columns
+
+    tagReq := &http.Request{
+        Form:   url.Values{"q": []string{fmt.Sprintf("show tag keys from \"%s\" ", measure)}, "db": []string{db}},
+        Header: http.Header{"User-Agent": []string{"curl/7.54.0"}, "Accept": []string{"*/*"}},
+    }
+    tags := GetMeasurementList(circle, tagReq, []*Backend{srcBackend})
+
+    fieldReq := &http.Request{
+        Form:   url.Values{"q": []string{fmt.Sprintf("show field keys from \"%s\" ", measure)}, "db": []string{db}},
+        Header: http.Header{"User-Agent": []string{"curl/7.54.0"}, "Accept": []string{"*/*"}},
+    }
+    fields := GetMeasurementList(circle, fieldReq, []*Backend{srcBackend})
+
+    var lines []string
+    for key, value := range series[0].Values {
+        columnToValue := make(map[string]string)
+        if key % 20000 == 0 {
+            if len(lines) != 0 {
+                lineData := strings.Join(lines, "\n")
+                err = dstBackend.Write(db, []byte(lineData), true)
+                if err != nil {
+                    return err
+                }
+            }
+        }
+
+        for k, v := range value {
+            var vStr string
+            switch  v.(type) {
+            case float64:
+                vStr = strconv.FormatFloat(v.(float64), 'f', -1, 64)
+            case bool:
+                if v.(bool) {
+                    vStr = "true"
+                } else {
+                    vStr = "false"
+                }
+            case string:
+                vStr = v.(string)
+            }
+            columnToValue[columns[k]] = columns[k] + "=" + vStr
+        }
+        tagStr := []string{measure}
+        for _, v := range tags {
+            tagStr = append(tagStr, columnToValue[v])
+        }
+        line1 := strings.Join(tagStr, ",")
+
+        fieldStr := make([]string, 0)
+        for _, v := range fields {
+            fieldStr = append(fieldStr, columnToValue[v])
+        }
+
+        line2 := strings.Join(fieldStr, ",")
+
+        timeStr := strings.Split(columnToValue["time"], "=")[1]
+
+        ts, _ := time.Parse(time.RFC3339Nano, timeStr)
+
+        line3 := strconv.FormatInt(ts.UnixNano(), 10)
+
+        line := strings.Join([]string{line1, line2, line3}, " ")
+        lines = append(lines, line)
+    }
+
+    lineData := strings.Join(lines, "\n")
+    err = dstBackend.Write(db, []byte(lineData), true)
+    if err != nil {
+        return err
+    }
+    return nil
+}
+
+func (circle *Circle) GetIsMigrating() bool {
+    circle.StatusLock.RLock()
+    defer circle.StatusLock.RUnlock()
+    return circle.IsMigrating
+}
+
+func (circle *Circle) SetIsMigrating(b bool) {
+    circle.StatusLock.Lock()
+    defer circle.StatusLock.Unlock()
+    circle.IsMigrating = b
+}
+
+func (circle *Circle) GetReadyMigrating() bool {
+    circle.StatusLock.RLock()
+    defer circle.StatusLock.RUnlock()
+    return circle.ReadyMigrating
+}
+
+func (circle *Circle) SetReadyMigrating(b bool) {
+    circle.StatusLock.Lock()
+    defer circle.StatusLock.Unlock()
+    circle.ReadyMigrating = b
 }

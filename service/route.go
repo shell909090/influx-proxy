@@ -3,6 +3,7 @@ package service
 import (
     "bytes"
     "compress/gzip"
+    "encoding/json"
     "github.com/chengshiwen/influx-proxy/consist"
     "github.com/chengshiwen/influx-proxy/util"
     "io/ioutil"
@@ -25,6 +26,8 @@ func (hs *HttpService) Register(mux *http.ServeMux) {
     mux.HandleFunc("/query", hs.HandlerQuery)
     mux.HandleFunc("/write", hs.HandlerWrite)
     mux.HandleFunc("/clear_measure", hs.HandlerClearMeasure)
+    mux.HandleFunc("/set_migrate_flag", hs.HandlerSetMigrateFlag)
+    mux.HandleFunc("/get_migrate_flag", hs.HandlerGetMigrateFlag)
     mux.HandleFunc("/debug/pprof/", pprof.Index)
     mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
     return
@@ -93,6 +96,9 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     for {
         randClusterPos := rand.Intn(len(hs.Circles))
         circle = hs.Circles[randClusterPos]
+        if circle.ReadyMigrating {
+            continue
+        }
         status := circle.CheckStatus()
         if status {
             break
@@ -252,6 +258,67 @@ func (hs *HttpService) HandlerClearMeasure(w http.ResponseWriter, req *http.Requ
     w.WriteHeader(util.Success)
     w.Write(util.Code2Message[util.Success])
     return
+}
+
+func (hs *HttpService) HandlerSetMigrateFlag(w http.ResponseWriter, req *http.Request) {
+    defer req.Body.Close()
+    w.Header().Add("X-Influxdb-Version", util.Version)
+
+    if req.Method != util.Post {
+        w.WriteHeader(util.MethodNotAllow)
+        w.Write(util.Code2Message[util.MethodNotAllow])
+        return
+    }
+
+    circleNumStr := req.FormValue("circle_num")
+    circleNumStrs := strings.Split(circleNumStr, ",")
+
+    flagStr := req.FormValue("flag")
+    flagStrs := strings.Split(flagStr, ",")
+    if len(circleNumStrs) != len(flagStrs) {
+        w.WriteHeader(util.BadRequest)
+        w.Write(util.Code2Message[util.BadRequest])
+        return
+    }
+
+    for k, v := range circleNumStrs {
+        circleNum, err := strconv.Atoi(v)
+        if err != nil || circleNum > len(hs.Circles) {
+            w.WriteHeader(util.BadRequest)
+            w.Write([]byte(err.Error()))
+            return
+        }
+
+        flag, err := strconv.ParseBool(flagStrs[k])
+        if err != nil {
+            w.WriteHeader(util.BadRequest)
+            w.Write([]byte(err.Error()))
+            return
+        }
+
+        hs.Circles[circleNum].SetReadyMigrating(flag)
+    }
+
+    w.WriteHeader(util.SuccessNoResp)
+}
+
+func (hs *HttpService) HandlerGetMigrateFlag(w http.ResponseWriter, req *http.Request) {
+    resp := make([]*consist.MigrateFlagStatus, len(hs.Circles))
+    for k, v := range hs.Circles {
+        resp[k] = &consist.MigrateFlagStatus{
+            ReadyMigratingFlag: v.ReadyMigrating,
+            IsMigratingFlag: v.IsMigrating,
+        }
+    }
+
+    respData, err := json.Marshal(resp)
+    if err != nil {
+        w.WriteHeader(util.SuccessNoResp)
+        return
+    }
+
+    w.WriteHeader(util.Success)
+    w.Write(respData)
 }
 
 func (hs *HttpService) WriteHeader(w http.ResponseWriter, req *http.Request) {

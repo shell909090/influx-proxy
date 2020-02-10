@@ -40,6 +40,16 @@ type LineData struct {
     Measure   string `json:"measure"`
 }
 
+// MigrationInfo 迁移信息
+type MigrationInfo struct {
+    CircleNum           int         `json:"circle_num"`
+    Database            string      `json:"database"`
+    Measurement         string      `json:"measurement"`
+    BackendMeasureTotal int         `json:"backend_measure_total"`
+    BMNeedMigrateCount  int         `json:"bm_need_migrate_count"`
+    BMNotMigrateCount   int         `json:"bm_not_migrate_count"`
+}
+
 // NewCluster 新建集群
 func NewProxy(file string) *Proxy {
     proxy := loadProxyJson(file)
@@ -71,8 +81,12 @@ func loadProxyJson(file string) *Proxy {
 func (proxy *Proxy) initCircle(circle *Circle) {
     circle.Router = util.NewConsistent()
     circle.Router.NumberOfReplicas = proxy.NumberOfReplicas
-    circle.UrlToMap = make(map[string]*Backend)
+    circle.UrlToBackend = make(map[string]*Backend)
     circle.BackendWgMap = make(map[string]*sync.WaitGroup)
+    circle.WgMigrate = &sync.WaitGroup{}
+    circle.ReadyMigrating = false
+    circle.IsMigrating = false
+    circle.StatusLock = &sync.RWMutex{}
     for _, backend := range circle.Backends {
         circle.BackendWgMap[backend.Url] = &sync.WaitGroup{}
         proxy.initBackend(circle, backend)
@@ -81,7 +95,7 @@ func (proxy *Proxy) initCircle(circle *Circle) {
 
 func (proxy *Proxy) initBackend(circle *Circle, backend *Backend) {
     circle.Router.Add(backend.Url)
-    circle.UrlToMap[backend.Url] = backend
+    circle.UrlToBackend[backend.Url] = backend
 
     backend.BufferMap = make(map[string]*BufferCounter)
     backend.LockDbMap = make(map[string]*sync.RWMutex)
@@ -109,9 +123,9 @@ func (proxy *Proxy) GetMachines(key string) []*Backend {
             util.Log.Errorf("circleNum:%v key:%+v err:%v", circleNum, key, err)
             continue
         }
-        backend, ok := circle.UrlToMap[backendUrl]
+        backend, ok := circle.UrlToBackend[backendUrl]
         if !ok {
-            util.Log.Errorf("circleNum:%v UrlToMap:%+v err:%+v", circleNum, circle.UrlToMap, err)
+            util.Log.Errorf("circleNum:%v UrlToBackend:%+v err:%+v", circleNum, circle.UrlToBackend, err)
             continue
         }
         machines = append(machines, backend)
@@ -151,7 +165,7 @@ func (proxy *Proxy) WriteData(data *LineData) error {
 func (proxy *Proxy) AddBackend(circleNum int) ([]*Backend, error) {
     circle := proxy.Circles[circleNum]
     var res []*Backend
-    for _, v := range circle.UrlToMap {
+    for _, v := range circle.UrlToBackend {
         res = append(res, v)
     }
     return res, nil
@@ -234,12 +248,16 @@ func (proxy *Proxy) CheckClusterQuery(q string) error {
 func (proxy *Proxy) ClearMeasure(dbs []string, circleNum int) error {
     circle := proxy.Circles[circleNum]
     for _, backend := range circle.Backends {
-        go proxy.clearMeasure(circle, dbs, backend)
+        circle.WgMigrate.Add(1)
+        go proxy.clearCircleMeasure(circle, dbs, backend)
     }
+    circle.WgMigrate.Wait()
     return nil
 }
 
-func (proxy *Proxy) clearMeasure(circle *Circle, dbs []string, backend *Backend) {
+func (proxy *Proxy) clearCircleMeasure(circle *Circle, dbs []string, backend *Backend) {
+    defer circle.WgMigrate.Done()
+
     for _, db := range dbs {
         // 单独出一个接口 删除接口
         // deleet old measure
@@ -267,6 +285,31 @@ func (proxy *Proxy) clearMeasure(circle *Circle, dbs []string, backend *Backend)
                 }
             }
         }
+    }
+}
+
+// 迁移数据
+func (proxy *Proxy) Migrate(db, measure, dstBackendUrl string, circle *Circle, backend *Backend) {
+    // start := time.Now().Unix()
+    dstBackend := circle.UrlToBackend[dstBackendUrl]
+    err := circle.Migrate(backend, dstBackend, db, measure)
+    if err != nil {
+        util.Log.Errorf("err:%+v", err)
+        return
+    }
+    // now := time.Now().Unix()
+    // fmt.Printf(" targetBackendUrl:%+v backendurl:%+v measure:%+v now:%+v start:%+v timeUsed:%+v\n", targetBackendUrl, backend.Url, measure, now, start, now-start)
+    circle.BackendWgMap[backend.Url].Done()
+}
+
+// 清空进度状态信息
+func (proxy *Proxy) ClearMigrateStatus(data map[string]*MigrationInfo) {
+    for _, backend := range data {
+        backend.Database = ""
+        backend.Measurement = ""
+        backend.BackendMeasureTotal = 0
+        backend.BMNeedMigrateCount = 0
+        backend.BMNotMigrateCount = 0
     }
 }
 
