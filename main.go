@@ -7,9 +7,9 @@ package main
 import (
     "flag"
     "fmt"
-    "github.com/chengshiwen/influx-proxy/consist"
-    "github.com/chengshiwen/influx-proxy/util"
+    "github.com/chengshiwen/influx-proxy/consistent"
     "github.com/chengshiwen/influx-proxy/service"
+    "github.com/chengshiwen/influx-proxy/util"
     "net/http"
     "runtime"
     "time"
@@ -35,7 +35,7 @@ func main() {
         return
     }
 
-    proxy := consist.NewProxy(ProxyFile)
+    proxy := consistent.NewProxy(ProxyFile)
     httpServer := service.HttpService{Proxy: proxy}
     mux := http.NewServeMux()
     httpServer.Register(mux)

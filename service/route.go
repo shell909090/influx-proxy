@@ -4,7 +4,7 @@ import (
     "bytes"
     "compress/gzip"
     "encoding/json"
-    "github.com/chengshiwen/influx-proxy/consist"
+    "github.com/chengshiwen/influx-proxy/consistent"
     "github.com/chengshiwen/influx-proxy/util"
     "io/ioutil"
     "math/rand"
@@ -16,7 +16,7 @@ import (
 )
 
 type HttpService struct {
-    *consist.Proxy
+    *consistent.Proxy
 }
 
 // Register 注册http方法
@@ -41,7 +41,7 @@ func (hs *HttpService)HandlerEncryption(w http.ResponseWriter, req *http.Request
         return
     }
     ctx := req.URL.Query().Get("ctx")
-    passord := util.AesEncrypt(ctx, consist.KEY)
+    passord := util.AesEncrypt(ctx, consistent.KEY)
     w.WriteHeader(200)
     w.Write([]byte(passord))
 }
@@ -92,7 +92,7 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     }
 
     // 选出一个状态良好的cluster
-    var circle *consist.Circle
+    var circle *consistent.Circle
     for {
         randClusterPos := rand.Intn(len(hs.Circles))
         circle = hs.Circles[randClusterPos]
@@ -217,7 +217,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
         measures := bytes.Split(measure, []byte(","))
 
         // 构建一个数据对象
-        data := &consist.LineData{
+        data := &consistent.LineData{
             Precision: precision,
             Line:      line,
             Db:        db,
@@ -303,9 +303,9 @@ func (hs *HttpService) HandlerSetMigrateFlag(w http.ResponseWriter, req *http.Re
 }
 
 func (hs *HttpService) HandlerGetMigrateFlag(w http.ResponseWriter, req *http.Request) {
-    resp := make([]*consist.MigrateFlagStatus, len(hs.Circles))
+    resp := make([]*consistent.MigrateFlagStatus, len(hs.Circles))
     for k, v := range hs.Circles {
-        resp[k] = &consist.MigrateFlagStatus{
+        resp[k] = &consistent.MigrateFlagStatus{
             ReadyMigratingFlag: v.ReadyMigrating,
             IsMigratingFlag: v.IsMigrating,
         }
@@ -327,12 +327,12 @@ func (hs *HttpService) WriteHeader(w http.ResponseWriter, req *http.Request) {
 
 func (hs *HttpService) checkAuth(r *http.Request) bool {
     userName, password, ok := r.BasicAuth()
-    if ok && util.AesEncrypt(userName, consist.KEY) == hs.ProxyUsername && util.AesEncrypt(password, consist.KEY) == hs.ProxyPassword {
+    if ok && util.AesEncrypt(userName, consistent.KEY) == hs.ProxyUsername && util.AesEncrypt(password, consistent.KEY) == hs.ProxyPassword {
         return true
     }
 
     userName, password = r.URL.Query().Get("u"), r.URL.Query().Get("p")
-    if util.AesEncrypt(userName, consist.KEY) == hs.ProxyUsername && util.AesEncrypt(password, consist.KEY) == hs.ProxyPassword  {
+    if util.AesEncrypt(userName, consistent.KEY) == hs.ProxyUsername && util.AesEncrypt(password, consistent.KEY) == hs.ProxyPassword  {
         return true
     }
     return false
