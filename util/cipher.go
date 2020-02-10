@@ -7,34 +7,34 @@ import (
     "encoding/base64"
 )
 
-func AesEncrypt(orig string, key string) string {
-    if len(orig)==0{
+func AesEncrypt(origin string, key string) string {
+    if len(origin) == 0 {
         return ""
     }
     // 转成字节数组
-    origData := []byte(orig)
+    originBytes := []byte(origin)
     k := []byte(key)
     // 分组秘钥
     block, _ := aes.NewCipher(k)
     // 获取秘钥块的长度
     blockSize := block.BlockSize()
     // 补全码
-    origData = PKCS7Padding(origData, blockSize)
+    originBytes = PKCS7Padding(originBytes, blockSize)
     // 加密模式
     blockMode := cipher.NewCBCEncrypter(block, k[:blockSize])
     // 创建数组
-    cryted := make([]byte, len(origData))
+    encryptBytes := make([]byte, len(originBytes))
     // 加密
-    blockMode.CryptBlocks(cryted, origData)
-    return base64.StdEncoding.EncodeToString(cryted)
+    blockMode.CryptBlocks(encryptBytes, originBytes)
+    return base64.StdEncoding.EncodeToString(encryptBytes)
 }
 
-func AesDecrypt(cryted string, key string) string {
+func AesDecrypt(encrypt string, key string) string {
     // 转成字节数组
-    if len(cryted)!=24 ||len(key)!=24{
+    if len(encrypt) != 24 || len(key) != 24 {
         return ""
     }
-    crytedByte, _ := base64.StdEncoding.DecodeString(cryted)
+    encryptBytes, _ := base64.StdEncoding.DecodeString(encrypt)
     k := []byte(key)
     // 分组秘钥
     block, _ := aes.NewCipher(k)
@@ -43,22 +43,22 @@ func AesDecrypt(cryted string, key string) string {
     // 加密模式
     blockMode := cipher.NewCBCDecrypter(block, k[:blockSize])
     // 创建数组
-    orig := make([]byte, len(crytedByte))
+    plainBytes := make([]byte, len(encryptBytes))
     // 解密
-    blockMode.CryptBlocks(orig, crytedByte)
+    blockMode.CryptBlocks(plainBytes, encryptBytes)
     // 去补全码
-    orig = PKCS7UnPadding(orig)
-    return string(orig)
+    plainBytes = PKCS7UnPadding(plainBytes)
+    return string(plainBytes)
 }
 
-func PKCS7Padding(ciphertext []byte, blocksize int) []byte {
-    padding := blocksize - len(ciphertext)%blocksize
-    padtext := bytes.Repeat([]byte{byte(padding)}, padding)
-    return append(ciphertext, padtext...)
+func PKCS7Padding(originBytes []byte, blockSize int) []byte {
+    padding := blockSize - len(originBytes) % blockSize
+    padBytes := bytes.Repeat([]byte{byte(padding)}, padding)
+    return append(originBytes, padBytes...)
 }
 
-func PKCS7UnPadding(origData []byte) []byte {
-    length := len(origData)
-    unpadding := int(origData[length-1])
-    return origData[:(length - unpadding)]
+func PKCS7UnPadding(plainBytes []byte) []byte {
+    length := len(plainBytes)
+    unpadding := int(plainBytes[length-1])
+    return plainBytes[:(length - unpadding)]
 }

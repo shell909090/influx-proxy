@@ -16,8 +16,6 @@ import (
     "time"
 )
 
-const KEY = "3kcdplq90m438j5h3n3es0lm"
-
 type BufferCounter struct {
     Buffer  *bytes.Buffer `json:"buffer"`
     Counter int           `json:"counter"`
@@ -409,7 +407,7 @@ func (backend *Backend) WriteStream(db string, stream io.Reader) error {
     q.Set("db", db)
     req, err := http.NewRequest("POST", backend.Url+"/write?"+q.Encode(), stream)
     req.Header.Add("Content-Encoding", "gzip")
-    req.SetBasicAuth(util.AesDecrypt(backend.Username, KEY), util.AesDecrypt(backend.Password, KEY))
+    req.SetBasicAuth(util.AesDecrypt(backend.Username, util.CIPHER_KEY), util.AesDecrypt(backend.Password, util.CIPHER_KEY))
     resp, err := backend.Client.Do(req)
     if err != nil {
         fmt.Printf("backend.Client.Do err:%+v\n", err)
@@ -452,7 +450,7 @@ func (backend *Backend) Query(req *http.Request) ([]byte, error) {
     req.Form.Del("u")
     req.Form.Del("p")
     req, err = http.NewRequest("POST", backend.Url+"/query?"+req.Form.Encode(), nil)
-    req.SetBasicAuth(util.AesDecrypt(backend.Username, KEY), util.AesDecrypt(backend.Password, KEY))
+    req.SetBasicAuth(util.AesDecrypt(backend.Username, util.CIPHER_KEY), util.AesDecrypt(backend.Password, util.CIPHER_KEY))
     resp, err := backend.Client.Do(req)
     defer resp.Body.Close()
     if err != nil {

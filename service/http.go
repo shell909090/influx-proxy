@@ -21,8 +21,8 @@ type HttpService struct {
 
 // Register 注册http方法
 func (hs *HttpService) Register(mux *http.ServeMux) {
-    mux.HandleFunc("/encryption", hs.HandlerEncryption)
-    mux.HandleFunc("/decryption", hs.HandlerDencryption)
+    mux.HandleFunc("/encrypt", hs.HandlerEncrypt)
+    mux.HandleFunc("/decrypt", hs.HandlerDencrypt)
     mux.HandleFunc("/query", hs.HandlerQuery)
     mux.HandleFunc("/write", hs.HandlerWrite)
     mux.HandleFunc("/clear_measure", hs.HandlerClearMeasure)
@@ -33,7 +33,7 @@ func (hs *HttpService) Register(mux *http.ServeMux) {
     return
 }
 
-func (hs *HttpService)HandlerEncryption(w http.ResponseWriter, req *http.Request)  {
+func (hs *HttpService)HandlerEncrypt(w http.ResponseWriter, req *http.Request)  {
     defer req.Body.Close()
     if req.Method != "GET" {
         w.WriteHeader(405)
@@ -41,12 +41,12 @@ func (hs *HttpService)HandlerEncryption(w http.ResponseWriter, req *http.Request
         return
     }
     ctx := req.URL.Query().Get("ctx")
-    passord := util.AesEncrypt(ctx, consistent.KEY)
+    encrypt := util.AesEncrypt(ctx, util.CIPHER_KEY)
     w.WriteHeader(200)
-    w.Write([]byte(passord))
+    w.Write([]byte(encrypt))
 }
 
-func (hs *HttpService)HandlerDencryption(w http.ResponseWriter, req *http.Request)  {
+func (hs *HttpService)HandlerDencrypt(w http.ResponseWriter, req *http.Request)  {
     defer req.Body.Close()
     if req.Method != "GET" {
         w.WriteHeader(405)
@@ -55,9 +55,9 @@ func (hs *HttpService)HandlerDencryption(w http.ResponseWriter, req *http.Reques
     }
     key := req.URL.Query().Get("key")
     ctx := req.URL.Query().Get("ctx")
-    passord := util.AesDecrypt(ctx, key)
+    decrypt := util.AesDecrypt(ctx, key)
     w.WriteHeader(200)
-    w.Write([]byte(passord))
+    w.Write([]byte(decrypt))
 }
 
 // HandlerQuery query方法入口
@@ -327,12 +327,12 @@ func (hs *HttpService) WriteHeader(w http.ResponseWriter, req *http.Request) {
 
 func (hs *HttpService) checkAuth(r *http.Request) bool {
     userName, password, ok := r.BasicAuth()
-    if ok && util.AesEncrypt(userName, consistent.KEY) == hs.ProxyUsername && util.AesEncrypt(password, consistent.KEY) == hs.ProxyPassword {
+    if ok && util.AesEncrypt(userName, util.CIPHER_KEY) == hs.ProxyUsername && util.AesEncrypt(password, util.CIPHER_KEY) == hs.ProxyPassword {
         return true
     }
 
     userName, password = r.URL.Query().Get("u"), r.URL.Query().Get("p")
-    if util.AesEncrypt(userName, consistent.KEY) == hs.ProxyUsername && util.AesEncrypt(password, consistent.KEY) == hs.ProxyPassword  {
+    if util.AesEncrypt(userName, util.CIPHER_KEY) == hs.ProxyUsername && util.AesEncrypt(password, util.CIPHER_KEY) == hs.ProxyPassword  {
         return true
     }
     return false
