@@ -146,6 +146,21 @@ func (circle *Circle) Query(req *http.Request) ([]byte, error) {
     return backend.Query(req)
 }
 
+func (circle *Circle) GetSeriesValues(req *http.Request, backends []*Backend) []string {
+    p, _ := circle.QueryCluster(req, backends)
+    res, _ := GetSeriesArray(p)
+    var databases []string
+    for _, v := range res {
+        for _, vv := range v.Values {
+            if vv[0] == "_internal" {
+                continue
+            }
+            databases = append(databases, vv[0].(string))
+        }
+    }
+    return databases
+}
+
 func (circle *Circle) Migrate(srcBackend *Backend, dstBackend *Backend, db, measure string) error {
     dataReq := &http.Request{
         Form:   url.Values{"q": []string{fmt.Sprintf("select * from \"%s\"", measure)}, "db": []string{db}},
@@ -169,13 +184,13 @@ func (circle *Circle) Migrate(srcBackend *Backend, dstBackend *Backend, db, meas
         Form:   url.Values{"q": []string{fmt.Sprintf("show tag keys from \"%s\" ", measure)}, "db": []string{db}},
         Header: http.Header{"User-Agent": []string{"curl/7.54.0"}, "Accept": []string{"*/*"}},
     }
-    tags := GetMeasurementList(circle, tagReq, []*Backend{srcBackend})
+    tags := circle.GetSeriesValues(tagReq, []*Backend{srcBackend})
 
     fieldReq := &http.Request{
         Form:   url.Values{"q": []string{fmt.Sprintf("show field keys from \"%s\" ", measure)}, "db": []string{db}},
         Header: http.Header{"User-Agent": []string{"curl/7.54.0"}, "Accept": []string{"*/*"}},
     }
-    fields := GetMeasurementList(circle, fieldReq, []*Backend{srcBackend})
+    fields := circle.GetSeriesValues(fieldReq, []*Backend{srcBackend})
 
     var lines []string
     for key, value := range series[0].Values {

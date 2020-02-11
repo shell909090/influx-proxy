@@ -193,21 +193,6 @@ func (proxy *Proxy) DeleteBackend(backendUrls []string) ([]*Backend, error) {
     return res, nil
 }
 
-func GetMeasurementList(circle *Circle, req *http.Request, backends []*Backend) []string {
-    p, _ := circle.QueryCluster(req, backends)
-    res, _ := GetSeriesArray(p)
-    var databases []string
-    for _, v := range res {
-        for _, vv := range v.Values {
-            if vv[0] == "_internal" {
-                continue
-            }
-            databases = append(databases, vv[0].(string))
-        }
-    }
-    return databases
-}
-
 func (proxy *Proxy) ForbidQuery(s string) {
     r, _ := regexp.Compile(s)
     proxy.ForbiddenQuery = append(proxy.ForbiddenQuery, r)
@@ -276,7 +261,7 @@ func (proxy *Proxy) clearCircleMeasure(circle *Circle, dbs []string, backend *Ba
         // 单独出一个接口 删除接口
         // deleet old measure
         req := &http.Request{Form: url.Values{"q": []string{"show measurements"}, "db": []string{db}}}
-        measures := GetMeasurementList(circle, req, []*Backend{backend})
+        measures := circle.GetSeriesValues(req, []*Backend{backend})
         fmt.Printf("len-->%d db-->%+v\n", len(measures), db)
         for _, measure := range measures {
             key := db + "," + measure
@@ -362,7 +347,7 @@ func (proxy *Proxy) RebalanceBackend(backend *Backend, circleNum int, databases 
         proxy.BackendRebalanceStatus[circleNum][backendUrl].Database = db
         // 获取db的measurement列表
         req := &http.Request{Form: url.Values{"q": []string{"show measurements"}, "db": []string{db}}}
-        measures := GetMeasurementList(circle, req, []*Backend{backend})
+        measures := circle.GetSeriesValues(req, []*Backend{backend})
         // 设置进度  BackendMeasureTotal
         proxy.BackendRebalanceStatus[circleNum][backendUrl].BackendMeasureTotal = len(measures)
 
