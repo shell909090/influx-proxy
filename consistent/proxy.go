@@ -12,24 +12,26 @@ import (
     "os"
     "regexp"
     "strconv"
+    "strings"
     "sync"
     "time"
 )
 
 // Proxy 集群
 type Proxy struct {
-    Circles                []*Circle            `json:"circles"` // 集群列表
-    ForbiddenQuery         []*regexp.Regexp     `json:"forbidden_query"`
-    ObligatedQuery         []*regexp.Regexp     `json:"obligated_query"`
-    ClusteredQuery         []*regexp.Regexp     `json:"clustered_query"`
-    ListenAddr             string               `json:"listen_addr"`   // 服务监听的端口
-    FailDataDir            string               `json:"fail_data_dir"` // 写缓存文件目录
-    DbList                 []string             `json:"db_list"`
-    NumberOfReplicas       int                  `json:"number_of_replicas"`     // 虚拟节点数
-    BackendBufferMaxNum    int                  `json:"backend_buffer_max_num"` // 实例的缓冲区大小
-    SyncDataTimeOut        time.Duration        `json:"sync_data_time_out"`
-    ProxyUsername          string               `json:"proxy_username"`
-    ProxyPassword          string               `json:"proxy_password"`
+    Circles                []*Circle                    `json:"circles"` // 集群列表
+    ForbiddenQuery         []*regexp.Regexp             `json:"forbidden_query"`
+    ObligatedQuery         []*regexp.Regexp             `json:"obligated_query"`
+    ClusteredQuery         []*regexp.Regexp             `json:"clustered_query"`
+    ListenAddr             string                       `json:"listen_addr"`   // 服务监听的端口
+    FailDataDir            string                       `json:"fail_data_dir"` // 写缓存文件目录
+    DbList                 []string                     `json:"db_list"`
+    NumberOfReplicas       int                          `json:"number_of_replicas"`     // 虚拟节点数
+    BackendBufferMaxNum    int                          `json:"backend_buffer_max_num"` // 实例的缓冲区大小
+    SyncDataTimeOut        time.Duration                `json:"sync_data_time_out"`
+    BackendRebalanceStatus []map[string]*MigrationInfo  `json:"backend_re_balance_status"`
+    ProxyUsername          string                       `json:"proxy_username"`
+    ProxyPassword          string                       `json:"proxy_password"`
 }
 
 // LineData 数据传输形式
@@ -53,9 +55,11 @@ type MigrationInfo struct {
 // NewCluster 新建集群
 func NewProxy(file string) *Proxy {
     proxy := loadProxyJson(file)
+    proxy.BackendRebalanceStatus = make([]map[string]*MigrationInfo, len(proxy.Circles))
     util.CheckPathAndCreate(proxy.FailDataDir)
     for circleNum, circle := range proxy.Circles {
         circle.CircleNum = circleNum
+        proxy.initMigration(circle, circleNum)
         proxy.initCircle(circle)
     }
     proxy.ForbidQuery(util.ForbidCmds)
@@ -104,6 +108,9 @@ func (proxy *Proxy) initBackend(circle *Circle, backend *Backend) {
     backend.Active = true
     backend.CreateCacheFile(proxy.FailDataDir)
     backend.Transport = new(http.Transport)
+    if backend.MigrateCpuCores == 0 {
+        backend.MigrateCpuCores = 1
+    }
 
     for _, db := range proxy.DbList {
         backend.LockDbMap[db] = new(sync.RWMutex)
@@ -112,6 +119,13 @@ func (proxy *Proxy) initBackend(circle *Circle, backend *Backend) {
     go backend.CheckActive()
     go backend.CheckBufferAndSync(proxy.SyncDataTimeOut)
     go backend.SyncFileData()
+}
+
+func (proxy *Proxy) initMigration(circle *Circle, circleNum int) {
+    proxy.BackendRebalanceStatus[circleNum] = make(map[string]*MigrationInfo)
+    for _, backend := range circle.Backends {
+        proxy.BackendRebalanceStatus[circleNum][backend.Url] = &MigrationInfo{}
+    }
 }
 
 // GetMachines 获取数据对应的三台备份物理主机
@@ -171,7 +185,7 @@ func (proxy *Proxy) AddBackend(circleNum int) ([]*Backend, error) {
     return res, nil
 }
 
-func (proxy *Proxy) DeleteBackend(backendUrls []string, circleNum int) ([]*Backend, error) {
+func (proxy *Proxy) DeleteBackend(backendUrls []string) ([]*Backend, error) {
     var res []*Backend
     for _, v := range backendUrls {
         res = append(res, &Backend{Url: v, Client: &http.Client{}, Transport: new(http.Transport)})
@@ -298,7 +312,7 @@ func (proxy *Proxy) Migrate(db, measure, dstBackendUrl string, circle *Circle, b
         return
     }
     // now := time.Now().Unix()
-    // fmt.Printf(" targetBackendUrl:%+v backendurl:%+v measure:%+v now:%+v start:%+v timeUsed:%+v\n", targetBackendUrl, backend.Url, measure, now, start, now-start)
+    // fmt.Printf(" dstBackendUrl:%+v backendurl:%+v measure:%+v now:%+v start:%+v timeUsed:%+v\n", dstBackendUrl, backend.Url, measure, now, start, now-start)
     circle.BackendWgMap[backend.Url].Done()
 }
 
@@ -310,6 +324,75 @@ func (proxy *Proxy) ClearMigrateStatus(data map[string]*MigrationInfo) {
         backend.BackendMeasureTotal = 0
         backend.BMNeedMigrateCount = 0
         backend.BMNotMigrateCount = 0
+    }
+}
+
+func (proxy *Proxy) Rebalance(backends []*Backend, circleNum int, databases []string) {
+    // 标志正在迁移
+    circle := proxy.Circles[circleNum]
+    circle.SetIsMigrating(true)
+    // databases判断
+    if len(databases) == 0 {
+        databases = proxy.DbList
+    }
+
+    // 异步迁移每台机器上的数据
+    for _, backend := range backends {
+        circle.WgMigrate.Add(1)
+        go proxy.RebalanceBackend(backend, circleNum, databases)
+    }
+    circle.WgMigrate.Wait()
+    circle.SetIsMigrating(false)
+}
+
+func (proxy *Proxy) RebalanceBackend(backend *Backend, circleNum int, databases []string) {
+    var wgCount int
+    // 清空计数
+    proxy.ClearMigrateStatus(proxy.BackendRebalanceStatus[circleNum])
+    backendUrl := backend.Url
+    circle := proxy.Circles[circleNum]
+    // 确认本实例 迁移完毕
+    defer circle.WgMigrate.Done()
+
+    // 设置进度 CircleNum
+    proxy.BackendRebalanceStatus[circleNum][backendUrl].CircleNum = circleNum
+    fmt.Printf("dbs-->%+v url-->%+v num-->%+v\n", databases, backend.Url, circleNum)
+    for _, db := range databases {
+        // 设置进度 db
+        proxy.BackendRebalanceStatus[circleNum][backendUrl].Database = db
+        // 获取db的measurement列表
+        req := &http.Request{Form: url.Values{"q": []string{"show measurements"}, "db": []string{db}}}
+        measures := GetMeasurementList(circle, req, []*Backend{backend})
+        // 设置进度  BackendMeasureTotal
+        proxy.BackendRebalanceStatus[circleNum][backendUrl].BackendMeasureTotal = len(measures)
+
+        for key, measure := range measures {
+            // 设置进度  Measurement
+            proxy.BackendRebalanceStatus[circleNum][backendUrl].Measurement = measure
+
+            // 获取目标实例
+            dbMeasure := strings.Join([]string{db, ",", measure}, "")
+            targetBackendUrl, err := circle.Router.Get(dbMeasure)
+            if err != nil {
+                util.Log.Errorf("dbMeasure:%+v err:%+v", dbMeasure, err)
+            }
+            // 判断data属否需要迁移
+            if targetBackendUrl != backend.Url {
+                // 设置进度 BMNeedMigrateCount计数器
+                proxy.BackendRebalanceStatus[circleNum][backendUrl].BMNeedMigrateCount++
+                // fmt.Printf("srcUrl:%+v dstUrl:%+v\n", backend.Url, targetBackendUrl)
+                util.RebalanceLog.Infof("srcUrl:%+v dstUrl:%+v key:%+v measure:%+v", backendUrl, targetBackendUrl, key, measure)
+                circle.BackendWgMap[backendUrl].Add(1)
+                go proxy.Migrate(db, measure, targetBackendUrl, circle, backend)
+                wgCount++
+                if wgCount % backend.MigrateCpuCores == 0 {
+                    circle.BackendWgMap[backendUrl].Wait()
+                }
+            } else {
+                // 设置进度 BMNotMigrateCount 计数器
+                proxy.BackendRebalanceStatus[circleNum][backendUrl].BMNotMigrateCount++
+            }
+        }
     }
 }
 

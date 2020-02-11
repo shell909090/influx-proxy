@@ -12,6 +12,7 @@ import (
     "net/http/pprof"
     "strconv"
     "strings"
+    "sync"
     "time"
 )
 
@@ -28,6 +29,7 @@ func (hs *HttpService) Register(mux *http.ServeMux) {
     mux.HandleFunc("/clear_measure", hs.HandlerClearMeasure)
     mux.HandleFunc("/set_migrate_flag", hs.HandlerSetMigrateFlag)
     mux.HandleFunc("/get_migrate_flag", hs.HandlerGetMigrateFlag)
+    mux.HandleFunc("/rebalance", hs.HandlerRebalance)
     mux.HandleFunc("/debug/pprof/", pprof.Index)
     mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
     return
@@ -319,6 +321,92 @@ func (hs *HttpService) HandlerGetMigrateFlag(w http.ResponseWriter, req *http.Re
 
     w.WriteHeader(util.Success)
     w.Write(respData)
+}
+
+func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request) {
+    defer req.Body.Close()
+    hs.WriteHeader(w, req)
+    w.Header().Add("X-Influxdb-Version", util.Version)
+    if req.Method != util.Post {
+        w.WriteHeader(util.MethodNotAllow)
+        w.Write(util.Code2Message[util.MethodNotAllow])
+        return
+    }
+
+    operateType := req.FormValue("operate_type")
+    if operateType != "add" && operateType != "del" {
+        w.WriteHeader(util.BadRequest)
+        w.Write(util.Code2Message[util.BadRequest])
+        return
+    }
+    circleNum, err := strconv.Atoi(req.FormValue("circle_num"))
+    if err != nil || circleNum >= len(hs.Circles) {
+        w.WriteHeader(util.BadRequest)
+        w.Write([]byte(err.Error()))
+        return
+    }
+    dbs := strings.Split(strings.Trim(req.FormValue("dbs"), ","), ",")
+
+    // add or del backend in circle
+    var backends []*consistent.Backend
+    if operateType == "add" {
+        // 当前所有的实例列表
+        backends, err = hs.AddBackend(circleNum)
+        if err != nil {
+            w.WriteHeader(util.BadRequest)
+            w.Write([]byte(err.Error()))
+            return
+        }
+    } else if operateType == "del" {
+        backendUrls := strings.Split(strings.Trim(req.FormValue("backends"), ","), ",")
+        if len(backendUrls) == 0 {
+            w.WriteHeader(util.BadRequest)
+            w.Write(util.Code2Message[util.BadRequest])
+            return
+        }
+        // 要删除的实例列表
+        backends, err = hs.DeleteBackend(backendUrls)
+        if err != nil {
+            w.WriteHeader(util.BadRequest)
+            w.Write([]byte(err.Error()))
+            return
+        }
+        cpuCores, err := strconv.Atoi(req.FormValue("cpu_cores"))
+        if err != nil {
+            w.WriteHeader(util.BadRequest)
+            w.Write([]byte(err.Error()))
+            return
+        }
+
+        // backends也已经删除需要创建一个进度状态信息
+        for _, backend := range backends {
+            hs.BackendRebalanceStatus[circleNum][backend.Url] = &consistent.MigrationInfo{}
+            hs.Circles[circleNum].BackendWgMap[backend.Url] = &sync.WaitGroup{}
+            backend.MigrateCpuCores = cpuCores
+        }
+        for _, backend := range hs.Circles[circleNum].Backends {
+            backends = append(backends, backend)
+        }
+    }
+
+    // 判断是否已转移所有proxy的流量
+    if !hs.Circles[circleNum].ReadyMigrating {
+        w.WriteHeader(util.BadRequest)
+        w.Write(util.SyncAllProxy)
+        return
+    }
+
+    // 判断是否正在迁移
+    if hs.Circles[circleNum].GetIsMigrating() {
+        w.WriteHeader(util.NotComplete)
+        w.Write(util.Code2Message[util.NotComplete])
+        return
+    }
+    // rebalance
+    go hs.Rebalance(backends, circleNum, dbs)
+    w.WriteHeader(util.Success)
+    w.Write(util.Code2Message[util.Success])
+    return
 }
 
 func (hs *HttpService) WriteHeader(w http.ResponseWriter, req *http.Request) {
