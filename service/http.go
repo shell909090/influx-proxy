@@ -132,11 +132,11 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     }
 
     // 执行查询
-    resp, e := circle.Query(req)
-    if e != nil {
-        util.Log.Errorf("err:%+v", e)
+    resp, err := circle.Query(req)
+    if err != nil {
+        util.Log.Errorf("err:%+v", err)
         w.WriteHeader(util.BadRequest)
-        w.Write([]byte(e.Error()))
+        w.Write([]byte(err.Error()))
         return
     }
     w.WriteHeader(util.Success)
@@ -248,12 +248,17 @@ func (hs *HttpService) HandlerClearMeasure(w http.ResponseWriter, req *http.Requ
         w.Write(util.Code2Message[util.MethodNotAllow])
         return
     }
-    db := req.FormValue("db")
-    dbs := strings.Split(db, ",")
-    circleNum, e := strconv.Atoi(req.FormValue("circle_num"))
-    if e != nil || circleNum >= len(hs.Circles) || len(dbs) == 0 {
+    circleNum, err := strconv.Atoi(req.FormValue("circle_num"))
+    if err != nil || circleNum < 0 || circleNum >= len(hs.Circles) {
         w.WriteHeader(util.BadRequest)
-        w.Write([]byte(e.Error()))
+        w.Write([]byte("invalid circle_num"))
+        return
+    }
+    db := strings.Trim(req.FormValue("db"), ",")
+    dbs := strings.Split(db, ",")
+    if len(dbs) == 0 {
+        w.WriteHeader(util.BadRequest)
+        w.Write(util.Code2Message[util.BadRequest])
         return
     }
     go hs.ClearMeasure(dbs, circleNum)
@@ -286,9 +291,9 @@ func (hs *HttpService) HandlerSetMigrateFlag(w http.ResponseWriter, req *http.Re
 
     for k, v := range circleNumStrs {
         circleNum, err := strconv.Atoi(v)
-        if err != nil || circleNum > len(hs.Circles) {
+        if err != nil || circleNum < 0 || circleNum >= len(hs.Circles) {
             w.WriteHeader(util.BadRequest)
-            w.Write([]byte(err.Error()))
+            w.Write([]byte("invalid circle_num"))
             return
         }
 
@@ -341,9 +346,9 @@ func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request
         return
     }
     circleNum, err := strconv.Atoi(req.FormValue("circle_num"))
-    if err != nil || circleNum >= len(hs.Circles) {
+    if err != nil || circleNum < 0 || circleNum >= len(hs.Circles) {
         w.WriteHeader(util.BadRequest)
-        w.Write([]byte(err.Error()))
+        w.Write([]byte("invalid circle_num"))
         return
     }
     dbs := strings.Split(strings.Trim(req.FormValue("dbs"), ","), ",")
@@ -431,9 +436,9 @@ func (hs *HttpService) HandlerRecovery(w http.ResponseWriter, req *http.Request)
         w.Write([]byte(err.Error()))
         return
     }
-    if fromCircleNum >= len(hs.Circles) || toCircleNum >= len(hs.Circles) {
+    if fromCircleNum < 0 || fromCircleNum >= len(hs.Circles) || toCircleNum < 0 || toCircleNum >= len(hs.Circles) {
         w.WriteHeader(util.BadRequest)
-        w.Write(util.Code2Message[util.BadRequest])
+        w.Write([]byte("invalid circle_num"))
         return
     }
 
