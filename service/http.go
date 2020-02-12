@@ -30,6 +30,7 @@ func (hs *HttpService) Register(mux *http.ServeMux) {
     mux.HandleFunc("/set_migrate_flag", hs.HandlerSetMigrateFlag)
     mux.HandleFunc("/get_migrate_flag", hs.HandlerGetMigrateFlag)
     mux.HandleFunc("/rebalance", hs.HandlerRebalance)
+    mux.HandleFunc("/recovery", hs.HandlerRecovery)
     mux.HandleFunc("/debug/pprof/", pprof.Index)
     mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
     return
@@ -404,6 +405,59 @@ func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request
     }
     // rebalance
     go hs.Rebalance(backends, circleNum, dbs)
+    w.WriteHeader(util.Success)
+    w.Write(util.Code2Message[util.Success])
+    return
+}
+
+func (hs *HttpService) HandlerRecovery(w http.ResponseWriter, req *http.Request) {
+    defer req.Body.Close()
+    hs.WriteHeader(w, req)
+    if req.Method != util.Post {
+        w.WriteHeader(util.MethodNotAllow)
+        w.Write(util.Code2Message[util.MethodNotAllow])
+        return
+    }
+
+    fromCircleNum, err := strconv.Atoi(req.FormValue("from_circle_num"))
+    if err != nil {
+        w.WriteHeader(util.BadRequest)
+        w.Write([]byte(err.Error()))
+        return
+    }
+    toCircleNum, err := strconv.Atoi(req.FormValue("to_circle_num"))
+    if err != nil {
+        w.WriteHeader(util.BadRequest)
+        w.Write([]byte(err.Error()))
+        return
+    }
+    if fromCircleNum >= len(hs.Circles) || toCircleNum >= len(hs.Circles) {
+        w.WriteHeader(util.BadRequest)
+        w.Write(util.Code2Message[util.BadRequest])
+        return
+    }
+
+    // 判断是否已转移所有proxy的流量
+    if !hs.Circles[toCircleNum].ReadyMigrating {
+        w.WriteHeader(util.BadRequest)
+        w.Write(util.SyncAllProxy)
+        return
+    }
+
+    if hs.Circles[fromCircleNum].GetIsMigrating() || hs.Circles[toCircleNum].GetIsMigrating() {
+        w.WriteHeader(util.NotComplete)
+        w.Write(util.Code2Message[util.NotComplete])
+        return
+    }
+
+    backendUrls := strings.Split(strings.Trim(req.FormValue("fault_backends"), ","), ",")
+    if len(backendUrls) == 0 {
+        w.WriteHeader(util.BadRequest)
+        w.Write(util.Code2Message[util.BadRequest])
+        return
+    }
+    dbs := strings.Split(strings.Trim(req.FormValue("dbs"), ","), ",")
+    go hs.Recovery(fromCircleNum, toCircleNum, backendUrls, dbs)
     w.WriteHeader(util.Success)
     w.Write(util.Code2Message[util.Success])
     return

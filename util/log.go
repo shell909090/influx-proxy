@@ -9,6 +9,7 @@ import (
 var (
     Log             *logrus.Logger
     RebalanceLog    *logrus.Logger
+    RecoveryLog     *logrus.Logger
 )
 
 func init() {
@@ -20,6 +21,12 @@ func init() {
         panic(err)
     }
     RebalanceLog = newLogger(rebalanceLogFile)
+
+    recoveryLogFile, err := os.OpenFile("log/recovery.log", os.O_WRONLY | os.O_APPEND | os.O_CREATE, 0644)
+    if err != nil {
+        panic(err)
+    }
+    RecoveryLog = newLogger(recoveryLogFile)
 }
 
 func newLogger(outPut io.Writer) *logrus.Logger {
