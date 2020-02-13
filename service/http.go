@@ -399,10 +399,10 @@ func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request
         }
     }
 
-    // 判断是否已转移所有proxy的流量
+    // 判断迁移是否已就绪
     if !hs.Circles[circleNum].ReadyMigrating {
         w.WriteHeader(util.BadRequest)
-        w.Write(util.SyncAllProxy)
+        w.Write(util.CallAllProxyMigrate)
         return
     }
 
@@ -441,16 +441,16 @@ func (hs *HttpService) HandlerRecovery(w http.ResponseWriter, req *http.Request)
         w.Write([]byte(err.Error()))
         return
     }
-    if fromCircleNum < 0 || fromCircleNum >= len(hs.Circles) || toCircleNum < 0 || toCircleNum >= len(hs.Circles) {
+    if fromCircleNum < 0 || fromCircleNum >= len(hs.Circles) || toCircleNum < 0 || toCircleNum >= len(hs.Circles) || fromCircleNum == toCircleNum {
         w.WriteHeader(util.BadRequest)
         w.Write([]byte("invalid circle_num"))
         return
     }
 
-    // 判断是否已转移所有proxy的流量
+    // 判断迁移是否已就绪
     if !hs.Circles[toCircleNum].ReadyMigrating {
         w.WriteHeader(util.BadRequest)
-        w.Write(util.SyncAllProxy)
+        w.Write(util.CallAllProxyMigrate)
         return
     }
 

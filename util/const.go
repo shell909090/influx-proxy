@@ -31,7 +31,7 @@ var Code2Message = map[int][]byte{
 }
 
 var (
-    SyncAllProxy = []byte("请告知所有proxy，转移读操作流量")
+    CallAllProxyMigrate = []byte("调用所有proxy，设置迁移标志")
 )
 
 // http method
