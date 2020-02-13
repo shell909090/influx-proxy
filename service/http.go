@@ -67,8 +67,7 @@ func (hs *HttpService)HandlerDencrypt(w http.ResponseWriter, req *http.Request) 
 // HandlerQuery query方法入口
 func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
-    hs.WriteHeader(w, req)
-    w.Header().Add("X-Influxdb-Version", util.Version)
+    hs.AddHeader(w)
 
     // 验证密码
     ok := hs.checkAuth(req)
@@ -148,7 +147,7 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
 // HandlerWrite write方法入口
 func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
-    hs.WriteHeader(w, req)
+    hs.AddHeader(w)
 
     ok := hs.checkAuth(req)
     if !ok{
@@ -242,7 +241,8 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
 
 func (hs *HttpService) HandlerClearMeasure(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
-    hs.WriteHeader(w, req)
+    hs.AddHeader(w)
+
     if req.Method != util.Post {
         util.Log.Errorf("req.Method:%+v err:nil", req.Method)
         w.WriteHeader(util.MethodNotAllow)
@@ -271,7 +271,7 @@ func (hs *HttpService) HandlerClearMeasure(w http.ResponseWriter, req *http.Requ
 
 func (hs *HttpService) HandlerSetMigrateFlag(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
-    w.Header().Add("X-Influxdb-Version", util.Version)
+    hs.AddHeader(w)
 
     if req.Method != util.Post {
         w.WriteHeader(util.MethodNotAllow)
@@ -312,6 +312,9 @@ func (hs *HttpService) HandlerSetMigrateFlag(w http.ResponseWriter, req *http.Re
 }
 
 func (hs *HttpService) HandlerGetMigrateFlag(w http.ResponseWriter, req *http.Request) {
+    defer req.Body.Close()
+    hs.AddHeader(w)
+
     resp := make([]*consistent.MigrateFlagStatus, len(hs.Circles))
     for k, v := range hs.Circles {
         resp[k] = &consistent.MigrateFlagStatus{
@@ -332,8 +335,8 @@ func (hs *HttpService) HandlerGetMigrateFlag(w http.ResponseWriter, req *http.Re
 
 func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
-    hs.WriteHeader(w, req)
-    w.Header().Add("X-Influxdb-Version", util.Version)
+    hs.AddHeader(w)
+
     if req.Method != util.Post {
         w.WriteHeader(util.MethodNotAllow)
         w.Write(util.Code2Message[util.MethodNotAllow])
@@ -418,7 +421,8 @@ func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request
 
 func (hs *HttpService) HandlerRecovery(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
-    hs.WriteHeader(w, req)
+    hs.AddHeader(w)
+
     if req.Method != util.Post {
         w.WriteHeader(util.MethodNotAllow)
         w.Write(util.Code2Message[util.MethodNotAllow])
@@ -471,7 +475,8 @@ func (hs *HttpService) HandlerRecovery(w http.ResponseWriter, req *http.Request)
 
 func (hs *HttpService) HandlerStatus(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
-    w.Header().Add("X-Influxdb-Version", util.Version)
+    hs.AddHeader(w)
+
     if req.Method != util.Get {
         w.WriteHeader(util.MethodNotAllow)
         w.Write(util.Code2Message[util.MethodNotAllow])
@@ -512,7 +517,7 @@ func (hs *HttpService) HandlerStatus(w http.ResponseWriter, req *http.Request) {
     return
 }
 
-func (hs *HttpService) WriteHeader(w http.ResponseWriter, req *http.Request) {
+func (hs *HttpService) AddHeader(w http.ResponseWriter) {
     w.Header().Add("X-Influxdb-Version", util.Version)
 }
 
