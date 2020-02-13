@@ -31,6 +31,7 @@ func (hs *HttpService) Register(mux *http.ServeMux) {
     mux.HandleFunc("/get_migrate_flag", hs.HandlerGetMigrateFlag)
     mux.HandleFunc("/rebalance", hs.HandlerRebalance)
     mux.HandleFunc("/recovery", hs.HandlerRecovery)
+    mux.HandleFunc("/status", hs.HandlerStatus)
     mux.HandleFunc("/debug/pprof/", pprof.Index)
     mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
     return
@@ -465,6 +466,49 @@ func (hs *HttpService) HandlerRecovery(w http.ResponseWriter, req *http.Request)
     go hs.Recovery(fromCircleNum, toCircleNum, backendUrls, dbs)
     w.WriteHeader(util.Success)
     w.Write(util.Code2Message[util.Success])
+    return
+}
+
+func (hs *HttpService) HandlerStatus(w http.ResponseWriter, req *http.Request) {
+    defer req.Body.Close()
+    w.Header().Add("X-Influxdb-Version", util.Version)
+    if req.Method != util.Get {
+        w.WriteHeader(util.MethodNotAllow)
+        w.Write(util.Code2Message[util.MethodNotAllow])
+        return
+    }
+
+    circleNumStr := req.FormValue("circle_num")
+    circleNum, err := strconv.Atoi(circleNumStr)
+    if err != nil || circleNum < 0 || circleNum >= len(hs.Circles) {
+        w.WriteHeader(util.BadRequest)
+        w.Write([]byte("invalid circle_num"))
+        return
+    }
+    var res []byte
+    statusType := req.FormValue("type")
+    if statusType == "rebalance" {
+        res, err = json.Marshal(hs.BackendRebalanceStatus[circleNum])
+        if err != nil {
+            util.Log.Errorf("err:%+v", err)
+            w.WriteHeader(util.BadRequest)
+            w.Write([]byte(err.Error()))
+        }
+    } else if statusType == "recovery" {
+        res, err = json.Marshal(hs.BackendRecoveryStatus[circleNum])
+        if err != nil {
+            util.Log.Errorf("err:%+v", err)
+            w.WriteHeader(util.BadRequest)
+            w.Write([]byte(err.Error()))
+        }
+    } else {
+        w.WriteHeader(util.BadRequest)
+        w.Write([]byte("invalid status type"))
+        return
+    }
+
+    w.WriteHeader(util.Success)
+    w.Write(res)
     return
 }
 
