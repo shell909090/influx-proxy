@@ -161,9 +161,14 @@ func (circle *Circle) GetSeriesValues(req *http.Request, backends []*Backend) []
     return databases
 }
 
-func (circle *Circle) Migrate(srcBackend *Backend, dstBackend *Backend, db, measure string) error {
+func (circle *Circle) Migrate(srcBackend *Backend, dstBackends []*Backend, db, measure string, lastSeconds int) error {
+    timeLimitStr := ""
+    if lastSeconds > 0 {
+        timeLimitStr = fmt.Sprintf(" where time >= %ds", time.Now().Unix()-int64(lastSeconds))
+    }
+
     dataReq := &http.Request{
-        Form:   url.Values{"q": []string{fmt.Sprintf("select * from \"%s\"", measure)}, "db": []string{db}},
+        Form:   url.Values{"q": []string{fmt.Sprintf("select * from \"%s\"%s", measure, timeLimitStr)}, "db": []string{db}},
         Header: http.Header{"User-Agent": []string{"curl/7.54.0"}, "Accept": []string{"*/*"}},
     }
     res, err := srcBackend.Query(dataReq)
@@ -181,13 +186,13 @@ func (circle *Circle) Migrate(srcBackend *Backend, dstBackend *Backend, db, meas
     columns := series[0].Columns
 
     tagReq := &http.Request{
-        Form:   url.Values{"q": []string{fmt.Sprintf("show tag keys from \"%s\" ", measure)}, "db": []string{db}},
+        Form:   url.Values{"q": []string{fmt.Sprintf("show tag keys from \"%s\"%s", measure, timeLimitStr)}, "db": []string{db}},
         Header: http.Header{"User-Agent": []string{"curl/7.54.0"}, "Accept": []string{"*/*"}},
     }
     tags := circle.GetSeriesValues(tagReq, []*Backend{srcBackend})
 
     fieldReq := &http.Request{
-        Form:   url.Values{"q": []string{fmt.Sprintf("show field keys from \"%s\" ", measure)}, "db": []string{db}},
+        Form:   url.Values{"q": []string{fmt.Sprintf("show field keys from \"%s\"%s", measure, timeLimitStr)}, "db": []string{db}},
         Header: http.Header{"User-Agent": []string{"curl/7.54.0"}, "Accept": []string{"*/*"}},
     }
     fields := circle.GetSeriesValues(fieldReq, []*Backend{srcBackend})
@@ -198,9 +203,11 @@ func (circle *Circle) Migrate(srcBackend *Backend, dstBackend *Backend, db, meas
         if key % 20000 == 0 {
             if len(lines) != 0 {
                 lineData := strings.Join(lines, "\n")
-                err = dstBackend.Write(db, []byte(lineData), true)
-                if err != nil {
-                    return err
+                for _, dstBackend := range dstBackends {
+                    err = dstBackend.Write(db, []byte(lineData), true)
+                    if err != nil {
+                        return err
+                    }
                 }
             }
         }
@@ -245,9 +252,11 @@ func (circle *Circle) Migrate(srcBackend *Backend, dstBackend *Backend, db, meas
     }
 
     lineData := strings.Join(lines, "\n")
-    err = dstBackend.Write(db, []byte(lineData), true)
-    if err != nil {
-        return err
+    for _, dstBackend := range dstBackends {
+        err = dstBackend.Write(db, []byte(lineData), true)
+        if err != nil {
+            return err
+        }
     }
     return nil
 }

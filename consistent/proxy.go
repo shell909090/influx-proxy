@@ -125,11 +125,9 @@ func (proxy *Proxy) initBackend(circle *Circle, backend *Backend) {
 
 func (proxy *Proxy) initMigration(circle *Circle, circleNum int) {
     proxy.BackendRebalanceStatus[circleNum] = make(map[string]*MigrationInfo)
-    for _, backend := range circle.Backends {
-        proxy.BackendRebalanceStatus[circleNum][backend.Url] = &MigrationInfo{}
-    }
     proxy.BackendRecoveryStatus[circleNum] = make(map[string]*MigrationInfo)
     for _, backend := range circle.Backends {
+        proxy.BackendRebalanceStatus[circleNum][backend.Url] = &MigrationInfo{}
         proxy.BackendRecoveryStatus[circleNum][backend.Url] = &MigrationInfo{}
     }
 }
@@ -297,7 +295,7 @@ func (proxy *Proxy) clearCircleMeasure(circle *Circle, dbs []string, backend *Ba
 func (proxy *Proxy) Migrate(db, measure, dstBackendUrl string, circle *Circle, backend *Backend) {
     // start := time.Now().Unix()
     dstBackend := circle.UrlToBackend[dstBackendUrl]
-    err := circle.Migrate(backend, dstBackend, db, measure)
+    err := circle.Migrate(backend, []*Backend{dstBackend}, db, measure, 0)
     if err != nil {
         util.Log.Errorf("err:%+v", err)
         return
@@ -388,7 +386,6 @@ func (proxy *Proxy) RebalanceBackend(backend *Backend, circleNum int, databases 
 }
 
 func (proxy *Proxy) Recovery(fromCircleNum, toCircleNum int, recoveryBackendUrls []string, databases []string) {
-    // 查询数据库
     fromCircle := proxy.Circles[fromCircleNum]
     toCircle := proxy.Circles[toCircleNum]
 
@@ -450,7 +447,7 @@ func (proxy *Proxy) RecoveryBackend(backend *Backend, fromCircle, toCircle *Circ
 }
 
 func (proxy *Proxy) RecoveryBackendMigrate(backend, dstBackend *Backend, fromCircle, toCircle *Circle, targetBackendUrl, db, measure string) {
-    fromCircle.Migrate(backend, dstBackend, db, measure)
+    fromCircle.Migrate(backend, []*Backend{dstBackend}, db, measure, 0)
     fromCircle.BackendWgMap[backend.Url].Done()
 }
 
