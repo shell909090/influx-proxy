@@ -31,6 +31,7 @@ func (hs *HttpService) Register(mux *http.ServeMux) {
     mux.HandleFunc("/get_migrate_flag", hs.HandlerGetMigrateFlag)
     mux.HandleFunc("/rebalance", hs.HandlerRebalance)
     mux.HandleFunc("/recovery", hs.HandlerRecovery)
+    mux.HandleFunc("/resync", hs.HandlerResync)
     mux.HandleFunc("/status", hs.HandlerStatus)
     mux.HandleFunc("/debug/pprof/", pprof.Index)
     mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
@@ -308,7 +309,8 @@ func (hs *HttpService) HandlerSetMigrateFlag(w http.ResponseWriter, req *http.Re
         hs.Circles[circleNum].SetReadyMigrating(flag)
     }
 
-    w.WriteHeader(util.SuccessNoResp)
+    w.WriteHeader(util.Success)
+    w.Write(util.Code2Message[util.Success])
 }
 
 func (hs *HttpService) HandlerGetMigrateFlag(w http.ResponseWriter, req *http.Request) {
@@ -473,6 +475,42 @@ func (hs *HttpService) HandlerRecovery(w http.ResponseWriter, req *http.Request)
     return
 }
 
+func (hs *HttpService) HandlerResync(w http.ResponseWriter, req *http.Request) {
+    defer req.Body.Close()
+    hs.AddHeader(w)
+
+    if req.Method != util.Post {
+        w.WriteHeader(util.MethodNotAllow)
+        w.Write(util.Code2Message[util.MethodNotAllow])
+        return
+    }
+
+    lastSecondsStr := req.FormValue("last_seconds")
+    if lastSecondsStr == "" {
+        lastSecondsStr = "0"
+    }
+    lastSeconds, err := strconv.Atoi(lastSecondsStr)
+    if err != nil || lastSeconds < 0 {
+        w.WriteHeader(util.BadRequest)
+        w.Write([]byte("invalid latest_seconds"))
+        return
+    }
+
+    for _, circle := range hs.Circles {
+        if circle.GetIsMigrating() {
+            w.WriteHeader(util.NotComplete)
+            w.Write(util.Code2Message[util.NotComplete])
+            return
+        }
+    }
+
+    dbs := strings.Split(strings.Trim(req.FormValue("dbs"), ","), ",")
+    go hs.Resync(dbs, lastSeconds)
+    w.WriteHeader(util.Success)
+    w.Write(util.Code2Message[util.Success])
+    return
+}
+
 func (hs *HttpService) HandlerStatus(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
     hs.AddHeader(w)
@@ -501,6 +539,13 @@ func (hs *HttpService) HandlerStatus(w http.ResponseWriter, req *http.Request) {
         }
     } else if statusType == "recovery" {
         res, err = json.Marshal(hs.BackendRecoveryStatus[circleNum])
+        if err != nil {
+            util.Log.Errorf("err:%+v", err)
+            w.WriteHeader(util.BadRequest)
+            w.Write([]byte(err.Error()))
+        }
+    } else if statusType == "resync" {
+        res, err = json.Marshal(hs.BackendResyncStatus[circleNum])
         if err != nil {
             util.Log.Errorf("err:%+v", err)
             w.WriteHeader(util.BadRequest)
