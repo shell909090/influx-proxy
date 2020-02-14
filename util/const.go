@@ -12,7 +12,7 @@ const (
     AwaitActiveTimeOut = 10
     SyncFileData       = 5
     CIPHER_KEY         = "3kcdplq90m438j5h3n3es0lm"
-    Version            = "3.0.2"
+    Version            = "3.1.1"
 )
 
 var (

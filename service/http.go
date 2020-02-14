@@ -257,12 +257,12 @@ func (hs *HttpService) HandlerClearMeasure(w http.ResponseWriter, req *http.Requ
         return
     }
     db := strings.Trim(req.FormValue("db"), ",")
-    dbs := strings.Split(db, ",")
-    if len(dbs) == 0 {
+    if db == "" {
         w.WriteHeader(util.BadRequest)
         w.Write(util.Code2Message[util.BadRequest])
         return
     }
+    dbs := strings.Split(db, ",")
     go hs.ClearMeasure(dbs, circleNum)
 
     w.WriteHeader(util.Success)
@@ -357,7 +357,11 @@ func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request
         w.Write([]byte("invalid circle_num"))
         return
     }
-    dbs := strings.Split(strings.Trim(req.FormValue("dbs"), ","), ",")
+    db := strings.Trim(req.FormValue("db"), ",")
+    var dbs []string
+    if db != "" {
+        dbs = strings.Split(db, ",")
+    }
 
     // add or del backend in circle
     var backends []*consistent.Backend
@@ -449,6 +453,12 @@ func (hs *HttpService) HandlerRecovery(w http.ResponseWriter, req *http.Request)
         return
     }
 
+    db := strings.Trim(req.FormValue("db"), ",")
+    var dbs []string
+    if db != "" {
+        dbs = strings.Split(db, ",")
+    }
+
     // 判断迁移是否已就绪
     if !hs.Circles[toCircleNum].ReadyMigrating {
         w.WriteHeader(util.BadRequest)
@@ -468,7 +478,7 @@ func (hs *HttpService) HandlerRecovery(w http.ResponseWriter, req *http.Request)
         w.Write(util.Code2Message[util.BadRequest])
         return
     }
-    dbs := strings.Split(strings.Trim(req.FormValue("dbs"), ","), ",")
+
     go hs.Recovery(fromCircleNum, toCircleNum, backendUrls, dbs)
     w.WriteHeader(util.Success)
     w.Write(util.Code2Message[util.Success])
@@ -483,6 +493,12 @@ func (hs *HttpService) HandlerResync(w http.ResponseWriter, req *http.Request) {
         w.WriteHeader(util.MethodNotAllow)
         w.Write(util.Code2Message[util.MethodNotAllow])
         return
+    }
+
+    db := strings.Trim(req.FormValue("db"), ",")
+    var dbs []string
+    if db != "" {
+        dbs = strings.Split(db, ",")
     }
 
     lastSecondsStr := req.FormValue("last_seconds")
@@ -504,7 +520,6 @@ func (hs *HttpService) HandlerResync(w http.ResponseWriter, req *http.Request) {
         }
     }
 
-    dbs := strings.Split(strings.Trim(req.FormValue("dbs"), ","), ",")
     go hs.Resync(dbs, lastSeconds)
     w.WriteHeader(util.Success)
     w.Write(util.Code2Message[util.Success])
