@@ -12,6 +12,7 @@ import (
 )
 
 type Circle struct {
+    Name           string                     `json:"name"`
     Router         *util.Consistent           `json:"router"`
     Backends       []*Backend                 `json:"backends"`
     UrlToBackend   map[string]*Backend        `json:"url_to_backend"`

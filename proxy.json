@@ -1,15 +1,16 @@
 {
     "circles": [
         {
+            "name": "circle-1",
             "backends": [
                 {
-                    "name": "1-1",
+                    "name": "influxdb-1-1",
                     "url": "http://127.0.0.1:8086",
                     "username": "PlfN1qeCOpETSk7RGLVqCg==",
                     "password": "lcVJtnUr4XhdgIOMm1sLHg=="
                 },
                 {
-                    "name": "1-2",
+                    "name": "influxdb-1-2",
                     "url": "http://127.0.0.1:8087",
                     "username": "PlfN1qeCOpETSk7RGLVqCg==",
                     "password": "lcVJtnUr4XhdgIOMm1sLHg=="
