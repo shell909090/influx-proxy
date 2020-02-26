@@ -78,9 +78,8 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
     hs.AddHeader(w)
 
-    // 验证密码
-    ok := hs.checkAuth(req)
-    if !ok{
+    // 检查认证
+    if !hs.checkAuth(req) {
         w.WriteHeader(401)
         w.Write([]byte("authentication failed\n"))
         return
@@ -158,8 +157,8 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
     hs.AddHeader(w)
 
-    ok := hs.checkAuth(req)
-    if !ok{
+    // 检查认证
+    if !hs.checkAuth(req) {
         w.WriteHeader(401)
         w.Write([]byte("authentication failed\n"))
         return
@@ -590,13 +589,15 @@ func (hs *HttpService) AddHeader(w http.ResponseWriter) {
 }
 
 func (hs *HttpService) checkAuth(r *http.Request) bool {
-    userName, password, ok := r.BasicAuth()
-    if ok && util.AesEncrypt(userName, util.CIPHER_KEY) == hs.ProxyUsername && util.AesEncrypt(password, util.CIPHER_KEY) == hs.ProxyPassword {
+    if hs.Username == "" && hs.Password == "" {
         return true
     }
-
-    userName, password = r.URL.Query().Get("u"), r.URL.Query().Get("p")
-    if util.AesEncrypt(userName, util.CIPHER_KEY) == hs.ProxyUsername && util.AesEncrypt(password, util.CIPHER_KEY) == hs.ProxyPassword  {
+    u, p := r.URL.Query().Get("u"), r.URL.Query().Get("p")
+    if util.AesEncrypt(u, util.CIPHER_KEY) == hs.Username && util.AesEncrypt(p, util.CIPHER_KEY) == hs.Password  {
+        return true
+    }
+    u, p, ok := r.BasicAuth()
+    if ok && util.AesEncrypt(u, util.CIPHER_KEY) == hs.Username && util.AesEncrypt(p, util.CIPHER_KEY) == hs.Password {
         return true
     }
     return false

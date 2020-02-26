@@ -32,8 +32,8 @@ type Proxy struct {
     BackendRebalanceStatus []map[string]*MigrationInfo  `json:"backend_re_balance_status"`
     BackendRecoveryStatus  []map[string]*MigrationInfo  `json:"backend_recovery_status"`
     BackendResyncStatus    []map[string]*MigrationInfo  `json:"backend_resync_status"`
-    ProxyUsername          string                       `json:"proxy_username"`
-    ProxyPassword          string                       `json:"proxy_password"`
+    Username               string                       `json:"username"`
+    Password               string                       `json:"password"`
 }
 
 // LineData 数据传输形式

@@ -26,6 +26,6 @@
     "number_of_replicas": 256,
     "backend_buffer_max_num": 5000,
     "sync_data_time_out": 2,
-    "proxy_username": "QhaaJIbRM2RfuJLylnxPKQ==",
-    "proxy_password": "QhaaJIbRM2RfuJLylnxPKQ=="
+    "username": "QhaaJIbRM2RfuJLylnxPKQ==",
+    "password": "QhaaJIbRM2RfuJLylnxPKQ=="
 }
