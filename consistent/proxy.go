@@ -165,7 +165,7 @@ func (proxy *Proxy) WriteData(data *LineData) error {
     backends := proxy.GetMachines(key)
     if len(backends) < 1 {
         util.Log.Errorf("request data:%v err:GetMachines length is 0", data)
-        return util.LengthNilErr
+        return errors.New("length is zero")
     }
 
     // 对象如果不是以\n结束的，则加上\n

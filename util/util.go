@@ -1,6 +1,9 @@
 package util
 
-import "os"
+import (
+    "net/http"
+    "os"
+)
 
 func ContainString(arr []string, t string) bool {
     for _, v := range arr {
@@ -42,4 +45,8 @@ func CheckPathAndCreate(StoreDir string) {
             return
         }
     }
+}
+
+func StatusText(status int) []byte {
+    return []byte(http.StatusText(status) + "\n")
 }

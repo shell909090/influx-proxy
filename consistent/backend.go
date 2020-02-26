@@ -4,6 +4,7 @@ import (
     "bytes"
     "compress/gzip"
     "encoding/binary"
+    "errors"
     "fmt"
     "github.com/chengshiwen/influx-proxy/util"
     "io"
@@ -337,7 +338,7 @@ func (backend *Backend) WriteDataToBuffer(data *LineData, backendBufferMaxNum in
 func (backend *Backend) WriteDataToDb(db string) error {
     // 没有数据返回nil error
     if backend.BufferMap[db].Buffer.Len() == 0 {
-        return util.LengthNilErr
+        return errors.New("length is zero")
     }
 
     // 对应实例的机器如果存活，则写入数据库
@@ -405,7 +406,7 @@ func (backend *Backend) Write(db string, p []byte, compress bool) error {
 func (backend *Backend) WriteStream(db string, stream io.Reader) error {
     q := url.Values{}
     q.Set("db", db)
-    req, err := http.NewRequest("POST", backend.Url+"/write?"+q.Encode(), stream)
+    req, err := http.NewRequest(http.MethodPost, backend.Url+"/write?"+q.Encode(), stream)
     req.Header.Add("Content-Encoding", "gzip")
     req.SetBasicAuth(util.AesDecrypt(backend.Username, util.CIPHER_KEY), util.AesDecrypt(backend.Password, util.CIPHER_KEY))
     resp, err := backend.Client.Do(req)
@@ -449,7 +450,7 @@ func (backend *Backend) Query(req *http.Request) ([]byte, error) {
     var err error
     req.Form.Del("u")
     req.Form.Del("p")
-    req, err = http.NewRequest("POST", backend.Url+"/query?"+req.Form.Encode(), nil)
+    req, err = http.NewRequest(http.MethodPost, backend.Url+"/query?"+req.Form.Encode(), nil)
     req.SetBasicAuth(util.AesDecrypt(backend.Username, util.CIPHER_KEY), util.AesDecrypt(backend.Password, util.CIPHER_KEY))
     resp, err := backend.Client.Do(req)
     defer resp.Body.Close()

@@ -41,7 +41,7 @@ func (hs *HttpService) Register(mux *http.ServeMux) {
 
 func (hs *HttpService)HandlerEncrypt(w http.ResponseWriter, req *http.Request)  {
     defer req.Body.Close()
-    if req.Method != "GET" {
+    if req.Method != http.MethodGet {
         w.WriteHeader(405)
         w.Write([]byte("method not allow\n"))
         return
@@ -54,7 +54,7 @@ func (hs *HttpService)HandlerEncrypt(w http.ResponseWriter, req *http.Request)  
 
 func (hs *HttpService)HandlerDencrypt(w http.ResponseWriter, req *http.Request)  {
     defer req.Body.Close()
-    if req.Method != "GET" {
+    if req.Method != http.MethodGet {
         w.WriteHeader(405)
         w.Write([]byte("method not allow\n"))
         return
@@ -69,7 +69,7 @@ func (hs *HttpService)HandlerDencrypt(w http.ResponseWriter, req *http.Request) 
 func (hs *HttpService) HandlerPing(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
     hs.AddHeader(w)
-    w.WriteHeader(204)
+    w.WriteHeader(http.StatusNoContent)
     return
 }
 
@@ -86,9 +86,9 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     }
 
     // 检查请求方法
-    if !util.ContainString([]string{util.Post, util.Get}, req.Method) {
+    if req.Method != http.MethodPost && req.Method != http.MethodGet {
         util.Log.Errorf("method:%+v", req.Method)
-        w.WriteHeader(util.BadRequest)
+        w.WriteHeader(http.StatusBadRequest)
         w.Write([]byte("illegal method\n"))
         return
     }
@@ -97,7 +97,7 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     q := strings.TrimSpace(req.FormValue("q"))
     if q == "" {
         util.Log.Errorf("query:%+v", q)
-        w.WriteHeader(util.BadRequest)
+        w.WriteHeader(http.StatusBadRequest)
         w.Write([]byte("empty query\n"))
         return
     }
@@ -126,11 +126,11 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
             body, err := circle.QueryCluster(req, circle.Backends)
             if err != nil {
                 util.Log.Errorf("query cluster:%+v err:%+v", q, err)
-                w.WriteHeader(util.BadRequest)
+                w.WriteHeader(http.StatusBadRequest)
                 w.Write([]byte(err.Error()))
                 return
             }
-            w.WriteHeader(util.Success)
+            w.WriteHeader(http.StatusOK)
             w.Write(body)
             return
         }
@@ -143,11 +143,11 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     resp, err := circle.Query(req)
     if err != nil {
         util.Log.Errorf("err:%+v", err)
-        w.WriteHeader(util.BadRequest)
+        w.WriteHeader(http.StatusBadRequest)
         w.Write([]byte(err.Error()))
         return
     }
-    w.WriteHeader(util.Success)
+    w.WriteHeader(http.StatusOK)
     w.Write(resp)
     return
 }
@@ -165,10 +165,10 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
     }
 
     // 判断http方法
-    if req.Method != util.Post {
+    if req.Method != http.MethodPost {
         util.Log.Errorf("req.Method:%+v err:nil", req.Method)
-        w.WriteHeader(util.MethodNotAllow)
-        w.Write(util.Code2Message[util.MethodNotAllow])
+        w.WriteHeader(http.StatusMethodNotAllowed)
+        w.Write(util.StatusText(http.StatusMethodNotAllowed))
         return
     }
 
@@ -180,12 +180,12 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
     // db必须要给出
     db := req.URL.Query().Get("db")
     if db == "" {
-        w.WriteHeader(util.BadRequest)
-        w.Write(util.Code2Message[util.BadRequest])
+        w.WriteHeader(http.StatusBadRequest)
+        w.Write(util.StatusText(http.StatusBadRequest))
         return
     }
     if !util.ContainString(hs.DbList, db) {
-        w.WriteHeader(util.BadRequest)
+        w.WriteHeader(http.StatusBadRequest)
         w.Write([]byte("database not exist\n"))
         return
     }
@@ -197,7 +197,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
         defer b.Close()
         if err != nil {
             util.Log.Errorf("err:%+v", err)
-            w.WriteHeader(util.BadRequest)
+            w.WriteHeader(http.StatusBadRequest)
             w.Write([]byte(err.Error()))
             return
         }
@@ -207,7 +207,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
     p, err := ioutil.ReadAll(body)
     if err != nil {
         util.Log.Errorf("err:%+v", err)
-        w.WriteHeader(util.BadRequest)
+        w.WriteHeader(http.StatusBadRequest)
         w.Write([]byte(err.Error()))
         return
     }
@@ -221,8 +221,8 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
         }
         lineList := bytes.Split(line, []byte(" "))
         if len(lineList) < 2 {
-            w.WriteHeader(util.BadRequest)
-            w.Write(util.Code2Message[util.BadRequest])
+            w.WriteHeader(http.StatusBadRequest)
+            w.Write(util.StatusText(http.StatusBadRequest))
         }
         measure := lineList[0]
         measures := bytes.Split(measure, []byte(","))
@@ -238,12 +238,12 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
         err = hs.WriteData(data)
         if err != nil {
             util.Log.Errorf("request data:%+v err:%+v", data, err)
-            w.WriteHeader(util.BadRequest)
+            w.WriteHeader(http.StatusBadRequest)
             w.Write([]byte(err.Error()))
             return
         }
     }
-    w.WriteHeader(util.SuccessNoResp)
+    w.WriteHeader(http.StatusNoContent)
     return
 }
 
@@ -251,29 +251,29 @@ func (hs *HttpService) HandlerClear(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
     hs.AddHeader(w)
 
-    if req.Method != util.Post {
+    if req.Method != http.MethodPost {
         util.Log.Errorf("req.Method:%+v err:nil", req.Method)
-        w.WriteHeader(util.MethodNotAllow)
-        w.Write(util.Code2Message[util.MethodNotAllow])
+        w.WriteHeader(http.StatusMethodNotAllowed)
+        w.Write(util.StatusText(http.StatusMethodNotAllowed))
         return
     }
     circleNum, err := strconv.Atoi(req.FormValue("circle_num"))
     if err != nil || circleNum < 0 || circleNum >= len(hs.Circles) {
-        w.WriteHeader(util.BadRequest)
+        w.WriteHeader(http.StatusBadRequest)
         w.Write([]byte("invalid circle_num\n"))
         return
     }
     db := strings.Trim(req.FormValue("db"), ",")
     if db == "" {
-        w.WriteHeader(util.BadRequest)
-        w.Write(util.Code2Message[util.BadRequest])
+        w.WriteHeader(http.StatusBadRequest)
+        w.Write(util.StatusText(http.StatusBadRequest))
         return
     }
     dbs := strings.Split(db, ",")
     go hs.Clear(dbs, circleNum)
 
-    w.WriteHeader(util.Success)
-    w.Write(util.Code2Message[util.Success])
+    w.WriteHeader(http.StatusOK)
+    w.Write(util.StatusText(http.StatusOK))
     return
 }
 
@@ -281,9 +281,9 @@ func (hs *HttpService) HandlerSetMigrateFlag(w http.ResponseWriter, req *http.Re
     defer req.Body.Close()
     hs.AddHeader(w)
 
-    if req.Method != util.Post {
-        w.WriteHeader(util.MethodNotAllow)
-        w.Write(util.Code2Message[util.MethodNotAllow])
+    if req.Method != http.MethodPost {
+        w.WriteHeader(http.StatusMethodNotAllowed)
+        w.Write(util.StatusText(http.StatusMethodNotAllowed))
         return
     }
 
@@ -293,22 +293,22 @@ func (hs *HttpService) HandlerSetMigrateFlag(w http.ResponseWriter, req *http.Re
     flagStr := req.FormValue("flag")
     flagStrs := strings.Split(flagStr, ",")
     if len(circleNumStrs) != len(flagStrs) {
-        w.WriteHeader(util.BadRequest)
-        w.Write(util.Code2Message[util.BadRequest])
+        w.WriteHeader(http.StatusBadRequest)
+        w.Write(util.StatusText(http.StatusBadRequest))
         return
     }
 
     for k, v := range circleNumStrs {
         circleNum, err := strconv.Atoi(v)
         if err != nil || circleNum < 0 || circleNum >= len(hs.Circles) {
-            w.WriteHeader(util.BadRequest)
+            w.WriteHeader(http.StatusBadRequest)
             w.Write([]byte("invalid circle_num\n"))
             return
         }
 
         flag, err := strconv.ParseBool(flagStrs[k])
         if err != nil {
-            w.WriteHeader(util.BadRequest)
+            w.WriteHeader(http.StatusBadRequest)
             w.Write([]byte(err.Error()))
             return
         }
@@ -316,8 +316,8 @@ func (hs *HttpService) HandlerSetMigrateFlag(w http.ResponseWriter, req *http.Re
         hs.Circles[circleNum].SetReadyMigrating(flag)
     }
 
-    w.WriteHeader(util.Success)
-    w.Write(util.Code2Message[util.Success])
+    w.WriteHeader(http.StatusOK)
+    w.Write(util.StatusText(http.StatusOK))
 }
 
 func (hs *HttpService) HandlerGetMigrateFlag(w http.ResponseWriter, req *http.Request) {
@@ -332,13 +332,9 @@ func (hs *HttpService) HandlerGetMigrateFlag(w http.ResponseWriter, req *http.Re
         }
     }
 
-    respData, err := json.Marshal(resp)
-    if err != nil {
-        w.WriteHeader(util.SuccessNoResp)
-        return
-    }
+    respData, _ := json.Marshal(resp)
 
-    w.WriteHeader(util.Success)
+    w.WriteHeader(http.StatusOK)
     w.Write(respData)
 }
 
@@ -346,21 +342,21 @@ func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request
     defer req.Body.Close()
     hs.AddHeader(w)
 
-    if req.Method != util.Post {
-        w.WriteHeader(util.MethodNotAllow)
-        w.Write(util.Code2Message[util.MethodNotAllow])
+    if req.Method != http.MethodPost {
+        w.WriteHeader(http.StatusMethodNotAllowed)
+        w.Write(util.StatusText(http.StatusMethodNotAllowed))
         return
     }
 
     operateType := req.FormValue("operate_type")
     if operateType != "add" && operateType != "del" {
-        w.WriteHeader(util.BadRequest)
-        w.Write(util.Code2Message[util.BadRequest])
+        w.WriteHeader(http.StatusBadRequest)
+        w.Write(util.StatusText(http.StatusBadRequest))
         return
     }
     circleNum, err := strconv.Atoi(req.FormValue("circle_num"))
     if err != nil || circleNum < 0 || circleNum >= len(hs.Circles) {
-        w.WriteHeader(util.BadRequest)
+        w.WriteHeader(http.StatusBadRequest)
         w.Write([]byte("invalid circle_num\n"))
         return
     }
@@ -376,27 +372,27 @@ func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request
         // 当前所有的实例列表
         backends, err = hs.AddBackend(circleNum)
         if err != nil {
-            w.WriteHeader(util.BadRequest)
+            w.WriteHeader(http.StatusBadRequest)
             w.Write([]byte(err.Error()))
             return
         }
     } else if operateType == "del" {
         backendUrls := strings.Split(strings.Trim(req.FormValue("backends"), ","), ",")
         if len(backendUrls) == 0 {
-            w.WriteHeader(util.BadRequest)
-            w.Write(util.Code2Message[util.BadRequest])
+            w.WriteHeader(http.StatusBadRequest)
+            w.Write(util.StatusText(http.StatusBadRequest))
             return
         }
         // 要删除的实例列表
         backends, err = hs.DeleteBackend(backendUrls)
         if err != nil {
-            w.WriteHeader(util.BadRequest)
+            w.WriteHeader(http.StatusBadRequest)
             w.Write([]byte(err.Error()))
             return
         }
         cpuCores, err := strconv.Atoi(req.FormValue("cpu_cores"))
         if err != nil {
-            w.WriteHeader(util.BadRequest)
+            w.WriteHeader(http.StatusBadRequest)
             w.Write([]byte(err.Error()))
             return
         }
@@ -414,21 +410,21 @@ func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request
 
     // 判断迁移是否已就绪
     if !hs.Circles[circleNum].ReadyMigrating {
-        w.WriteHeader(util.BadRequest)
-        w.Write(util.CallAllProxyMigrate)
+        w.WriteHeader(http.StatusBadRequest)
+        w.Write([]byte("call all proxy to set_migrate_flag\n"))
         return
     }
 
     // 判断是否正在迁移
     if hs.Circles[circleNum].GetIsMigrating() {
-        w.WriteHeader(util.NotComplete)
-        w.Write(util.Code2Message[util.NotComplete])
+        w.WriteHeader(http.StatusAccepted)
+        w.Write(util.StatusText(http.StatusAccepted))
         return
     }
     // rebalance
     go hs.Rebalance(backends, circleNum, dbs)
-    w.WriteHeader(util.Success)
-    w.Write(util.Code2Message[util.Success])
+    w.WriteHeader(http.StatusOK)
+    w.Write(util.StatusText(http.StatusOK))
     return
 }
 
@@ -436,26 +432,26 @@ func (hs *HttpService) HandlerRecovery(w http.ResponseWriter, req *http.Request)
     defer req.Body.Close()
     hs.AddHeader(w)
 
-    if req.Method != util.Post {
-        w.WriteHeader(util.MethodNotAllow)
-        w.Write(util.Code2Message[util.MethodNotAllow])
+    if req.Method != http.MethodPost {
+        w.WriteHeader(http.StatusMethodNotAllowed)
+        w.Write(util.StatusText(http.StatusMethodNotAllowed))
         return
     }
 
     fromCircleNum, err := strconv.Atoi(req.FormValue("from_circle_num"))
     if err != nil {
-        w.WriteHeader(util.BadRequest)
+        w.WriteHeader(http.StatusBadRequest)
         w.Write([]byte(err.Error()))
         return
     }
     toCircleNum, err := strconv.Atoi(req.FormValue("to_circle_num"))
     if err != nil {
-        w.WriteHeader(util.BadRequest)
+        w.WriteHeader(http.StatusBadRequest)
         w.Write([]byte(err.Error()))
         return
     }
     if fromCircleNum < 0 || fromCircleNum >= len(hs.Circles) || toCircleNum < 0 || toCircleNum >= len(hs.Circles) || fromCircleNum == toCircleNum {
-        w.WriteHeader(util.BadRequest)
+        w.WriteHeader(http.StatusBadRequest)
         w.Write([]byte("invalid circle_num\n"))
         return
     }
@@ -468,27 +464,27 @@ func (hs *HttpService) HandlerRecovery(w http.ResponseWriter, req *http.Request)
 
     // 判断迁移是否已就绪
     if !hs.Circles[toCircleNum].ReadyMigrating {
-        w.WriteHeader(util.BadRequest)
-        w.Write(util.CallAllProxyMigrate)
+        w.WriteHeader(http.StatusBadRequest)
+        w.Write([]byte("call all proxy to set_migrate_flag\n"))
         return
     }
 
     if hs.Circles[fromCircleNum].GetIsMigrating() || hs.Circles[toCircleNum].GetIsMigrating() {
-        w.WriteHeader(util.NotComplete)
-        w.Write(util.Code2Message[util.NotComplete])
+        w.WriteHeader(http.StatusAccepted)
+        w.Write(util.StatusText(http.StatusAccepted))
         return
     }
 
     backendUrls := strings.Split(strings.Trim(req.FormValue("fault_backends"), ","), ",")
     if len(backendUrls) == 0 {
-        w.WriteHeader(util.BadRequest)
-        w.Write(util.Code2Message[util.BadRequest])
+        w.WriteHeader(http.StatusBadRequest)
+        w.Write(util.StatusText(http.StatusBadRequest))
         return
     }
 
     go hs.Recovery(fromCircleNum, toCircleNum, backendUrls, dbs)
-    w.WriteHeader(util.Success)
-    w.Write(util.Code2Message[util.Success])
+    w.WriteHeader(http.StatusOK)
+    w.Write(util.StatusText(http.StatusOK))
     return
 }
 
@@ -496,9 +492,9 @@ func (hs *HttpService) HandlerResync(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
     hs.AddHeader(w)
 
-    if req.Method != util.Post {
-        w.WriteHeader(util.MethodNotAllow)
-        w.Write(util.Code2Message[util.MethodNotAllow])
+    if req.Method != http.MethodPost {
+        w.WriteHeader(http.StatusMethodNotAllowed)
+        w.Write(util.StatusText(http.StatusMethodNotAllowed))
         return
     }
 
@@ -514,22 +510,22 @@ func (hs *HttpService) HandlerResync(w http.ResponseWriter, req *http.Request) {
     }
     lastSeconds, err := strconv.Atoi(lastSecondsStr)
     if err != nil || lastSeconds < 0 {
-        w.WriteHeader(util.BadRequest)
+        w.WriteHeader(http.StatusBadRequest)
         w.Write([]byte("invalid latest_seconds\n"))
         return
     }
 
     for _, circle := range hs.Circles {
         if circle.GetIsMigrating() {
-            w.WriteHeader(util.NotComplete)
-            w.Write(util.Code2Message[util.NotComplete])
+            w.WriteHeader(http.StatusAccepted)
+            w.Write(util.StatusText(http.StatusAccepted))
             return
         }
     }
 
     go hs.Resync(dbs, lastSeconds)
-    w.WriteHeader(util.Success)
-    w.Write(util.Code2Message[util.Success])
+    w.WriteHeader(http.StatusOK)
+    w.Write(util.StatusText(http.StatusOK))
     return
 }
 
@@ -537,16 +533,16 @@ func (hs *HttpService) HandlerStatus(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
     hs.AddHeader(w)
 
-    if req.Method != util.Get {
-        w.WriteHeader(util.MethodNotAllow)
-        w.Write(util.Code2Message[util.MethodNotAllow])
+    if req.Method != http.MethodGet {
+        w.WriteHeader(http.StatusMethodNotAllowed)
+        w.Write(util.StatusText(http.StatusMethodNotAllowed))
         return
     }
 
     circleNumStr := req.FormValue("circle_num")
     circleNum, err := strconv.Atoi(circleNumStr)
     if err != nil || circleNum < 0 || circleNum >= len(hs.Circles) {
-        w.WriteHeader(util.BadRequest)
+        w.WriteHeader(http.StatusBadRequest)
         w.Write([]byte("invalid circle_num\n"))
         return
     }
@@ -556,30 +552,30 @@ func (hs *HttpService) HandlerStatus(w http.ResponseWriter, req *http.Request) {
         res, err = json.Marshal(hs.BackendRebalanceStatus[circleNum])
         if err != nil {
             util.Log.Errorf("err:%+v", err)
-            w.WriteHeader(util.BadRequest)
+            w.WriteHeader(http.StatusBadRequest)
             w.Write([]byte(err.Error()))
         }
     } else if statusType == "recovery" {
         res, err = json.Marshal(hs.BackendRecoveryStatus[circleNum])
         if err != nil {
             util.Log.Errorf("err:%+v", err)
-            w.WriteHeader(util.BadRequest)
+            w.WriteHeader(http.StatusBadRequest)
             w.Write([]byte(err.Error()))
         }
     } else if statusType == "resync" {
         res, err = json.Marshal(hs.BackendResyncStatus[circleNum])
         if err != nil {
             util.Log.Errorf("err:%+v", err)
-            w.WriteHeader(util.BadRequest)
+            w.WriteHeader(http.StatusBadRequest)
             w.Write([]byte(err.Error()))
         }
     } else {
-        w.WriteHeader(util.BadRequest)
+        w.WriteHeader(http.StatusBadRequest)
         w.Write([]byte("invalid status type\n"))
         return
     }
 
-    w.WriteHeader(util.Success)
+    w.WriteHeader(http.StatusOK)
     w.Write(res)
     return
 }
