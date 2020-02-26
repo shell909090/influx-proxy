@@ -43,7 +43,7 @@ func (hs *HttpService)HandlerEncrypt(w http.ResponseWriter, req *http.Request)  
     defer req.Body.Close()
     if req.Method != "GET" {
         w.WriteHeader(405)
-        w.Write([]byte("method not allow."))
+        w.Write([]byte("method not allow\n"))
         return
     }
     ctx := req.URL.Query().Get("ctx")
@@ -56,7 +56,7 @@ func (hs *HttpService)HandlerDencrypt(w http.ResponseWriter, req *http.Request) 
     defer req.Body.Close()
     if req.Method != "GET" {
         w.WriteHeader(405)
-        w.Write([]byte("method not allow."))
+        w.Write([]byte("method not allow\n"))
         return
     }
     key := req.URL.Query().Get("key")
@@ -82,7 +82,7 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     ok := hs.checkAuth(req)
     if !ok{
         w.WriteHeader(401)
-        w.Write([]byte("auth failed"))
+        w.Write([]byte("authentication failed\n"))
         return
     }
 
@@ -136,7 +136,7 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
             return
         }
         w.WriteHeader(400)
-        w.Write([]byte("query forbidden"))
+        w.Write([]byte("query forbidden\n"))
         return
     }
 
@@ -161,7 +161,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
     ok := hs.checkAuth(req)
     if !ok{
         w.WriteHeader(401)
-        w.Write([]byte("auth failed"))
+        w.Write([]byte("authentication failed\n"))
         return
     }
 
@@ -187,7 +187,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
     }
     if !util.ContainString(hs.DbList, db) {
         w.WriteHeader(util.BadRequest)
-        w.Write([]byte("database not found"))
+        w.Write([]byte("database not exist\n"))
         return
     }
 
@@ -261,7 +261,7 @@ func (hs *HttpService) HandlerClearMeasure(w http.ResponseWriter, req *http.Requ
     circleNum, err := strconv.Atoi(req.FormValue("circle_num"))
     if err != nil || circleNum < 0 || circleNum >= len(hs.Circles) {
         w.WriteHeader(util.BadRequest)
-        w.Write([]byte("invalid circle_num"))
+        w.Write([]byte("invalid circle_num\n"))
         return
     }
     db := strings.Trim(req.FormValue("db"), ",")
@@ -303,7 +303,7 @@ func (hs *HttpService) HandlerSetMigrateFlag(w http.ResponseWriter, req *http.Re
         circleNum, err := strconv.Atoi(v)
         if err != nil || circleNum < 0 || circleNum >= len(hs.Circles) {
             w.WriteHeader(util.BadRequest)
-            w.Write([]byte("invalid circle_num"))
+            w.Write([]byte("invalid circle_num\n"))
             return
         }
 
@@ -362,7 +362,7 @@ func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request
     circleNum, err := strconv.Atoi(req.FormValue("circle_num"))
     if err != nil || circleNum < 0 || circleNum >= len(hs.Circles) {
         w.WriteHeader(util.BadRequest)
-        w.Write([]byte("invalid circle_num"))
+        w.Write([]byte("invalid circle_num\n"))
         return
     }
     db := strings.Trim(req.FormValue("db"), ",")
@@ -457,7 +457,7 @@ func (hs *HttpService) HandlerRecovery(w http.ResponseWriter, req *http.Request)
     }
     if fromCircleNum < 0 || fromCircleNum >= len(hs.Circles) || toCircleNum < 0 || toCircleNum >= len(hs.Circles) || fromCircleNum == toCircleNum {
         w.WriteHeader(util.BadRequest)
-        w.Write([]byte("invalid circle_num"))
+        w.Write([]byte("invalid circle_num\n"))
         return
     }
 
@@ -516,7 +516,7 @@ func (hs *HttpService) HandlerResync(w http.ResponseWriter, req *http.Request) {
     lastSeconds, err := strconv.Atoi(lastSecondsStr)
     if err != nil || lastSeconds < 0 {
         w.WriteHeader(util.BadRequest)
-        w.Write([]byte("invalid latest_seconds"))
+        w.Write([]byte("invalid latest_seconds\n"))
         return
     }
 
@@ -548,7 +548,7 @@ func (hs *HttpService) HandlerStatus(w http.ResponseWriter, req *http.Request) {
     circleNum, err := strconv.Atoi(circleNumStr)
     if err != nil || circleNum < 0 || circleNum >= len(hs.Circles) {
         w.WriteHeader(util.BadRequest)
-        w.Write([]byte("invalid circle_num"))
+        w.Write([]byte("invalid circle_num\n"))
         return
     }
     var res []byte
@@ -576,7 +576,7 @@ func (hs *HttpService) HandlerStatus(w http.ResponseWriter, req *http.Request) {
         }
     } else {
         w.WriteHeader(util.BadRequest)
-        w.Write([]byte("invalid status type"))
+        w.Write([]byte("invalid status type\n"))
         return
     }
 
