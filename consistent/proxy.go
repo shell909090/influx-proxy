@@ -252,17 +252,17 @@ func (proxy *Proxy) CheckClusterQuery(q string) error {
     return nil
 }
 
-func (proxy *Proxy) ClearMeasure(dbs []string, circleNum int) error {
+func (proxy *Proxy) Clear(dbs []string, circleNum int) error {
     circle := proxy.Circles[circleNum]
     for _, backend := range circle.Backends {
         circle.WgMigrate.Add(1)
-        go proxy.clearCircleMeasure(circle, dbs, backend)
+        go proxy.clearCircle(circle, backend, dbs)
     }
     circle.WgMigrate.Wait()
     return nil
 }
 
-func (proxy *Proxy) clearCircleMeasure(circle *Circle, dbs []string, backend *Backend) {
+func (proxy *Proxy) clearCircle(circle *Circle, backend *Backend, dbs []string) {
     defer circle.WgMigrate.Done()
 
     for _, db := range dbs {

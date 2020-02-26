@@ -27,7 +27,7 @@ func (hs *HttpService) Register(mux *http.ServeMux) {
     mux.HandleFunc("/ping", hs.HandlerPing)
     mux.HandleFunc("/query", hs.HandlerQuery)
     mux.HandleFunc("/write", hs.HandlerWrite)
-    mux.HandleFunc("/clear_measure", hs.HandlerClearMeasure)
+    mux.HandleFunc("/clear", hs.HandlerClear)
     mux.HandleFunc("/set_migrate_flag", hs.HandlerSetMigrateFlag)
     mux.HandleFunc("/get_migrate_flag", hs.HandlerGetMigrateFlag)
     mux.HandleFunc("/rebalance", hs.HandlerRebalance)
@@ -247,7 +247,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
     return
 }
 
-func (hs *HttpService) HandlerClearMeasure(w http.ResponseWriter, req *http.Request) {
+func (hs *HttpService) HandlerClear(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
     hs.AddHeader(w)
 
@@ -270,7 +270,7 @@ func (hs *HttpService) HandlerClearMeasure(w http.ResponseWriter, req *http.Requ
         return
     }
     dbs := strings.Split(db, ",")
-    go hs.ClearMeasure(dbs, circleNum)
+    go hs.Clear(dbs, circleNum)
 
     w.WriteHeader(util.Success)
     w.Write(util.Code2Message[util.Success])
