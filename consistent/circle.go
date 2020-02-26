@@ -3,6 +3,7 @@ package consistent
 import (
     "fmt"
     "github.com/chengshiwen/influx-proxy/util"
+    "github.com/influxdata/influxdb1-client/models"
     "net/http"
     "net/url"
     "strconv"
@@ -65,9 +66,9 @@ func (circle *Circle) QueryCluster(req *http.Request, backends []*Backend) ([]by
 }
 
 func (circle *Circle) reduceByValues(bodies [][]byte) (rBody []byte, err error) {
-    valuesMap := make(map[string]*seri)
+    valuesMap := make(map[string]*models.Row)
     for _, body := range bodies {
-        _series, _err := GetSeriesArray(body)
+        _series, _err := SeriesFromResponseBytes(body)
         if _err != nil {
             util.Log.Errorf("err:%+v", _err)
             err = _err
@@ -84,7 +85,7 @@ func (circle *Circle) reduceByValues(bodies [][]byte) (rBody []byte, err error) 
             }
         }
     }
-    serie := &seri{}
+    serie := &models.Row{}
     var values [][]interface{}
     for v, s := range valuesMap {
         values = append(values, []interface{}{v})
@@ -92,21 +93,21 @@ func (circle *Circle) reduceByValues(bodies [][]byte) (rBody []byte, err error) 
     }
     serie.Values = values
     if len(values) > 0 {
-        rBody, err = GetJsonBodyfromSeries([]*seri{serie})
+        rBody, err = ResponseBytesFromSeries(models.Rows{serie})
         if err != nil {
             util.Log.Errorf("err:%+v", err)
             return
         }
     } else {
-        rBody, _ = GetJsonBodyfromSeries(nil)
+        rBody, _ = ResponseBytesFromSeries(nil)
     }
     return
 }
 
 func (circle *Circle) reduceBySeries(bodies [][]byte) (rBody []byte, err error) {
-    seriesMap := make(map[string]*seri)
+    seriesMap := make(map[string]*models.Row)
     for _, body := range bodies {
-        _series, _err := GetSeriesArray(body)
+        _series, _err := SeriesFromResponseBytes(body)
         if _err != nil {
             util.Log.Errorf("err:%+v", _err)
             err = _err
@@ -117,11 +118,11 @@ func (circle *Circle) reduceBySeries(bodies [][]byte) (rBody []byte, err error) 
         }
     }
 
-    var series []*seri
+    var series models.Rows
     for _, item := range seriesMap {
         series = append(series, item)
     }
-    rBody, err = GetJsonBodyfromSeries(series)
+    rBody, err = ResponseBytesFromSeries(series)
     if err != nil {
         util.Log.Errorf("err:%+v", err)
     }
@@ -149,7 +150,7 @@ func (circle *Circle) Query(req *http.Request) ([]byte, error) {
 
 func (circle *Circle) GetSeriesValues(req *http.Request, backends []*Backend) []string {
     p, _ := circle.QueryCluster(req, backends)
-    res, _ := GetSeriesArray(p)
+    res, _ := SeriesFromResponseBytes(p)
     var databases []string
     for _, v := range res {
         for _, vv := range v.Values {
@@ -177,7 +178,7 @@ func (circle *Circle) Migrate(srcBackend *Backend, dstBackends []*Backend, db, m
         return err
     }
 
-    series, err := GetSeriesArray(res)
+    series, err := SeriesFromResponseBytes(res)
     if err != nil {
         return err
     }
