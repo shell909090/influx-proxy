@@ -24,6 +24,7 @@ type HttpService struct {
 func (hs *HttpService) Register(mux *http.ServeMux) {
     mux.HandleFunc("/encrypt", hs.HandlerEncrypt)
     mux.HandleFunc("/decrypt", hs.HandlerDencrypt)
+    mux.HandleFunc("/ping", hs.HandlerPing)
     mux.HandleFunc("/query", hs.HandlerQuery)
     mux.HandleFunc("/write", hs.HandlerWrite)
     mux.HandleFunc("/clear_measure", hs.HandlerClearMeasure)
@@ -63,6 +64,13 @@ func (hs *HttpService)HandlerDencrypt(w http.ResponseWriter, req *http.Request) 
     decrypt := util.AesDecrypt(ctx, key)
     w.WriteHeader(200)
     w.Write([]byte(decrypt))
+}
+
+func (hs *HttpService) HandlerPing(w http.ResponseWriter, req *http.Request) {
+    defer req.Body.Close()
+    hs.AddHeader(w)
+    w.WriteHeader(204)
+    return
 }
 
 // HandlerQuery query方法入口
