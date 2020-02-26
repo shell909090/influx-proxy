@@ -16,14 +16,14 @@ import (
 )
 
 var (
-    ProxyFile       string
+    ConfigFile      string
     Version         bool
     GitCommit       string
     BuildTime       string
 )
 
 func main() {
-    flag.StringVar(&ProxyFile, "proxy", "proxy.json", "proxy config file")
+    flag.StringVar(&ConfigFile, "config", "proxy.json", "proxy config file")
     flag.BoolVar(&Version, "version", false, "proxy version")
     flag.Parse()
     if Version {
@@ -35,10 +35,10 @@ func main() {
         return
     }
 
-    proxy := consistent.NewProxy(ProxyFile)
-    httpServer := service.HttpService{Proxy: proxy}
+    proxy := consistent.NewProxy(ConfigFile)
+    hs := service.HttpService{Proxy: proxy}
     mux := http.NewServeMux()
-    httpServer.Register(mux)
+    hs.Register(mux)
 
     server := &http.Server{
         Addr:        proxy.ListenAddr,
