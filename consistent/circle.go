@@ -1,9 +1,11 @@
 package consistent
 
 import (
+    "bytes"
     "fmt"
     "github.com/chengshiwen/influx-proxy/util"
     "github.com/influxdata/influxdb1-client/models"
+    "io/ioutil"
     "net/http"
     "net/url"
     "strconv"
@@ -40,9 +42,16 @@ func (circle *Circle) CheckStatus() bool {
 
 // 执行 show 查询操作
 func (circle *Circle) QueryCluster(req *http.Request, backends []*Backend) ([]byte, error) {
+    // remove support of query parameter `chunked`
+    req.Form.Del("chunked")
+    var reqBodyBytes []byte
+    if req.Body != nil {
+        reqBodyBytes, _ = ioutil.ReadAll(req.Body)
+    }
     bodies := make([][]byte, 0)
     // 在环内的所有数据库实例上执行查询，再聚合在一起
     for _, backend := range backends {
+        req.Body = ioutil.NopCloser(bytes.NewBuffer(reqBodyBytes))
         body, err := backend.Query(req)
         if err != nil {
             util.Log.Errorf("req:%+v err:%+v", req, err)
