@@ -169,8 +169,8 @@ func (proxy *Proxy) WriteData(data *LineData) error {
     }
 
     // 对象如果不是以\n结束的，则加上\n
-    if data.Line[len(data.Line)-1] != '\n' {
-        data.Line = bytes.Join([][]byte{data.Line, []byte("\n")}, []byte(""))
+    if !bytes.HasSuffix(data.Line, []byte("\n")) {
+        data.Line = append(data.Line, []byte("\n")...)
     }
 
     // 顺序存储到多个备份节点上

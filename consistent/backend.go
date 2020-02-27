@@ -192,20 +192,17 @@ func (backend *Backend) WriteLengthAndData(p []byte, compress bool) error {
     return nil
 }
 
-func (backend *Backend) IsData() bool {
+func (backend *Backend) hasData() bool {
     backend.LockFile.RLock()
     defer backend.LockFile.RUnlock()
 
     pro, _ := backend.FileProducer.Seek(0, io.SeekCurrent)
     con, _ := backend.FileConsumer.Seek(0, io.SeekCurrent)
-    if pro-con > 0 {
-        return true
-    }
-    return false
+    return pro - con > 0
 }
 
 func (backend *Backend) Read() ([]byte, error) {
-    if !backend.IsData() {
+    if !backend.hasData() {
         return nil, nil
     }
     var length uint32
@@ -290,7 +287,7 @@ func (backend *Backend) checkBufferAndSync(db string) error {
 }
 
 func (backend *Backend) syncFileDataToDb() {
-    for backend.IsData() {
+    for backend.hasData() {
         if !backend.Active {
             time.Sleep(time.Second * util.AwaitActiveTimeOut)
             continue
@@ -347,8 +344,8 @@ func (backend *Backend) WriteDataToDb(db string) error {
         err := backend.Write(db, byteData, true)
         if err != nil {
             util.Log.Errorf("db:%+v err:%+v", db, err)
-            return err
         }
+        return err
     }
 
     // 写入数据库失败，则写到文件中，等待同步
