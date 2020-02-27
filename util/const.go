@@ -7,11 +7,11 @@ import (
 const (
     MaxUint32          = math.MaxUint32 + 1
     IdleTimeOut        = 10
-    CheckPingTimeOut   = 10
-    AwaitActiveTimeOut = 10
-    SyncFileData       = 5
-    CIPHER_KEY         = "3kcdplq90m438j5h3n3es0lm"
-    Version            = "2.1.1"
+    CheckPingInterval  = 1
+    WaitActiveInterval = 10
+    SyncFileInterval   = 10
+    CipherKey          = "3kcdplq90m438j5h3n3es0lm"
+    Version            = "2.2.0"
 )
 
 var (

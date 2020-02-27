@@ -265,7 +265,7 @@ func (backend *Backend) CheckBufferAndSync(syncDataTimeOut time.Duration) {
 func (backend *Backend) SyncFileData() {
     for {
         select {
-        case <- time.After(util.SyncFileData * time.Second):
+        case <- time.After(util.SyncFileInterval * time.Second):
             backend.syncFileDataToDb()
         }
     }
@@ -289,7 +289,7 @@ func (backend *Backend) checkBufferAndSync(db string) error {
 func (backend *Backend) syncFileDataToDb() {
     for backend.hasData() {
         if !backend.Active {
-            time.Sleep(time.Second * util.AwaitActiveTimeOut)
+            time.Sleep(time.Second * util.WaitActiveInterval)
             continue
         }
 
@@ -361,7 +361,7 @@ func (backend *Backend) WriteDataToDb(db string) error {
 func (backend *Backend) CheckActive() {
     for {
         backend.Active = backend.Ping()
-        time.Sleep(util.CheckPingTimeOut * time.Second)
+        time.Sleep(util.CheckPingInterval * time.Second)
     }
 }
 
@@ -405,7 +405,7 @@ func (backend *Backend) WriteStream(db string, stream io.Reader) error {
     q.Set("db", db)
     req, err := http.NewRequest(http.MethodPost, backend.Url+"/write?"+q.Encode(), stream)
     req.Header.Add("Content-Encoding", "gzip")
-    req.SetBasicAuth(util.AesDecrypt(backend.Username, util.CIPHER_KEY), util.AesDecrypt(backend.Password, util.CIPHER_KEY))
+    req.SetBasicAuth(util.AesDecrypt(backend.Username, util.CipherKey), util.AesDecrypt(backend.Password, util.CipherKey))
     resp, err := backend.Client.Do(req)
     if err != nil {
         fmt.Printf("backend.Client.Do err:%+v\n", err)
@@ -448,7 +448,7 @@ func (backend *Backend) Query(req *http.Request) ([]byte, error) {
     req.Form.Del("u")
     req.Form.Del("p")
     req, err = http.NewRequest(http.MethodPost, backend.Url+"/query?"+req.Form.Encode(), nil)
-    req.SetBasicAuth(util.AesDecrypt(backend.Username, util.CIPHER_KEY), util.AesDecrypt(backend.Password, util.CIPHER_KEY))
+    req.SetBasicAuth(util.AesDecrypt(backend.Username, util.CipherKey), util.AesDecrypt(backend.Password, util.CipherKey))
     resp, err := backend.Client.Do(req)
     defer resp.Body.Close()
     if err != nil {

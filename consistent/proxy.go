@@ -19,16 +19,16 @@ import (
 
 // Proxy 集群
 type Proxy struct {
-    Circles                []*Circle                    `json:"circles"` // 集群列表
+    Circles                []*Circle                    `json:"circles"`     // 集群列表
+    ListenAddr             string                       `json:"listen_addr"` // 服务监听地址
+    DataDir                string                       `json:"data_dir"`    // 缓存文件目录
+    DbList                 []string                     `json:"db_list"`     // 数据库列表
+    VNodeSize              int                          `json:"vnode_size"`  // 虚拟节点数
+    FlushSize              int                          `json:"flush_size"`  // 实例的缓冲区大小
+    FlushTime              time.Duration                `json:"flush_time"`  // 实例的缓冲清空时间
     ForbiddenQuery         []*regexp.Regexp             `json:"forbidden_query"`
     ObligatedQuery         []*regexp.Regexp             `json:"obligated_query"`
     ClusteredQuery         []*regexp.Regexp             `json:"clustered_query"`
-    ListenAddr             string                       `json:"listen_addr"`   // 服务监听的端口
-    FailDataDir            string                       `json:"fail_data_dir"` // 写缓存文件目录
-    DbList                 []string                     `json:"db_list"`
-    NumberOfReplicas       int                          `json:"number_of_replicas"`     // 虚拟节点数
-    BackendBufferMaxNum    int                          `json:"backend_buffer_max_num"` // 实例的缓冲区大小
-    SyncDataTimeOut        time.Duration                `json:"sync_data_time_out"`
     BackendRebalanceStatus []map[string]*MigrationInfo  `json:"backend_re_balance_status"`
     BackendRecoveryStatus  []map[string]*MigrationInfo  `json:"backend_recovery_status"`
     BackendResyncStatus    []map[string]*MigrationInfo  `json:"backend_resync_status"`
@@ -60,7 +60,7 @@ func NewProxy(file string) *Proxy {
     proxy.BackendRebalanceStatus = make([]map[string]*MigrationInfo, len(proxy.Circles))
     proxy.BackendRecoveryStatus = make([]map[string]*MigrationInfo, len(proxy.Circles))
     proxy.BackendResyncStatus = make([]map[string]*MigrationInfo, len(proxy.Circles))
-    util.CheckPathAndCreate(proxy.FailDataDir)
+    util.CheckPathAndCreate(proxy.DataDir)
     for circleNum, circle := range proxy.Circles {
         circle.CircleNum = circleNum
         proxy.initMigration(circle, circleNum)
@@ -88,7 +88,7 @@ func loadProxyJson(file string) *Proxy {
 // initCircle 初始化哈希环
 func (proxy *Proxy) initCircle(circle *Circle) {
     circle.Router = util.NewConsistent()
-    circle.Router.NumberOfReplicas = proxy.NumberOfReplicas
+    circle.Router.NumberOfReplicas = proxy.VNodeSize
     circle.UrlToBackend = make(map[string]*Backend)
     circle.BackendWgMap = make(map[string]*sync.WaitGroup)
     circle.WgMigrate = &sync.WaitGroup{}
@@ -110,7 +110,7 @@ func (proxy *Proxy) initBackend(circle *Circle, backend *Backend) {
     backend.LockFile = &sync.RWMutex{}
     backend.Client = &http.Client{}
     backend.Active = true
-    backend.CreateCacheFile(proxy.FailDataDir)
+    backend.CreateCacheFile(proxy.DataDir)
     backend.Transport = new(http.Transport)
     if backend.MigrateCpuCores == 0 {
         backend.MigrateCpuCores = 1
@@ -121,7 +121,7 @@ func (proxy *Proxy) initBackend(circle *Circle, backend *Backend) {
         backend.BufferMap[db] = &BufferCounter{Buffer: &bytes.Buffer{}}
     }
     go backend.CheckActive()
-    go backend.CheckBufferAndSync(proxy.SyncDataTimeOut)
+    go backend.CheckBufferAndSync(proxy.FlushTime)
     go backend.SyncFileData()
 }
 
@@ -175,7 +175,7 @@ func (proxy *Proxy) WriteData(data *LineData) error {
 
     // 顺序存储到多个备份节点上
     for _, backend := range backends {
-        err := backend.WriteDataToBuffer(data, proxy.BackendBufferMaxNum)
+        err := backend.WriteDataToBuffer(data, proxy.FlushSize)
         if err != nil {
             util.Log.Errorf("backend:%+v request data:%+v err:%+v", backend.Url, data, err)
             return err

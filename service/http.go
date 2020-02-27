@@ -47,7 +47,7 @@ func (hs *HttpService)HandlerEncrypt(w http.ResponseWriter, req *http.Request)  
         return
     }
     ctx := req.URL.Query().Get("ctx")
-    encrypt := util.AesEncrypt(ctx, util.CIPHER_KEY)
+    encrypt := util.AesEncrypt(ctx, util.CipherKey)
     w.WriteHeader(200)
     w.Write([]byte(encrypt))
 }
@@ -582,11 +582,11 @@ func (hs *HttpService) checkAuth(r *http.Request) bool {
         return true
     }
     u, p := r.URL.Query().Get("u"), r.URL.Query().Get("p")
-    if util.AesEncrypt(u, util.CIPHER_KEY) == hs.Username && util.AesEncrypt(p, util.CIPHER_KEY) == hs.Password  {
+    if util.AesEncrypt(u, util.CipherKey) == hs.Username && util.AesEncrypt(p, util.CipherKey) == hs.Password  {
         return true
     }
     u, p, ok := r.BasicAuth()
-    if ok && util.AesEncrypt(u, util.CIPHER_KEY) == hs.Username && util.AesEncrypt(p, util.CIPHER_KEY) == hs.Password {
+    if ok && util.AesEncrypt(u, util.CipherKey) == hs.Username && util.AesEncrypt(p, util.CipherKey) == hs.Password {
         return true
     }
     return false
