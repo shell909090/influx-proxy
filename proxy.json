@@ -20,10 +20,7 @@
     ],
     "listen_addr": ":7076",
     "data_dir": "data",
-    "db_list": [
-        "db1",
-        "db2"
-    ],
+    "db_list": ["db1", "db2"],
     "vnode_size": 256,
     "flush_size": 5000,
     "flush_time": 1,
