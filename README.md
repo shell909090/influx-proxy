@@ -114,12 +114,12 @@ Only support match the following commands.
 
 * `.* from .*`
 * `drop measurement`
-* `show databases`
-* `show series`
 * `show measurements`
-* `show tag keys`
+* `show series`
 * `show field keys`
+* `show tag keys`
 * `show retention policies`
+* `show databases`
 
 License
 -------

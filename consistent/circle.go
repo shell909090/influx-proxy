@@ -65,9 +65,9 @@ func (circle *Circle) QueryCluster(req *http.Request, backends []*Backend) ([]by
     // 针对集群语句特征执行不同的聚合过程
     q := strings.ToLower(strings.TrimSpace(req.FormValue("q")))
     if strings.HasPrefix(q, "show") {
-        if strings.Contains(q, "databases") || strings.Contains(q, "series") || strings.Contains(q, "measurements") {
+        if strings.Contains(q, "measurements") || strings.Contains(q, "databases") || strings.Contains(q, "series") {
             return circle.reduceByValues(bodies)
-        } else if (strings.Contains(q, "tag") || strings.Contains(q, "field")) && strings.Contains(q, "keys") {
+        } else if (strings.Contains(q, "field") || strings.Contains(q, "tag")) && strings.Contains(q, "keys") {
             return circle.reduceBySeries(bodies)
         } else if strings.Contains(q, "retention") && strings.Contains(q, "policies") {
             return circle.concatByValues(bodies)

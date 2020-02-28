@@ -201,21 +201,36 @@ func (proxy *Proxy) DeleteBackend(backendUrls []string) ([]*Backend, error) {
     return res, nil
 }
 
-func (proxy *Proxy) ForbidQuery(s string) {
-    r, _ := regexp.Compile(s)
-    proxy.ForbiddenQuery = append(proxy.ForbiddenQuery, r)
-    return
+func (proxy *Proxy) ForbidQuery(cmds []string) {
+    for _, cmd := range cmds {
+        r, err := regexp.Compile(cmd)
+        if err != nil {
+            panic(err)
+            return
+        }
+        proxy.ForbiddenQuery = append(proxy.ForbiddenQuery, r)
+    }
 }
 
-func (proxy *Proxy) EnsureQuery(s string) {
-    r, _ := regexp.Compile(s)
-    proxy.ObligatedQuery = append(proxy.ObligatedQuery, r)
-    return
+func (proxy *Proxy) EnsureQuery(cmds []string) {
+    for _, cmd := range cmds {
+        r, err := regexp.Compile(cmd)
+        if err != nil {
+            panic(err)
+            return
+        }
+        proxy.ObligatedQuery = append(proxy.ObligatedQuery, r)
+    }
 }
-func (proxy *Proxy) ClusterQuery(s string) {
-    r, _ := regexp.Compile(s)
-    proxy.ClusteredQuery = append(proxy.ClusteredQuery, r)
-    return
+func (proxy *Proxy) ClusterQuery(cmds []string) {
+    for _, cmd := range cmds {
+        r, err := regexp.Compile(cmd)
+        if err != nil {
+            panic(err)
+            return
+        }
+        proxy.ClusteredQuery = append(proxy.ClusteredQuery, r)
+    }
 }
 
 func (proxy *Proxy) CheckMeasurementQuery(q string) error {
