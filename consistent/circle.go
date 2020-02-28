@@ -67,26 +67,26 @@ func (circle *Circle) QueryCluster(req *http.Request, backends []*Backend) ([]by
     if strings.HasPrefix(q, "show") {
         if strings.Contains(q, "databases") || strings.Contains(q, "series") || strings.Contains(q, "measurements") {
             return circle.reduceByValues(bodies)
-        } else if strings.Contains(q, "keys") {
+        } else if (strings.Contains(q, "tag") || strings.Contains(q, "field")) && strings.Contains(q, "keys") {
             return circle.reduceBySeries(bodies)
+        } else if strings.Contains(q, "retention") && strings.Contains(q, "policies") {
+            return circle.concatByValues(bodies)
         }
     }
     return nil, nil
 }
 
-func (circle *Circle) reduceByValues(bodies [][]byte) (rBody []byte, err error) {
+func (circle *Circle) reduceByValues(bodies [][]byte) (body []byte, err error) {
     valuesMap := make(map[string]*models.Row)
-    for _, body := range bodies {
-        _series, _err := SeriesFromResponseBytes(body)
+    for _, b := range bodies {
+        _series, _err := SeriesFromResponseBytes(b)
         if _err != nil {
-            util.Log.Errorf("err:%+v", _err)
             err = _err
             return
         }
         for _, s := range _series {
             for _, value := range s.Values {
                 if len(value) < 1 {
-                    util.Log.Errorf("value length:%+v value:%+v", len(value), value)
                     continue
                 }
                 key := value[0].(string)
@@ -100,25 +100,20 @@ func (circle *Circle) reduceByValues(bodies [][]byte) (rBody []byte, err error) 
         values = append(values, []interface{}{v})
         serie = s
     }
-    serie.Values = values
     if len(values) > 0 {
-        rBody, err = ResponseBytesFromSeries(models.Rows{serie})
-        if err != nil {
-            util.Log.Errorf("err:%+v", err)
-            return
-        }
+        serie.Values = values
+        body, err = ResponseBytesFromSeries(models.Rows{serie})
     } else {
-        rBody, _ = ResponseBytesFromSeries(nil)
+        body, _ = ResponseBytesFromSeries(nil)
     }
     return
 }
 
-func (circle *Circle) reduceBySeries(bodies [][]byte) (rBody []byte, err error) {
+func (circle *Circle) reduceBySeries(bodies [][]byte) (body []byte, err error) {
     seriesMap := make(map[string]*models.Row)
-    for _, body := range bodies {
-        _series, _err := SeriesFromResponseBytes(body)
+    for _, b := range bodies {
+        _series, _err := SeriesFromResponseBytes(b)
         if _err != nil {
-            util.Log.Errorf("err:%+v", _err)
             err = _err
             return
         }
@@ -131,10 +126,30 @@ func (circle *Circle) reduceBySeries(bodies [][]byte) (rBody []byte, err error) 
     for _, item := range seriesMap {
         series = append(series, item)
     }
-    rBody, err = ResponseBytesFromSeries(series)
-    if err != nil {
-        util.Log.Errorf("err:%+v", err)
+    body, err = ResponseBytesFromSeries(series)
+    return
+}
+
+func (circle *Circle) concatByValues(bodies [][]byte) (body []byte, err error) {
+    var series []*models.Row
+    var values [][]interface{}
+    for _, b := range bodies {
+        _series, _err := SeriesFromResponseBytes(b)
+        if _err != nil {
+            err = _err
+            return
+        }
+        if len(_series) == 1 {
+            series = _series
+            for _, value := range _series[0].Values {
+                values = append(values, value)
+            }
+        }
     }
+    if len(series) == 1 {
+        series[0].Values = values
+    }
+    body, err = ResponseBytesFromSeries(series)
     return
 }
 
