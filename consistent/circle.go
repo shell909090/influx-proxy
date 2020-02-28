@@ -8,6 +8,7 @@ import (
     "io/ioutil"
     "net/http"
     "net/url"
+    "stathat.com/c/consistent"
     "strconv"
     "strings"
     "sync"
@@ -16,7 +17,7 @@ import (
 
 type Circle struct {
     Name           string                     `json:"name"`
-    Router         *util.Consistent           `json:"router"`
+    Router         *consistent.Consistent     `json:"router"`
     Backends       []*Backend                 `json:"backends"`
     UrlToBackend   map[string]*Backend        `json:"url_to_backend"`
     BackendWgMap   map[string]*sync.WaitGroup `json:"backend_wg_map"`

@@ -11,6 +11,7 @@ import (
     "net/url"
     "os"
     "regexp"
+    "stathat.com/c/consistent"
     "strconv"
     "strings"
     "sync"
@@ -87,7 +88,7 @@ func loadProxyJson(file string) *Proxy {
 
 // initCircle 初始化哈希环
 func (proxy *Proxy) initCircle(circle *Circle) {
-    circle.Router = util.NewConsistent()
+    circle.Router = consistent.New()
     circle.Router.NumberOfReplicas = proxy.VNodeSize
     circle.UrlToBackend = make(map[string]*Backend)
     circle.BackendWgMap = make(map[string]*sync.WaitGroup)
