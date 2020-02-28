@@ -369,10 +369,12 @@ func (backend *Backend) CheckActive() {
 func (backend *Backend) Ping() bool {
     resp, err := backend.Client.Get(backend.Url + "/ping")
     if err != nil {
+        util.Log.Print("http error: ", err)
         return false
     }
     defer resp.Body.Close()
     if resp.StatusCode != 204 {
+        util.Log.Printf("ping status code: %d, the backend is %s\n", resp.StatusCode, backend.Url)
         return false
     }
     return true
