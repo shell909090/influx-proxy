@@ -216,16 +216,17 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
     arr := bytes.Split(p, []byte("\n"))
     for _, line := range arr {
         // 数据对象格式是否正确
-        if len(line) == 0 || len(bytes.Split(line, []byte(" "))) < 2 {
+        sections := bytes.Split(line, []byte(" "))
+        if len(line) == 0 || len(sections) < 2 {
             continue
         }
-        measure := line[:bytes.Index(line, []byte(","))]
+        items := bytes.Split(sections[0], []byte(","))
         // 构建一个数据对象
         data := &consistent.LineData{
             Precision: precision,
             Line:      line,
             Db:        db,
-            Measure:   string(measure),
+            Measure:   string(items[0]),
         }
         // 写入buffer
         err = hs.WriteData(data)
