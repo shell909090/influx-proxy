@@ -8,7 +8,10 @@ import (
     "bufio"
     "bytes"
     "errors"
+    "github.com/influxdata/influxdb1-client/models"
+    "io"
     "log"
+    "strconv"
     "strings"
 )
 
@@ -48,6 +51,25 @@ func FindEndWithQuote(data []byte, start int, endchar byte) (end int, unquoted [
     return
 }
 
+func ScanKey(pointbuf []byte) (key string, err error) {
+    keyslice := make([]byte, 0)
+    buflen := len(pointbuf)
+    for i := 0; i < buflen; i++ {
+        c := pointbuf[i]
+        switch c {
+        case '\\':
+            i++
+            keyslice = append(keyslice, pointbuf[i])
+        case ' ', ',':
+            key = string(keyslice)
+            return
+        default:
+            keyslice = append(keyslice, c)
+        }
+    }
+    return "", io.EOF
+}
+
 func ScanToken(data []byte, atEOF bool) (advance int, token []byte, err error) {
     if atEOF && len(data) == 0 {
         return 0, nil, nil
@@ -55,7 +77,7 @@ func ScanToken(data []byte, atEOF bool) (advance int, token []byte, err error) {
 
     start := 0
     for ; start < len(data) && data[start] == ' '; start++ {
-        //fmt.Println("start->",start, data[start])
+        // fmt.Println("start->",start, data[start])
     }
 
     if start == len(data) {
@@ -168,4 +190,48 @@ func getMeasurement(tokens []string) (m string) {
         m = m[1: len(m)-1]
     }
     return
+}
+
+func Int64ToBytes(n int64) []byte {
+    return []byte(strconv.FormatInt(n, 10))
+}
+
+func BytesToInt64(buf []byte) int64 {
+    var res int64 = 0
+    var length = len(buf)
+    for i := 0; i < length; i++ {
+        res = res * 10 + int64(buf[i]-'0')
+    }
+    return res
+}
+
+func ScanTime(buf []byte) (int, bool) {
+    i := len(buf) - 1
+    for ; i >= 0; i-- {
+        if buf[i] < '0' || buf[i] > '9' {
+            break
+        }
+    }
+    return i, i > 0 && i < len(buf) - 1 && (buf[i] == ' ' || buf[i] == '\t' || buf[i] == 0)
+}
+
+func LineToNano(line []byte, precision string) []byte {
+    line = bytes.TrimRight(line, " \t\r\n")
+    if precision != "ns" {
+        if pos, found := ScanTime(line); found {
+            if precision == "u" {
+                return append(line, []byte("000")...)
+            } else if precision == "ms" {
+                return append(line, []byte("000000")...)
+            } else if precision == "s" {
+                return append(line, []byte("000000000")...)
+            } else {
+                mul := models.GetPrecisionMultiplier(precision)
+                nano := BytesToInt64(line[pos+1:]) * mul
+                bytenano := Int64ToBytes(nano)
+                return bytes.Join([][]byte{line[:pos], bytenano}, []byte(" "))
+            }
+        }
+    }
+    return line
 }

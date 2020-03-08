@@ -6,12 +6,10 @@ import (
     "errors"
     "fmt"
     "github.com/chengshiwen/influx-proxy/util"
-    "github.com/influxdata/influxdb1-client/models"
     "net/http"
     "os"
     "regexp"
     "stathat.com/c/consistent"
-    "strconv"
     "strings"
     "sync"
     "time"
@@ -38,10 +36,9 @@ type Proxy struct {
 
 // LineData 数据传输形式
 type LineData struct {
-    Line      []byte `json:"line"`      // 二进制数据
-    Precision string `json:"precision"` // influxDb时间单位
     Db        string `json:"db"`
-    Measure   string `json:"measure"`
+    Line      []byte `json:"line"`
+    Precision string `json:"precision"`
 }
 
 // MigrationInfo 迁移信息
@@ -152,12 +149,17 @@ func (proxy *Proxy) GetMachines(key string) []*Backend {
 }
 
 // WriteData 写入数据操作
-func (proxy *Proxy) WriteData(data *LineData) error {
+func (proxy *Proxy) WriteData(data *LineData) {
     // 根据 Precision 对line做相应的调整
     data.Line = LineToNano(data.Line, data.Precision)
 
+    measure, err := ScanKey(data.Line)
+    if err != nil {
+        util.Log.Errorf("scan key error: %s\n", err)
+        return
+    }
     // 得到对象将要存储的多个备份节点
-    key := data.Db + "," + data.Measure
+    key := data.Db + "," + measure
     backends := proxy.GetMachines(key)
     // fmt.Printf("%s key: %s; backends:", time.Now().Format("2006-01-02 15:04:05"), key)
     // for _, be := range backends {
@@ -166,7 +168,7 @@ func (proxy *Proxy) WriteData(data *LineData) error {
     // fmt.Printf("\n")
     if len(backends) < 1 {
         util.Log.Errorf("request data:%v err:GetMachines length is 0", data)
-        return errors.New("length is zero")
+        return
     }
 
     // 对象如果不是以\n结束的，则加上\n
@@ -179,10 +181,10 @@ func (proxy *Proxy) WriteData(data *LineData) error {
         err := backend.WriteDataToBuffer(data, proxy.FlushSize)
         if err != nil {
             util.Log.Errorf("backend:%+v request data:%+v err:%+v", backend.Url, data, err)
-            return err
+            return
         }
     }
-    return nil
+    return
 }
 
 func (proxy *Proxy) AddBackend(circleNum int) ([]*Backend, error) {
@@ -507,48 +509,4 @@ func (proxy *Proxy) ResyncBackend(backend *Backend, circle *Circle, databases []
             }
         }
     }
-}
-
-func Int64ToBytes(n int64) []byte {
-    return []byte(strconv.FormatInt(n, 10))
-}
-
-func BytesToInt64(buf []byte) int64 {
-    var res int64 = 0
-    var length = len(buf)
-    for i := 0; i < length; i++ {
-        res = res * 10 + int64(buf[i]-'0')
-    }
-    return res
-}
-
-func ScanTime(buf []byte) (int, bool) {
-    i := len(buf) - 1
-    for ; i >= 0; i-- {
-        if buf[i] < '0' || buf[i] > '9' {
-            break
-        }
-    }
-    return i, i > 0 && i < len(buf) - 1 && (buf[i] == ' ' || buf[i] == '\t' || buf[i] == 0)
-}
-
-func LineToNano(line []byte, precision string) []byte {
-    line = bytes.TrimRight(line, " \t\r\n")
-    if precision != "ns" {
-        if pos, found := ScanTime(line); found {
-            if precision == "u" {
-                return append(line, []byte("000")...)
-            } else if precision == "ms" {
-                return append(line, []byte("000000")...)
-            } else if precision == "s" {
-                return append(line, []byte("000000000")...)
-            } else {
-                mul := models.GetPrecisionMultiplier(precision)
-                nano := BytesToInt64(line[pos+1:]) * mul
-                bytenano := Int64ToBytes(nano)
-                return bytes.Join([][]byte{line[:pos], bytenano}, []byte(" "))
-            }
-        }
-    }
-    return line
 }
