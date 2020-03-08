@@ -314,10 +314,10 @@ func (backend *Backend) syncFileDataToDb() {
 // WriteDataToDb 写入对应backend的buffer中
 func (backend *Backend) WriteDataToBuffer(data *LineData, backendBufferMaxNum int) error {
     db := data.Db
-    //获取当前实例中对应db的锁
+    // 获取当前实例中对应db的锁
     backend.LockDbMap[db].Lock()
     defer backend.LockDbMap[db].Unlock()
-    //写数据并判断阈值
+    // 写数据并判断阈值
     backend.BufferMap[db].Buffer.Write(data.Line)
     backend.BufferMap[db].Counter++
 
@@ -459,4 +459,52 @@ func (backend *Backend) Query(req *http.Request) ([]byte, error) {
     }
     res, err := ioutil.ReadAll(resp.Body)
     return res, err
+}
+
+func (backend *Backend) QueryIQL(db, query string) ([]byte, error) {
+    req := &http.Request{Form: url.Values{"db": []string{db}, "q": []string{query}}}
+    return backend.Query(req)
+}
+
+func (backend *Backend) GetSeriesValues(db, query string) []string {
+    req := &http.Request{Form: url.Values{"db": []string{db}, "q": []string{query}}}
+    p, _ := backend.Query(req)
+    series, _ := SeriesFromResponseBytes(p)
+    var values []string
+    for _, s := range series {
+        for _, v := range s.Values {
+            if s.Name == "databases" && v[0].(string) == "_internal" {
+                continue
+            }
+            values = append(values, v[0].(string))
+        }
+    }
+    return values
+}
+
+func (backend *Backend) GetMeasurements(db string) []string {
+    return backend.GetSeriesValues(db, "show measurements")
+}
+
+func (backend *Backend) GetTagKeys(db, measure string) []string {
+    return backend.GetSeriesValues(db, fmt.Sprintf("show tag keys from \"%s\"", measure))
+}
+
+func (backend *Backend) GetFieldKeys(db, measure string) map[string]string {
+    query := fmt.Sprintf("show field keys from \"%s\"", measure)
+    req := &http.Request{Form: url.Values{"db": []string{db}, "q": []string{query}}}
+    p, _ := backend.Query(req)
+    series, _ := SeriesFromResponseBytes(p)
+    fieldKeys := make(map[string]string)
+    for _, s := range series {
+        for _, v := range s.Values {
+            fieldKeys[v[0].(string)] = v[1].(string)
+        }
+    }
+    return fieldKeys
+}
+
+func (backend *Backend) DropMeasurement(db, measure string) ([]byte, error) {
+    req := &http.Request{Form: url.Values{"db": []string{db}, "q": []string{fmt.Sprintf("drop measurement \"%s\"", measure)}}}
+    return backend.Query(req)
 }

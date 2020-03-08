@@ -7,9 +7,7 @@ import (
     "github.com/influxdata/influxdb1-client/models"
     "io/ioutil"
     "net/http"
-    "net/url"
     "stathat.com/c/consistent"
-    "strconv"
     "strings"
     "sync"
     "time"
@@ -34,11 +32,12 @@ type MigrateFlagStatus struct {
 }
 
 func (circle *Circle) CheckStatus() bool {
-    res := true
     for _, backend := range circle.Backends {
-        res = res && backend.Active
+        if !backend.Active {
+            return false
+        }
     }
-    return res
+    return true
 }
 
 // 执行 show 查询操作
@@ -65,6 +64,7 @@ func (circle *Circle) QueryCluster(req *http.Request, backends []*Backend) ([]by
 
     // 针对集群语句特征执行不同的聚合过程
     q := strings.ToLower(strings.TrimSpace(req.FormValue("q")))
+    // fmt.Printf("%s circle: %s; query: %s\n", time.Now().Format("2006-01-02 15:04:05"), circle.Name, q)
     if strings.HasPrefix(q, "show") {
         if strings.Contains(q, "measurements") || strings.Contains(q, "databases") || strings.Contains(q, "series") {
             return circle.reduceByValues(bodies)
@@ -170,40 +170,21 @@ func (circle *Circle) Query(req *http.Request) ([]byte, error) {
         return nil, e
     }
     backend := circle.UrlToBackend[backendUrl]
+    // fmt.Printf("%s key: %s; backend: %s %s; query: %s\n", time.Now().Format("2006-01-02 15:04:05"), key, backend.Name, backend.Url, q)
     return backend.Query(req)
 }
 
-func (circle *Circle) GetSeriesValues(req *http.Request, backends []*Backend) []string {
-    p, _ := circle.QueryCluster(req, backends)
-    res, _ := SeriesFromResponseBytes(p)
-    var databases []string
-    for _, v := range res {
-        for _, vv := range v.Values {
-            if vv[0] == "_internal" {
-                continue
-            }
-            databases = append(databases, vv[0].(string))
-        }
-    }
-    return databases
-}
-
 func (circle *Circle) Migrate(srcBackend *Backend, dstBackends []*Backend, db, measure string, lastSeconds int) error {
-    timeLimitStr := ""
+    timeClause := ""
     if lastSeconds > 0 {
-        timeLimitStr = fmt.Sprintf(" where time >= %ds", time.Now().Unix()-int64(lastSeconds))
+        timeClause = fmt.Sprintf(" where time >= %ds", time.Now().Unix()-int64(lastSeconds))
     }
 
-    dataReq := &http.Request{
-        Form:   url.Values{"q": []string{fmt.Sprintf("select * from \"%s\"%s", measure, timeLimitStr)}, "db": []string{db}},
-        Header: http.Header{"User-Agent": []string{"curl/7.54.0"}, "Accept": []string{"*/*"}},
-    }
-    res, err := srcBackend.Query(dataReq)
+    rsp, err := srcBackend.QueryIQL(db, fmt.Sprintf("select * from \"%s\"%s", measure, timeClause))
     if err != nil {
         return err
     }
-
-    series, err := SeriesFromResponseBytes(res)
+    series, err := SeriesFromResponseBytes(rsp)
     if err != nil {
         return err
     }
@@ -212,22 +193,43 @@ func (circle *Circle) Migrate(srcBackend *Backend, dstBackends []*Backend, db, m
     }
     columns := series[0].Columns
 
-    tagReq := &http.Request{
-        Form:   url.Values{"q": []string{fmt.Sprintf("show tag keys from \"%s\"%s", measure, timeLimitStr)}, "db": []string{db}},
-        Header: http.Header{"User-Agent": []string{"curl/7.54.0"}, "Accept": []string{"*/*"}},
+    tagKeys := srcBackend.GetTagKeys(db, measure)
+    tagMap := make(map[string]bool, 0)
+    for _, t := range tagKeys {
+        tagMap[t] = true
     }
-    tags := circle.GetSeriesValues(tagReq, []*Backend{srcBackend})
+    fieldKeys := srcBackend.GetFieldKeys(db, measure)
 
-    fieldReq := &http.Request{
-        Form:   url.Values{"q": []string{fmt.Sprintf("show field keys from \"%s\"%s", measure, timeLimitStr)}, "db": []string{db}},
-        Header: http.Header{"User-Agent": []string{"curl/7.54.0"}, "Accept": []string{"*/*"}},
-    }
-    fields := circle.GetSeriesValues(fieldReq, []*Backend{srcBackend})
-
+    vlen := len(series[0].Values)
     var lines []string
-    for key, value := range series[0].Values {
-        columnToValue := make(map[string]string)
-        if key % 20000 == 0 {
+    for idx, value := range series[0].Values {
+        mtagSet := []string{util.EscapeMeasurement(measure)}
+        fieldSet := make([]string, 0)
+        for i := 1; i < len(value); i++ {
+            k := columns[i]
+            v := value[i]
+            if _, ok := tagMap[k]; ok {
+                if v != nil {
+                    mtagSet = append(mtagSet, fmt.Sprintf("%s=%s", util.EscapeTag(k), util.EscapeTag(v.(string))))
+                }
+            } else if vtype, ok := fieldKeys[k]; ok {
+                if v != nil {
+                    if vtype == "float" || vtype == "boolean" {
+                        fieldSet = append(fieldSet, fmt.Sprintf("%s=%v", util.EscapeTag(k), v))
+                    } else if vtype == "integer" {
+                        fieldSet = append(fieldSet, fmt.Sprintf("%s=%di", util.EscapeTag(k), int64(v.(float64))))
+                    } else if vtype == "string" {
+                        fieldSet = append(fieldSet, fmt.Sprintf("%s=\"%s\"", util.EscapeTag(k), models.EscapeStringField(v.(string))))
+                    }
+                }
+            }
+        }
+        mtagStr := strings.Join(mtagSet, ",")
+        fieldStr := strings.Join(fieldSet, ",")
+        ts, _ := time.Parse(time.RFC3339Nano, value[0].(string))
+        line := fmt.Sprintf("%s %s %d", mtagStr, fieldStr, ts.UnixNano())
+        lines = append(lines, line)
+        if (idx + 1) % util.MigrateBatchSize == 0 || idx + 1 == vlen {
             if len(lines) != 0 {
                 lineData := strings.Join(lines, "\n")
                 for _, dstBackend := range dstBackends {
@@ -236,53 +238,8 @@ func (circle *Circle) Migrate(srcBackend *Backend, dstBackends []*Backend, db, m
                         return err
                     }
                 }
+                lines = lines[:0]
             }
-        }
-
-        for k, v := range value {
-            var vStr string
-            switch  v.(type) {
-            case float64:
-                vStr = strconv.FormatFloat(v.(float64), 'f', -1, 64)
-            case bool:
-                if v.(bool) {
-                    vStr = "true"
-                } else {
-                    vStr = "false"
-                }
-            case string:
-                vStr = v.(string)
-            }
-            columnToValue[columns[k]] = columns[k] + "=" + vStr
-        }
-        tagStr := []string{measure}
-        for _, v := range tags {
-            tagStr = append(tagStr, columnToValue[v])
-        }
-        line1 := strings.Join(tagStr, ",")
-
-        fieldStr := make([]string, 0)
-        for _, v := range fields {
-            fieldStr = append(fieldStr, columnToValue[v])
-        }
-
-        line2 := strings.Join(fieldStr, ",")
-
-        timeStr := strings.Split(columnToValue["time"], "=")[1]
-
-        ts, _ := time.Parse(time.RFC3339Nano, timeStr)
-
-        line3 := strconv.FormatInt(ts.UnixNano(), 10)
-
-        line := strings.Join([]string{line1, line2, line3}, " ")
-        lines = append(lines, line)
-    }
-
-    lineData := strings.Join(lines, "\n")
-    for _, dstBackend := range dstBackends {
-        err = dstBackend.Write(db, []byte(lineData), true)
-        if err != nil {
-            return err
         }
     }
     return nil

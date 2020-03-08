@@ -105,13 +105,12 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     // 选出一个状态良好的cluster
     var circle *consistent.Circle
     for {
-        randClusterPos := rand.Intn(len(hs.Circles))
-        circle = hs.Circles[randClusterPos]
+        num := rand.Intn(len(hs.Circles))
+        circle = hs.Circles[num]
         if circle.ReadyMigrating {
             continue
         }
-        status := circle.CheckStatus()
-        if status {
+        if circle.CheckStatus() {
             break
         }
         time.Sleep(time.Microsecond)
@@ -327,7 +326,6 @@ func (hs *HttpService) HandlerGetMigrateFlag(w http.ResponseWriter, req *http.Re
     }
 
     respData, _ := json.Marshal(resp)
-
     w.WriteHeader(http.StatusOK)
     w.Write(respData)
 }

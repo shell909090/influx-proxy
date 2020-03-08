@@ -8,7 +8,6 @@ import (
     "github.com/chengshiwen/influx-proxy/util"
     "github.com/influxdata/influxdb1-client/models"
     "net/http"
-    "net/url"
     "os"
     "regexp"
     "stathat.com/c/consistent"
@@ -146,11 +145,7 @@ func (proxy *Proxy) GetMachines(key string) []*Backend {
             util.Log.Errorf("circleNum:%v key:%+v err:%v", circleNum, key, err)
             continue
         }
-        backend, ok := circle.UrlToBackend[backendUrl]
-        if !ok {
-            util.Log.Errorf("circleNum:%v UrlToBackend:%+v err:%+v", circleNum, circle.UrlToBackend, err)
-            continue
-        }
+        backend := circle.UrlToBackend[backendUrl]
         machines = append(machines, backend)
     }
     return machines
@@ -164,6 +159,11 @@ func (proxy *Proxy) WriteData(data *LineData) error {
     // 得到对象将要存储的多个备份节点
     key := data.Db + "," + data.Measure
     backends := proxy.GetMachines(key)
+    // fmt.Printf("%s key: %s; backends:", time.Now().Format("2006-01-02 15:04:05"), key)
+    // for _, be := range backends {
+    //     fmt.Printf(" %s", be.Name)
+    // }
+    // fmt.Printf("\n")
     if len(backends) < 1 {
         util.Log.Errorf("request data:%v err:GetMachines length is 0", data)
         return errors.New("length is zero")
@@ -282,10 +282,7 @@ func (proxy *Proxy) clearCircle(circle *Circle, backend *Backend, dbs []string) 
     defer circle.WgMigrate.Done()
 
     for _, db := range dbs {
-        // 单独出一个接口 删除接口
-        // deleet old measure
-        req := &http.Request{Form: url.Values{"q": []string{"show measurements"}, "db": []string{db}}}
-        measures := circle.GetSeriesValues(req, []*Backend{backend})
+        measures := backend.GetMeasurements(db)
         fmt.Printf("len-->%d db-->%+v\n", len(measures), db)
         for _, measure := range measures {
             key := db + "," + measure
@@ -297,11 +294,7 @@ func (proxy *Proxy) clearCircle(circle *Circle, backend *Backend, dbs []string) 
 
             if targetBackendUrl != backend.Url {
                 fmt.Printf("src:%+v target:%+v \n", backend.Url, targetBackendUrl)
-                delMeasureReq := &http.Request{
-                    Form:   url.Values{"q": []string{fmt.Sprintf("drop measurement \"%s\" ", measure)}, "db": []string{db}},
-                    Header: http.Header{"User-Agent": []string{"curl/7.54.0"}, "Accept": []string{"*/*"}},
-                }
-                _, e := backend.Query(delMeasureReq)
+                _, e := backend.DropMeasurement(db, measure)
                 if e != nil {
                     util.Log.Errorf("err:%+v", e)
                     continue
@@ -346,6 +339,7 @@ func (proxy *Proxy) Rebalance(backends []*Backend, circleNum int, databases []st
     }
     circle.WgMigrate.Wait()
     circle.SetIsMigrating(false)
+    util.RebalanceLog.Infof("rebalance done")
 }
 
 func (proxy *Proxy) RebalanceBackend(backend *Backend, circleNum int, databases []string) {
@@ -361,8 +355,7 @@ func (proxy *Proxy) RebalanceBackend(backend *Backend, circleNum int, databases 
         // 设置进度 db
         proxy.BackendRebalanceStatus[circleNum][backend.Url].Database = db
         // 获取db的measurement列表
-        req := &http.Request{Form: url.Values{"q": []string{"show measurements"}, "db": []string{db}}}
-        measures := circle.GetSeriesValues(req, []*Backend{backend})
+        measures := backend.GetMeasurements(db)
         // 设置进度  BackendMeasureTotal
         proxy.BackendRebalanceStatus[circleNum][backend.Url].BackendMeasureTotal = len(measures)
 
@@ -416,6 +409,7 @@ func (proxy *Proxy) Recovery(fromCircleNum, toCircleNum int, recoveryBackendUrls
         go proxy.RecoveryBackend(backend, fromCircle, toCircle, recoveryBackendUrlMap, databases)
     }
     fromCircle.WgMigrate.Wait()
+    util.RecoveryLog.Infof("recovery done")
 }
 
 func (proxy *Proxy) RecoveryBackend(backend *Backend, fromCircle, toCircle *Circle, recoveryBackendUrlMap map[string]bool, databases []string) {
@@ -427,8 +421,7 @@ func (proxy *Proxy) RecoveryBackend(backend *Backend, fromCircle, toCircle *Circ
     proxy.BackendRecoveryStatus[fromCircleNum][backend.Url].CircleNum = fromCircleNum
     for _, db := range databases {
         proxy.BackendRecoveryStatus[fromCircleNum][backend.Url].Database = db
-        req := &http.Request{Form: url.Values{"q": []string{"show measurements"}, "db": []string{db}}}
-        measures := fromCircle.GetSeriesValues(req, []*Backend{backend})
+        measures := backend.GetMeasurements(db)
         proxy.BackendRecoveryStatus[fromCircleNum][backend.Url].BackendMeasureTotal = len(measures)
         for k, measure := range measures {
             proxy.BackendRecoveryStatus[fromCircleNum][backend.Url].Measurement = measure
@@ -468,7 +461,9 @@ func (proxy *Proxy) Resync(databases []string, lastSeconds int) {
         }
         circle.WgMigrate.Wait()
         circle.SetIsMigrating(false)
+        util.ResyncLog.Infof("resync %s(circle %d) done", circle.Name, circle.CircleNum)
     }
+    util.ResyncLog.Infof("resync done")
 }
 
 func (proxy *Proxy) ResyncBackend(backend *Backend, circle *Circle, databases []string, lastSeconds int) {
@@ -480,8 +475,7 @@ func (proxy *Proxy) ResyncBackend(backend *Backend, circle *Circle, databases []
     proxy.BackendResyncStatus[circleNum][backend.Url].CircleNum = circleNum
     for _, db := range databases {
         proxy.BackendResyncStatus[circleNum][backend.Url].Database = db
-        req := &http.Request{Form: url.Values{"q": []string{"show measurements"}, "db": []string{db}}}
-        measures := circle.GetSeriesValues(req, []*Backend{backend})
+        measures := backend.GetMeasurements(db)
         proxy.BackendResyncStatus[circleNum][backend.Url].BackendMeasureTotal = len(measures)
         for k, measure := range measures {
             proxy.BackendResyncStatus[circleNum][backend.Url].Measurement = measure
@@ -528,20 +522,20 @@ func BytesToInt64(buf []byte) int64 {
     return res
 }
 
-func ScanTime(buf []byte) (bool, int) {
+func ScanTime(buf []byte) (int, bool) {
     i := len(buf) - 1
     for ; i >= 0; i-- {
         if buf[i] < '0' || buf[i] > '9' {
             break
         }
     }
-    return i > 0 && i < len(buf) - 1 && (buf[i] == ' ' || buf[i] == '\t' || buf[i] == 0), i
+    return i, i > 0 && i < len(buf) - 1 && (buf[i] == ' ' || buf[i] == '\t' || buf[i] == 0)
 }
 
 func LineToNano(line []byte, precision string) []byte {
     line = bytes.TrimRight(line, " \t\r\n")
     if precision != "ns" {
-        if found, pos := ScanTime(line); found {
+        if pos, found := ScanTime(line); found {
             if precision == "u" {
                 return append(line, []byte("000")...)
             } else if precision == "ms" {

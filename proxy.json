@@ -16,6 +16,23 @@
                     "password": "lcVJtnUr4XhdgIOMm1sLHg=="
                 }
             ]
+        },
+        {
+            "name": "circle-2",
+            "backends": [
+                {
+                    "name": "influxdb-2-1",
+                    "url": "http://127.0.0.1:8088",
+                    "username": "PlfN1qeCOpETSk7RGLVqCg==",
+                    "password": "lcVJtnUr4XhdgIOMm1sLHg=="
+                },
+                {
+                    "name": "influxdb-2-2",
+                    "url": "http://127.0.0.1:8089",
+                    "username": "PlfN1qeCOpETSk7RGLVqCg==",
+                    "password": "lcVJtnUr4XhdgIOMm1sLHg=="
+                }
+            ]
         }
     ],
     "listen_addr": ":7076",
