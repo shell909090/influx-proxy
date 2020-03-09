@@ -4,7 +4,7 @@ import (
     "bytes"
     "compress/gzip"
     "encoding/json"
-    "github.com/chengshiwen/influx-proxy/consistent"
+    "github.com/chengshiwen/influx-proxy/backend"
     "github.com/chengshiwen/influx-proxy/util"
     "io/ioutil"
     "math/rand"
@@ -17,7 +17,7 @@ import (
 )
 
 type HttpService struct {
-    *consistent.Proxy
+    *backend.Proxy
 }
 
 // Register 注册http方法
@@ -103,7 +103,7 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     }
 
     // 选出一个状态良好的cluster
-    var circle *consistent.Circle
+    var circle *backend.Circle
     for {
         num := rand.Intn(len(hs.Circles))
         circle = hs.Circles[num]
@@ -217,7 +217,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
         if len(line) == 0 {
             continue
         }
-        data := &consistent.LineData{
+        data := &backend.LineData{
             Db:        db,
             Line:      line,
             Precision: precision,
@@ -305,9 +305,9 @@ func (hs *HttpService) HandlerGetMigrateFlag(w http.ResponseWriter, req *http.Re
     defer req.Body.Close()
     hs.AddHeader(w)
 
-    resp := make([]*consistent.MigrateFlagStatus, len(hs.Circles))
+    resp := make([]*backend.MigrateFlagStatus, len(hs.Circles))
     for k, v := range hs.Circles {
-        resp[k] = &consistent.MigrateFlagStatus{
+        resp[k] = &backend.MigrateFlagStatus{
             ReadyMigratingFlag: v.ReadyMigrating,
             IsMigratingFlag: v.IsMigrating,
         }
@@ -347,7 +347,7 @@ func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request
     }
 
     // add or del backend in circle
-    var backends []*consistent.Backend
+    var backends []*backend.Backend
     if operateType == "add" {
         // 当前所有的实例列表
         backends, err = hs.AddBackend(circleNum)
@@ -378,10 +378,10 @@ func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request
         }
 
         // backends也已经删除需要创建一个进度状态信息
-        for _, backend := range backends {
-            hs.BackendRebalanceStatus[circleNum][backend.Url] = &consistent.MigrationInfo{}
-            hs.Circles[circleNum].BackendWgMap[backend.Url] = &sync.WaitGroup{}
-            backend.MigrateCpuCores = cpuCores
+        for _, be := range backends {
+            hs.BackendRebalanceStatus[circleNum][be.Url] = &backend.MigrationInfo{}
+            hs.Circles[circleNum].BackendWgMap[be.Url] = &sync.WaitGroup{}
+            be.MigrateCpuCores = cpuCores
         }
         for _, backend := range hs.Circles[circleNum].Backends {
             backends = append(backends, backend)

@@ -1,4 +1,4 @@
-package consistent
+package backend
 
 import (
     "encoding/json"
