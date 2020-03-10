@@ -34,8 +34,6 @@ type Backend struct {
     FileConsumerPos *os.File                    `json:"file_consumer_pos"` // backend 消费者位置信息
     Client          *http.Client                `json:"client"`            // backend influxDb 客户端
     Active          bool                        `json:"active"`            // backend http客户端状态
-    SyncFailedData  bool                        `json:"sync_failed_data"`  // backend 是否正在同步失败时
-    MigrateCpuCores int                         `json:"migrate_cpu_cores"` // backend 限制迁移时可用内核数
     LockDbMap       map[string]*sync.RWMutex    `json:"lock_db_map"`       // backend 锁
     LockFile        *sync.RWMutex               `json:"lock_file"`
     Transport       *http.Transport             `json:"transport"`

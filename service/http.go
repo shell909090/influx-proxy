@@ -346,6 +346,14 @@ func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request
         dbs = strings.Split(db, ",")
     }
 
+    cpus, err := strconv.Atoi(req.FormValue("cpus"))
+    if err != nil || cpus <= 0 {
+        w.WriteHeader(http.StatusBadRequest)
+        w.Write([]byte("invalid cpus\n"))
+        return
+    }
+    hs.MigrateMaxCpus = cpus
+
     // add or del backend in circle
     var backends []*backend.Backend
     if operateType == "add" {
@@ -370,18 +378,11 @@ func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request
             w.Write([]byte(err.Error()))
             return
         }
-        cpuCores, err := strconv.Atoi(req.FormValue("cpu_cores"))
-        if err != nil {
-            w.WriteHeader(http.StatusBadRequest)
-            w.Write([]byte(err.Error()))
-            return
-        }
 
         // backends也已经删除需要创建一个进度状态信息
         for _, be := range backends {
             hs.BackendRebalanceStatus[circleNum][be.Url] = &backend.MigrationInfo{}
             hs.Circles[circleNum].BackendWgMap[be.Url] = &sync.WaitGroup{}
-            be.MigrateCpuCores = cpuCores
         }
         for _, backend := range hs.Circles[circleNum].Backends {
             backends = append(backends, backend)
@@ -442,6 +443,14 @@ func (hs *HttpService) HandlerRecovery(w http.ResponseWriter, req *http.Request)
         dbs = strings.Split(db, ",")
     }
 
+    cpus, err := strconv.Atoi(req.FormValue("cpus"))
+    if err != nil || cpus <= 0 {
+        w.WriteHeader(http.StatusBadRequest)
+        w.Write([]byte("invalid cpus\n"))
+        return
+    }
+    hs.MigrateMaxCpus = cpus
+
     // 判断迁移是否已就绪
     if !hs.Circles[toCircleNum].ReadyMigrating {
         w.WriteHeader(http.StatusBadRequest)
@@ -483,6 +492,14 @@ func (hs *HttpService) HandlerResync(w http.ResponseWriter, req *http.Request) {
     if db != "" {
         dbs = strings.Split(db, ",")
     }
+
+    cpus, err := strconv.Atoi(req.FormValue("cpus"))
+    if err != nil || cpus <= 0 {
+        w.WriteHeader(http.StatusBadRequest)
+        w.Write([]byte("invalid cpus\n"))
+        return
+    }
+    hs.MigrateMaxCpus = cpus
 
     lastSecondsStr := req.FormValue("last_seconds")
     if lastSecondsStr == "" {

@@ -24,6 +24,7 @@ type Proxy struct {
     VNodeSize              int                          `json:"vnode_size"`  // 虚拟节点数
     FlushSize              int                          `json:"flush_size"`  // 实例的缓冲区大小
     FlushTime              time.Duration                `json:"flush_time"`  // 实例的缓冲清空时间
+    MigrateMaxCpus         int                          `json:"migrate_max_cpus"` // 迁移时可用cpu数
     ForbiddenQuery         []*regexp.Regexp             `json:"forbidden_query"`
     ObligatedQuery         []*regexp.Regexp             `json:"obligated_query"`
     ClusteredQuery         []*regexp.Regexp             `json:"clustered_query"`
@@ -58,6 +59,9 @@ func NewProxy(file string) *Proxy {
     proxy.BackendRecoveryStatus = make([]map[string]*MigrationInfo, len(proxy.Circles))
     proxy.BackendResyncStatus = make([]map[string]*MigrationInfo, len(proxy.Circles))
     util.CheckPathAndCreate(proxy.DataDir)
+    if proxy.MigrateMaxCpus == 0 {
+        proxy.MigrateMaxCpus = 1
+    }
     for circleNum, circle := range proxy.Circles {
         circle.CircleNum = circleNum
         proxy.initMigration(circle, circleNum)
@@ -109,9 +113,6 @@ func (proxy *Proxy) initBackend(circle *Circle, backend *Backend) {
     backend.Active = true
     backend.CreateCacheFile(proxy.DataDir)
     backend.Transport = new(http.Transport)
-    if backend.MigrateCpuCores == 0 {
-        backend.MigrateCpuCores = 1
-    }
 
     for _, db := range proxy.DbList {
         backend.LockDbMap[db] = new(sync.RWMutex)
@@ -380,7 +381,7 @@ func (proxy *Proxy) RebalanceBackend(backend *Backend, circleNum int, databases 
                 migrateCount++
                 circle.BackendWgMap[backend.Url].Add(1)
                 go proxy.Migrate(backend, []*Backend{dstBackend}, circle, db, measure, 0)
-                if migrateCount % backend.MigrateCpuCores == 0 {
+                if migrateCount % proxy.MigrateMaxCpus == 0 {
                     circle.BackendWgMap[backend.Url].Wait()
                 }
             } else {
@@ -441,7 +442,7 @@ func (proxy *Proxy) RecoveryBackend(backend *Backend, fromCircle, toCircle *Circ
                 migrateCount++
                 fromCircle.BackendWgMap[backend.Url].Add(1)
                 go proxy.Migrate(backend, []*Backend{dstBackend}, fromCircle, db, measure, 0)
-                if migrateCount % backend.MigrateCpuCores == 0 {
+                if migrateCount % proxy.MigrateMaxCpus == 0 {
                     fromCircle.BackendWgMap[backend.Url].Wait()
                 }
             } else {
@@ -501,7 +502,7 @@ func (proxy *Proxy) ResyncBackend(backend *Backend, circle *Circle, databases []
                 migrateCount++
                 circle.BackendWgMap[backend.Url].Add(1)
                 go proxy.Migrate(backend, dstBackends, circle, db, measure, lastSeconds)
-                if migrateCount % backend.MigrateCpuCores == 0 {
+                if migrateCount % proxy.MigrateMaxCpus == 0 {
                     circle.BackendWgMap[backend.Url].Wait()
                 }
             } else {

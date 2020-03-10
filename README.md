@@ -88,13 +88,13 @@ The configurations in `proxy.json` are the following:
     * `url`: influxdb addr or other http backend which supports influxdb line protocol
     * `username`: influxdb username with encryption
     * `password`: influxdb password with encryption
-    * `migrate_cpu_cores`: max cpu cores when migrating such as rebalance, recovery or resync
 * `listen_addr`: proxy listen addr
 * `data_dir`: data dir to save .dat .rec, default is data
 * `db_list`: database list allowed to access
 * `vnode_size`: the size of virtual nodes for consistent hash
 * `flush_size`: default config is 5000, wait 5000 points write
 * `flush_time`: default config is 1s, wait 1 second write whether point count has bigger than flush_size config
+* `migrate_max_cpus`: max cpus when migrating such as rebalance, recovery or resync
 * `username`: proxy username with encryption
 * `password`: proxy password with encryption
 
