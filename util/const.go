@@ -21,6 +21,7 @@ var (
     ClusterCmds = []string{
         "(?i:^show\\s+measurements|^show\\s+series|^show\\s+databases$)",
         "(?i:^show\\s+field\\s+keys|^show\\s+tag\\s+keys)",
+        "(?i:^show\\s+stats)",
         "(?i:^show\\s+retention\\s+policies)",
     }
 )

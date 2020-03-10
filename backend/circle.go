@@ -66,10 +66,12 @@ func (circle *Circle) QueryCluster(req *http.Request, backends []*Backend) ([]by
     q := strings.ToLower(strings.TrimSpace(req.FormValue("q")))
     // fmt.Printf("%s circle: %s; query: %s\n", time.Now().Format("2006-01-02 15:04:05"), circle.Name, q)
     if strings.HasPrefix(q, "show") {
-        if strings.Contains(q, "measurements") || strings.Contains(q, "databases") || strings.Contains(q, "series") {
+        if strings.Contains(q, "measurements") || strings.Contains(q, "series") || strings.Contains(q, "databases") {
             return circle.reduceByValues(bodies)
         } else if (strings.Contains(q, "field") || strings.Contains(q, "tag")) && strings.Contains(q, "keys") {
             return circle.reduceBySeries(bodies)
+        } else if strings.Contains(q, "stats") {
+            return circle.concatByResults(bodies)
         } else if strings.Contains(q, "retention") && strings.Contains(q, "policies") {
             return circle.concatByValues(bodies)
         }
@@ -128,6 +130,22 @@ func (circle *Circle) reduceBySeries(bodies [][]byte) (body []byte, err error) {
         series = append(series, item)
     }
     body, err = ResponseBytesFromSeries(series)
+    return
+}
+
+func (circle *Circle) concatByResults(bodies [][]byte) (body []byte, err error) {
+    var results []*Result
+    for _, b := range bodies {
+        _results, _err := ResultsFromResponseBytes(b)
+        if _err != nil {
+            err = _err
+            return
+        }
+        if len(_results) == 1 {
+            results = append(results, _results[0])
+        }
+    }
+    body, err = ResponseBytesFromResults(results)
     return
 }
 

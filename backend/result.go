@@ -29,24 +29,45 @@ type Response struct {
     Err     string    `json:"error,omitempty"`
 }
 
-func SeriesFromResponseBytes(b []byte) (series models.Rows, err error) {
+func SeriesFromResponseBytes(b []byte) (series models.Rows, e error) {
     var rsp Response
-    err = json.Unmarshal(b, &rsp)
-    if err == nil && len(rsp.Results) > 0 && len(rsp.Results[0].Series) > 0 {
+    e = json.Unmarshal(b, &rsp)
+    if e == nil && len(rsp.Results) > 0 && len(rsp.Results[0].Series) > 0 {
         series = rsp.Results[0].Series
     }
     return
 }
 
-func ResponseBytesFromSeries(series models.Rows) (b []byte, err error) {
+func ResponseBytesFromSeries(series models.Rows) (b []byte, e error) {
     r := &Result{
         Series: series,
     }
     rsp := Response{
         Results: []*Result{r},
     }
-    b, err = json.Marshal(rsp)
-    if err != nil {
+    b, e = json.Marshal(rsp)
+    if e != nil {
+        return
+    }
+    b = append(b, '\n')
+    return
+}
+
+func ResultsFromResponseBytes(b []byte) (results []*Result, e error) {
+    var rsp Response
+    e = json.Unmarshal(b, &rsp)
+    if e == nil && len(rsp.Results) > 0 {
+        results = rsp.Results
+    }
+    return
+}
+
+func ResponseBytesFromResults(results []*Result) (b []byte, e error) {
+    rsp := Response{
+        Results: results,
+    }
+    b, e = json.Marshal(rsp)
+    if e != nil {
         return
     }
     b = append(b, '\n')

@@ -118,6 +118,7 @@ Only support match the following commands.
 * `show series`
 * `show field keys`
 * `show tag keys`
+* `show stats`
 * `show retention policies`
 * `show databases`
 
