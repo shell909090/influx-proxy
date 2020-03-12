@@ -105,8 +105,9 @@ Query Commands
 
 The following commands are forbid.
 
-* `GRANT`
-* `REVOKE`
+* `grant`
+* `revoke`
+* `select into from`
 
 #### Supported commands
 
@@ -118,6 +119,7 @@ Only support match the following commands.
 * `show series`
 * `show field keys`
 * `show tag keys`
+* `show tag values`
 * `show stats`
 * `show retention policies`
 * `show databases`
