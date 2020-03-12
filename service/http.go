@@ -7,6 +7,7 @@ import (
     "github.com/chengshiwen/influx-proxy/backend"
     "github.com/chengshiwen/influx-proxy/util"
     "io/ioutil"
+    "log"
     "math/rand"
     "net/http"
     "net/http/pprof"
@@ -87,7 +88,7 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
 
     // 检查请求方法
     if req.Method != http.MethodPost && req.Method != http.MethodGet {
-        util.Log.Errorf("method:%+v", req.Method)
+        log.Printf("method:%+v", req.Method)
         w.WriteHeader(http.StatusBadRequest)
         w.Write([]byte("illegal method\n"))
         return
@@ -96,7 +97,7 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     // 检查查询语句
     q := strings.TrimSpace(req.FormValue("q"))
     if q == "" {
-        util.Log.Errorf("query:%+v", q)
+        log.Printf("query:%+v", q)
         w.WriteHeader(http.StatusBadRequest)
         w.Write([]byte("empty query\n"))
         return
@@ -135,7 +136,7 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
                 body, err = circle.QueryCluster(w, req)
             }
             if err != nil {
-                util.Log.Errorf("query cluster:%+v err:%+v", q, err)
+                log.Printf("query cluster:%+v err:%+v", q, err)
                 w.WriteHeader(http.StatusBadRequest)
                 w.Write([]byte(err.Error()))
                 return
@@ -152,7 +153,7 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     // 执行查询
     resp, err := circle.Query(w, req)
     if err != nil {
-        util.Log.Errorf("err:%+v", err)
+        log.Printf("err:%+v", err)
         w.WriteHeader(http.StatusBadRequest)
         w.Write([]byte(err.Error()))
         return
@@ -176,7 +177,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
 
     // 判断http方法
     if req.Method != http.MethodPost {
-        util.Log.Errorf("req.Method:%+v err:nil", req.Method)
+        log.Printf("req.Method:%+v err:nil", req.Method)
         w.WriteHeader(http.StatusMethodNotAllowed)
         w.Write(util.StatusText(http.StatusMethodNotAllowed))
         return
@@ -206,7 +207,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
         b, err := gzip.NewReader(body)
         defer b.Close()
         if err != nil {
-            util.Log.Errorf("err:%+v", err)
+            log.Printf("err:%+v", err)
             w.WriteHeader(http.StatusBadRequest)
             w.Write([]byte(err.Error()))
             return
@@ -216,7 +217,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
     // 读出请求数据
     p, err := ioutil.ReadAll(body)
     if err != nil {
-        util.Log.Errorf("err:%+v", err)
+        log.Printf("err:%+v", err)
         w.WriteHeader(http.StatusBadRequest)
         w.Write([]byte(err.Error()))
         return
@@ -244,7 +245,7 @@ func (hs *HttpService) HandlerClear(w http.ResponseWriter, req *http.Request) {
     hs.AddHeader(w)
 
     if req.Method != http.MethodPost {
-        util.Log.Errorf("req.Method:%+v err:nil", req.Method)
+        log.Printf("req.Method:%+v err:nil", req.Method)
         w.WriteHeader(http.StatusMethodNotAllowed)
         w.Write(util.StatusText(http.StatusMethodNotAllowed))
         return
@@ -559,21 +560,21 @@ func (hs *HttpService) HandlerStatus(w http.ResponseWriter, req *http.Request) {
     if statusType == "rebalance" {
         res, err = json.Marshal(hs.BackendRebalanceStatus[circleNum])
         if err != nil {
-            util.Log.Errorf("err:%+v", err)
+            log.Printf("err:%+v", err)
             w.WriteHeader(http.StatusBadRequest)
             w.Write([]byte(err.Error()))
         }
     } else if statusType == "recovery" {
         res, err = json.Marshal(hs.BackendRecoveryStatus[circleNum])
         if err != nil {
-            util.Log.Errorf("err:%+v", err)
+            log.Printf("err:%+v", err)
             w.WriteHeader(http.StatusBadRequest)
             w.Write([]byte(err.Error()))
         }
     } else if statusType == "resync" {
         res, err = json.Marshal(hs.BackendResyncStatus[circleNum])
         if err != nil {
-            util.Log.Errorf("err:%+v", err)
+            log.Printf("err:%+v", err)
             w.WriteHeader(http.StatusBadRequest)
             w.Write([]byte(err.Error()))
         }

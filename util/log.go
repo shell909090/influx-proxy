@@ -1,48 +1,31 @@
 package util
 
 import (
-    "github.com/sirupsen/logrus"
-    "io"
+    "gopkg.in/natefinch/lumberjack.v2"
+    "log"
     "os"
+    "path/filepath"
 )
 
-var (
-    Log             *logrus.Logger
-    RebalanceLog    *logrus.Logger
-    RecoveryLog     *logrus.Logger
-    ResyncLog       *logrus.Logger
-)
+var Mlog *log.Logger
 
 func init() {
-    CheckPathAndCreate("log")
-    Log = newLogger(os.Stdout)
-
-    rebalanceLogFile, err := os.OpenFile("log/rebalance.log", os.O_WRONLY | os.O_APPEND | os.O_CREATE, 0644)
-    if err != nil {
-        panic(err)
-    }
-    RebalanceLog = newLogger(rebalanceLogFile)
-
-    recoveryLogFile, err := os.OpenFile("log/recovery.log", os.O_WRONLY | os.O_APPEND | os.O_CREATE, 0644)
-    if err != nil {
-        panic(err)
-    }
-    RecoveryLog = newLogger(recoveryLogFile)
-
-    resyncLogFile, err := os.OpenFile("log/resync.log", os.O_WRONLY | os.O_APPEND | os.O_CREATE, 0644)
-    if err != nil {
-        panic(err)
-    }
-    ResyncLog = newLogger(resyncLogFile)
+    log.SetFlags(log.LstdFlags | log.Lmicroseconds | log.Lshortfile)
+    log.SetOutput(os.Stdout)
+    Mlog = log.New(os.Stdout, "", log.LstdFlags | log.Lmicroseconds | log.Lshortfile)
 }
 
-func newLogger(outPut io.Writer) *logrus.Logger {
-    log := logrus.New()
-    log.SetOutput(outPut)
-    log.SetLevel(logrus.InfoLevel)
-    log.SetFormatter(&logrus.TextFormatter{
-        DisableColors: true,
-    })
-    log.ReportCaller = true
-    return log
+func SetMLog(logPath string, prefix string) {
+    Mlog.SetPrefix(prefix)
+    CheckPathAndCreate(filepath.Dir(logPath))
+    if logPath == "" {
+        Mlog.SetOutput(os.Stdout)
+    } else {
+        Mlog.SetOutput(&lumberjack.Logger{
+            Filename:   logPath,
+            MaxSize:    100,
+            MaxBackups: 5,
+            MaxAge:     7,
+        })
+    }
 }

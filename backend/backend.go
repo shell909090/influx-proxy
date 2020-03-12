@@ -432,7 +432,11 @@ func Compress(buf *bytes.Buffer, p []byte) (err error) {
     return
 }
 
-func copyHeader(dst, src http.Header) {
+func NewRequest(db, query string) *http.Request {
+    return &http.Request{Form: url.Values{"db": []string{db}, "q": []string{query}}, Header:make(map[string][]string)}
+}
+
+func CopyHeader(dst, src http.Header) {
     for k, vv := range src {
         for _, v := range vv {
             dst.Set(k, v)
@@ -466,7 +470,7 @@ func (backend *Backend) Query(req *http.Request, w http.ResponseWriter, fromClus
     }
     defer resp.Body.Close()
     if w != nil {
-        copyHeader(w.Header(), resp.Header)
+        CopyHeader(w.Header(), resp.Header)
     }
 
     respBody := resp.Body
@@ -483,13 +487,11 @@ func (backend *Backend) Query(req *http.Request, w http.ResponseWriter, fromClus
 }
 
 func (backend *Backend) QueryIQL(db, query string) ([]byte, error) {
-    req := &http.Request{Form: url.Values{"db": []string{db}, "q": []string{query}}}
-    return backend.Query(req, nil, false)
+    return backend.Query(NewRequest(db, query), nil, false)
 }
 
 func (backend *Backend) GetSeriesValues(db, query string) []string {
-    req := &http.Request{Form: url.Values{"db": []string{db}, "q": []string{query}}}
-    p, _ := backend.Query(req, nil, false)
+    p, _ := backend.Query(NewRequest(db, query), nil, false)
     series, _ := SeriesFromResponseBytes(p)
     var values []string
     for _, s := range series {
@@ -513,8 +515,7 @@ func (backend *Backend) GetTagKeys(db, measure string) []string {
 
 func (backend *Backend) GetFieldKeys(db, measure string) map[string]string {
     query := fmt.Sprintf("show field keys from \"%s\"", measure)
-    req := &http.Request{Form: url.Values{"db": []string{db}, "q": []string{query}}}
-    p, _ := backend.Query(req, nil, false)
+    p, _ := backend.Query(NewRequest(db, query), nil, false)
     series, _ := SeriesFromResponseBytes(p)
     fieldKeys := make(map[string]string)
     for _, s := range series {
@@ -526,6 +527,6 @@ func (backend *Backend) GetFieldKeys(db, measure string) map[string]string {
 }
 
 func (backend *Backend) DropMeasurement(db, measure string) ([]byte, error) {
-    req := &http.Request{Form: url.Values{"db": []string{db}, "q": []string{fmt.Sprintf("drop measurement \"%s\"", measure)}}}
-    return backend.Query(req, nil, false)
+    query := fmt.Sprintf("drop measurement \"%s\"", measure)
+    return backend.Query(NewRequest(db, query), nil, false)
 }

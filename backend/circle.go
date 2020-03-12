@@ -6,6 +6,7 @@ import (
     "github.com/chengshiwen/influx-proxy/util"
     "github.com/influxdata/influxdb1-client/models"
     "io/ioutil"
+    "log"
     "net/http"
     "stathat.com/c/consistent"
     "strings"
@@ -73,7 +74,7 @@ func (circle *Circle) QueryCluster(w http.ResponseWriter, req *http.Request) ([]
         req.Body = ioutil.NopCloser(bytes.NewBuffer(reqBodyBytes))
         body, err := backend.Query(req, w, true)
         if err != nil {
-            util.Log.Errorf("req:%+v err:%+v", req, err)
+            log.Printf("req:%+v err:%+v", req, err)
             return nil, err
         }
         if body != nil {
