@@ -40,8 +40,27 @@ func (circle *Circle) CheckStatus() bool {
     return true
 }
 
-// 执行 show 查询操作
-func (circle *Circle) QueryCluster(req *http.Request, backends []*Backend) ([]byte, error) {
+func (circle *Circle) Query(w http.ResponseWriter, req *http.Request) ([]byte, error) {
+    // 得到key
+    q := req.FormValue("q")
+    measurement, e := GetMeasurementFromInfluxQL(q)
+    if e != nil {
+        return nil, e
+    }
+    db := req.FormValue("db")
+    key := db + "," + measurement
+
+    // 得到目标数据库
+    backendUrl, e := circle.Router.Get(key)
+    if e != nil {
+        return nil, e
+    }
+    backend := circle.UrlToBackend[backendUrl]
+    // fmt.Printf("%s key: %s; backend: %s %s; query: %s\n", time.Now().Format("2006-01-02 15:04:05"), key, backend.Name, backend.Url, q)
+    return backend.Query(req, w, false)
+}
+
+func (circle *Circle) QueryCluster(w http.ResponseWriter, req *http.Request) ([]byte, error) {
     // remove support of query parameter `chunked`
     req.Form.Del("chunked")
     var reqBodyBytes []byte
@@ -50,9 +69,9 @@ func (circle *Circle) QueryCluster(req *http.Request, backends []*Backend) ([]by
     }
     bodies := make([][]byte, 0)
     // 在环内的所有数据库实例上执行查询，再聚合在一起
-    for _, backend := range backends {
+    for _, backend := range circle.Backends {
         req.Body = ioutil.NopCloser(bytes.NewBuffer(reqBodyBytes))
-        body, err := backend.Query(req)
+        body, err := backend.Query(req, w, true)
         if err != nil {
             util.Log.Errorf("req:%+v err:%+v", req, err)
             return nil, err
@@ -63,20 +82,32 @@ func (circle *Circle) QueryCluster(req *http.Request, backends []*Backend) ([]by
     }
 
     // 针对集群语句特征执行不同的聚合过程
+    var body []byte
+    var err error
     q := strings.ToLower(strings.TrimSpace(req.FormValue("q")))
     // fmt.Printf("%s circle: %s; query: %s\n", time.Now().Format("2006-01-02 15:04:05"), circle.Name, q)
     if strings.HasPrefix(q, "show") {
         if strings.Contains(q, "measurements") || strings.Contains(q, "series") || strings.Contains(q, "databases") {
-            return circle.reduceByValues(bodies)
+            body, err = circle.reduceByValues(bodies)
         } else if (strings.Contains(q, "field") || strings.Contains(q, "tag")) && (strings.Contains(q, "keys") || strings.Contains(q, "values")) {
-            return circle.reduceBySeries(bodies)
+            body, err = circle.reduceBySeries(bodies)
         } else if strings.Contains(q, "stats") {
-            return circle.concatByResults(bodies)
+            body, err = circle.concatByResults(bodies)
         } else if strings.Contains(q, "retention") && strings.Contains(q, "policies") {
-            return circle.concatByValues(bodies)
+            body, err = circle.concatByValues(bodies)
         }
     }
-    return nil, nil
+    if err != nil {
+        return nil, err
+    }
+    if body == nil {
+        body, _ = ResponseBytesFromSeries(nil)
+    }
+    if w.Header().Get("Content-Encoding") == "gzip" {
+        return util.GzipCompress(body)
+    } else {
+        return body, nil
+    }
 }
 
 func (circle *Circle) reduceByValues(bodies [][]byte) (body []byte, err error) {
@@ -170,26 +201,6 @@ func (circle *Circle) concatByValues(bodies [][]byte) (body []byte, err error) {
     }
     body, err = ResponseBytesFromSeries(series)
     return
-}
-
-func (circle *Circle) Query(req *http.Request) ([]byte, error) {
-    // 得到key
-    q := req.FormValue("q")
-    measurement, e := GetMeasurementFromInfluxQL(q)
-    if e != nil {
-        return nil, e
-    }
-    db := req.FormValue("db")
-    key := db + "," + measurement
-
-    // 得到目标数据库
-    backendUrl, e := circle.Router.Get(key)
-    if e != nil {
-        return nil, e
-    }
-    backend := circle.UrlToBackend[backendUrl]
-    // fmt.Printf("%s key: %s; backend: %s %s; query: %s\n", time.Now().Format("2006-01-02 15:04:05"), key, backend.Name, backend.Url, q)
-    return backend.Query(req)
 }
 
 func (circle *Circle) Migrate(srcBackend *Backend, dstBackends []*Backend, db, measure string, lastSeconds int) error {

@@ -1,6 +1,9 @@
 package util
 
 import (
+    "bytes"
+    "compress/gzip"
+    "io"
     "net/http"
     "os"
 )
@@ -49,4 +52,20 @@ func CheckPathAndCreate(StoreDir string) {
 
 func StatusText(status int) []byte {
     return []byte(http.StatusText(status) + "\n")
+}
+
+func GzipCompress(b []byte) (cb []byte, err error) {
+    var buf bytes.Buffer
+    zip := gzip.NewWriter(&buf)
+    n, err := zip.Write(b)
+    if err != nil {
+        return
+    }
+    if n != len(b) {
+        err = io.ErrShortWrite
+        return
+    }
+    err = zip.Close()
+    cb = buf.Bytes()
+    return
 }

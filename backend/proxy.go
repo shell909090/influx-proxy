@@ -110,9 +110,9 @@ func (proxy *Proxy) initBackend(circle *Circle, backend *Backend) {
     backend.LockDbMap = make(map[string]*sync.RWMutex)
     backend.LockFile = &sync.RWMutex{}
     backend.Client = &http.Client{}
+    backend.Transport = &http.Transport{}
     backend.Active = true
     backend.CreateCacheFile(proxy.DataDir)
-    backend.Transport = new(http.Transport)
 
     for _, db := range proxy.DbList {
         backend.LockDbMap[db] = new(sync.RWMutex)
@@ -200,7 +200,7 @@ func (proxy *Proxy) AddBackend(circleNum int) ([]*Backend, error) {
 func (proxy *Proxy) DeleteBackend(backendUrls []string) ([]*Backend, error) {
     var res []*Backend
     for _, v := range backendUrls {
-        res = append(res, &Backend{Url: v, Client: &http.Client{}, Transport: new(http.Transport)})
+        res = append(res, &Backend{Url: v, Client: &http.Client{}, Transport: &http.Transport{}})
     }
     return res, nil
 }

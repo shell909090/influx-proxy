@@ -122,7 +122,7 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
         // 检查集群查询语句，如show measurements
         err = hs.CheckClusterQuery(q)
         if err == nil {
-            body, err := circle.QueryCluster(req, circle.Backends)
+            body, err := circle.QueryCluster(w, req)
             if err != nil {
                 util.Log.Errorf("query cluster:%+v err:%+v", q, err)
                 w.WriteHeader(http.StatusBadRequest)
@@ -139,7 +139,7 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     }
 
     // 执行查询
-    resp, err := circle.Query(req)
+    resp, err := circle.Query(w, req)
     if err != nil {
         util.Log.Errorf("err:%+v", err)
         w.WriteHeader(http.StatusBadRequest)

@@ -33,10 +33,10 @@ type Backend struct {
     FileConsumer    *os.File                    `json:"file_consumer"`     // backend 文件内容消费者
     FileConsumerPos *os.File                    `json:"file_consumer_pos"` // backend 消费者位置信息
     Client          *http.Client                `json:"client"`            // backend influxDb 客户端
+    Transport       *http.Transport             `json:"transport"`         // backend influxDb 客户端
     Active          bool                        `json:"active"`            // backend http客户端状态
     LockDbMap       map[string]*sync.RWMutex    `json:"lock_db_map"`       // backend 锁
     LockFile        *sync.RWMutex               `json:"lock_file"`
-    Transport       *http.Transport             `json:"transport"`
 }
 
 // CreateCacheFile 创建缓存文件
@@ -379,11 +379,11 @@ func (backend *Backend) Ping() bool {
 }
 
 // WriteCompress 压缩在写入db
-func (backend *Backend) Write(db string, p []byte, compress bool) error {
+func (backend *Backend) Write(db string, p []byte, compressed bool) error {
     var err error
     var buf *bytes.Buffer
     // 压缩对象
-    if compress {
+    if compressed {
         buf = &bytes.Buffer{}
         err = Compress(buf, p)
         if err != nil {
@@ -395,17 +395,19 @@ func (backend *Backend) Write(db string, p []byte, compress bool) error {
     }
 
     // 发送http请求，写入数据库
-    err = backend.WriteStream(db, buf)
+    err = backend.WriteStream(db, buf, compressed)
     return err
 }
 
 // WriteStream 流式写入db
-func (backend *Backend) WriteStream(db string, stream io.Reader) error {
+func (backend *Backend) WriteStream(db string, stream io.Reader, compressed bool) error {
     q := url.Values{}
     q.Set("db", db)
     req, err := http.NewRequest(http.MethodPost, backend.Url+"/write?"+q.Encode(), stream)
-    req.Header.Add("Content-Encoding", "gzip")
     req.SetBasicAuth(util.AesDecrypt(backend.Username, util.CipherKey), util.AesDecrypt(backend.Password, util.CipherKey))
+    if compressed {
+        req.Header.Add("Content-Encoding", "gzip")
+    }
     resp, err := backend.Client.Do(req)
     if err != nil {
         fmt.Printf("backend.Client.Do err:%+v\n", err)
@@ -442,31 +444,62 @@ func Compress(buf *bytes.Buffer, p []byte) (err error) {
     return
 }
 
-// 发送http查询数据
-func (backend *Backend) Query(req *http.Request) ([]byte, error) {
+func copyHeader(dst, src http.Header) {
+    for k, vv := range src {
+        for _, v := range vv {
+            dst.Set(k, v)
+        }
+    }
+}
+
+func (backend *Backend) Query(req *http.Request, w http.ResponseWriter, fromCluster bool) ([]byte, error) {
     var err error
+    if len(req.Form) == 0 {
+        req.Form = url.Values{}
+    }
     req.Form.Del("u")
     req.Form.Del("p")
-    req, err = http.NewRequest(http.MethodPost, backend.Url+"/query?"+req.Form.Encode(), nil)
-    req.SetBasicAuth(util.AesDecrypt(backend.Username, util.CipherKey), util.AesDecrypt(backend.Password, util.CipherKey))
-    resp, err := backend.Client.Do(req)
-    defer resp.Body.Close()
+    req.ContentLength = 0
+    if backend.Username != "" && backend.Password != "" {
+        req.SetBasicAuth(util.AesDecrypt(backend.Username, util.CipherKey), util.AesDecrypt(backend.Password, util.CipherKey))
+    }
+
+    req.URL, err = url.Parse(backend.Url + "/query?" + req.Form.Encode())
+    if err != nil {
+        util.Log.Errorf("internal url parse error: ", err)
+        return nil, err
+    }
+    resp, err := backend.Transport.RoundTrip(req)
     if err != nil {
         util.Log.Errorf("err:%+v", err)
         return nil, err
     }
-    res, err := ioutil.ReadAll(resp.Body)
-    return res, err
+    defer resp.Body.Close()
+    if w != nil {
+        copyHeader(w.Header(), resp.Header)
+    }
+
+    respBody := resp.Body
+    if fromCluster && resp.Header.Get("Content-Encoding") == "gzip" {
+        respBody, err = gzip.NewReader(resp.Body)
+        defer respBody.Close()
+        if err != nil {
+            util.Log.Errorf("unable to decode gzip body\n")
+            return nil, err
+        }
+    }
+
+    return ioutil.ReadAll(respBody)
 }
 
 func (backend *Backend) QueryIQL(db, query string) ([]byte, error) {
     req := &http.Request{Form: url.Values{"db": []string{db}, "q": []string{query}}}
-    return backend.Query(req)
+    return backend.Query(req, nil, false)
 }
 
 func (backend *Backend) GetSeriesValues(db, query string) []string {
     req := &http.Request{Form: url.Values{"db": []string{db}, "q": []string{query}}}
-    p, _ := backend.Query(req)
+    p, _ := backend.Query(req, nil, false)
     series, _ := SeriesFromResponseBytes(p)
     var values []string
     for _, s := range series {
@@ -491,7 +524,7 @@ func (backend *Backend) GetTagKeys(db, measure string) []string {
 func (backend *Backend) GetFieldKeys(db, measure string) map[string]string {
     query := fmt.Sprintf("show field keys from \"%s\"", measure)
     req := &http.Request{Form: url.Values{"db": []string{db}, "q": []string{query}}}
-    p, _ := backend.Query(req)
+    p, _ := backend.Query(req, nil, false)
     series, _ := SeriesFromResponseBytes(p)
     fieldKeys := make(map[string]string)
     for _, s := range series {
@@ -504,5 +537,5 @@ func (backend *Backend) GetFieldKeys(db, measure string) map[string]string {
 
 func (backend *Backend) DropMeasurement(db, measure string) ([]byte, error) {
     req := &http.Request{Form: url.Values{"db": []string{db}, "q": []string{fmt.Sprintf("drop measurement \"%s\"", measure)}}}
-    return backend.Query(req)
+    return backend.Query(req, nil, false)
 }
