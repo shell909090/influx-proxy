@@ -383,10 +383,13 @@ func (backend *Backend) WriteStream(db string, stream io.Reader, compressed bool
     q := url.Values{}
     q.Set("db", db)
     req, err := http.NewRequest(http.MethodPost, backend.Url+"/write?"+q.Encode(), stream)
-    req.SetBasicAuth(util.AesDecrypt(backend.Username, util.CipherKey), util.AesDecrypt(backend.Password, util.CipherKey))
+    if backend.Username != "" || backend.Password != "" {
+        req.SetBasicAuth(util.AesDecrypt(backend.Username, util.CipherKey), util.AesDecrypt(backend.Password, util.CipherKey))
+    }
     if compressed {
         req.Header.Add("Content-Encoding", "gzip")
     }
+
     resp, err := backend.Client.Do(req)
     if err != nil {
         log.Print("http error: ", err)
@@ -452,7 +455,7 @@ func (backend *Backend) Query(req *http.Request, w http.ResponseWriter, fromClus
     req.Form.Del("u")
     req.Form.Del("p")
     req.ContentLength = 0
-    if backend.Username != "" && backend.Password != "" {
+    if backend.Username != "" || backend.Password != "" {
         req.SetBasicAuth(util.AesDecrypt(backend.Username, util.CipherKey), util.AesDecrypt(backend.Password, util.CipherKey))
     }
 
