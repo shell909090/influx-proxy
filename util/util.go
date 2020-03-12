@@ -8,20 +8,9 @@ import (
     "os"
 )
 
-func ContainString(arr []string, t string) bool {
-    for _, v := range arr {
-        if v == t {
-            return true
-        }
-    }
-    return false
-}
-
-func ContainInt(arr []int, t int) bool {
-    for _, v := range arr {
-        if v == t {
-            return true
-        }
+func MapHasKey(m map[string]bool, k string) bool {
+    if _, ok := m[k]; ok {
+        return true
     }
     return false
 }

@@ -102,6 +102,13 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
         return
     }
 
+    db := req.URL.Query().Get("db")
+    if len(hs.DbList) > 0 && !hs.checkDatabase(q) && !util.MapHasKey(hs.DbMap, db) {
+        w.WriteHeader(http.StatusBadRequest)
+        w.Write([]byte("database not exist\n"))
+        return
+    }
+
     // 选出一个状态良好的cluster
     var circle *backend.Circle
     for {
@@ -187,7 +194,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
         w.Write(util.StatusText(http.StatusBadRequest))
         return
     }
-    if !util.ContainString(hs.DbList, db) {
+    if len(hs.DbList) > 0 && !util.MapHasKey(hs.DbMap, db) {
         w.WriteHeader(http.StatusBadRequest)
         w.Write([]byte("database not exist\n"))
         return
@@ -598,4 +605,9 @@ func (hs *HttpService) checkAuth(r *http.Request) bool {
         return true
     }
     return false
+}
+
+func (hs *HttpService) checkDatabase(q string) bool {
+    q = strings.ToLower(q)
+    return (strings.HasPrefix(q, "show") && strings.Contains(q, "databases")) || (strings.HasPrefix(q, "create") && strings.Contains(q, "database"))
 }

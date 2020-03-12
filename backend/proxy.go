@@ -20,6 +20,7 @@ type Proxy struct {
     ListenAddr             string                       `json:"listen_addr"` // 服务监听地址
     DataDir                string                       `json:"data_dir"`    // 缓存文件目录
     DbList                 []string                     `json:"db_list"`     // 数据库列表
+    DbMap                  map[string]bool              `json:"db_map"`      // 数据库字典
     VNodeSize              int                          `json:"vnode_size"`  // 虚拟节点数
     FlushSize              int                          `json:"flush_size"`  // 实例的缓冲区大小
     FlushTime              time.Duration                `json:"flush_time"`  // 实例的缓冲清空时间
@@ -65,6 +66,10 @@ func NewProxy(file string) *Proxy {
         circle.CircleNum = circleNum
         proxy.initMigration(circle, circleNum)
         proxy.initCircle(circle)
+    }
+    proxy.DbMap = make(map[string]bool)
+    for _, db := range proxy.DbList {
+        proxy.DbMap[db] = true
     }
     proxy.ForbidQuery(util.ForbidCmds)
     proxy.EnsureQuery(util.SupportCmds)
