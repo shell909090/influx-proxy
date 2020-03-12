@@ -9,10 +9,12 @@ import (
     "github.com/chengshiwen/influx-proxy/util"
     "io"
     "io/ioutil"
+    "log"
     "net/http"
     "net/url"
     "os"
     "path/filepath"
+    "strings"
     "sync"
     "time"
 )
@@ -29,9 +31,9 @@ type Backend struct {
     Username        string                      `json:"username"`          // backend 用户名
     Password        string                      `json:"password"`          // backend 密码
     BufferMap       map[string]*BufferCounter   `json:"buffer_map"`        // backend 写缓存
-    FileProducer    *os.File                    `json:"file_producer"`     // backend 文件内容生产者
-    FileConsumer    *os.File                    `json:"file_consumer"`     // backend 文件内容消费者
-    FileConsumerPos *os.File                    `json:"file_consumer_pos"` // backend 消费者位置信息
+    Producer        *os.File                    `json:"producer"`          // backend 内容生产者
+    Consumer        *os.File                    `json:"consumer"`          // backend 内容消费者
+    Meta            *os.File                    `json:"meta"`              // backend 消费位置信息
     Client          *http.Client                `json:"client"`            // backend influxDb 客户端
     Transport       *http.Transport             `json:"transport"`         // backend influxDb 客户端
     Active          bool                        `json:"active"`            // backend http客户端状态
@@ -39,115 +41,113 @@ type Backend struct {
     LockFile        *sync.RWMutex               `json:"lock_file"`
 }
 
-// CreateCacheFile 创建缓存文件
 func (backend *Backend) CreateCacheFile(failDataDir string) {
     var err error
     fileNamePrefix := filepath.Join(failDataDir, backend.Name)
-    backend.FileProducer, err = os.OpenFile(fileNamePrefix+".dat", os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
+    backend.Producer, err = os.OpenFile(fileNamePrefix+".dat", os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
     if err != nil {
-        util.Log.Errorf("backend_url:%+v err:%+v", backend.Url, err)
+        log.Printf("open producer error: %s %s", backend.Url, err)
         panic(err)
     }
-    _, err = backend.FileProducer.Seek(0, io.SeekEnd)
+    _, err = backend.Producer.Seek(0, io.SeekEnd)
     if err != nil {
-        util.Log.Errorf("backend_url:%+v err:%+v", backend.Url, err)
-        panic(err)
-    }
-
-    backend.FileConsumer, err = os.OpenFile(fileNamePrefix+".dat", os.O_RDONLY, 0644)
-    if err != nil {
-        util.Log.Errorf("backend_url:%+v err:%+v", backend.Url, err)
+        log.Printf("seek producer error: %s %s", backend.Url, err)
         panic(err)
     }
 
-    backend.FileConsumerPos, err = os.OpenFile(fileNamePrefix+".rec", os.O_RDWR|os.O_CREATE, 0644)
+    backend.Consumer, err = os.OpenFile(fileNamePrefix+".dat", os.O_RDONLY, 0644)
     if err != nil {
-        util.Log.Errorf("backend_url:%+v err:%+v", backend.Url, err)
+        log.Printf("open consumer error: %s %s", backend.Url, err)
         panic(err)
     }
 
-    // read consumer pos from .rec
-    err = backend.ReadConsumerPos()
+    backend.Meta, err = os.OpenFile(fileNamePrefix+".rec", os.O_RDWR|os.O_CREATE, 0644)
+    if err != nil {
+        log.Printf("open meta error: %s %s", backend.Url, err)
+        panic(err)
+    }
+
+    err = backend.RollbackMeta()
 }
 
-func (backend *Backend) ReadConsumerPos() error {
-    _, err := backend.FileConsumerPos.Seek(0, io.SeekStart)
+func (backend *Backend) RollbackMeta() error {
+    _, err := backend.Meta.Seek(0, io.SeekStart)
     if err != nil {
-        util.Log.Errorf("err:%+v", err)
+        log.Printf("seek meta error: %s %s", backend.Url, err)
         return err
     }
 
     var off int64
-    err = binary.Read(backend.FileConsumerPos, binary.BigEndian, &off)
+    err = binary.Read(backend.Meta, binary.BigEndian, &off)
     if err != nil {
-        util.Log.Errorf("err:%+v", err)
+        log.Printf("read meta error: %s %s", backend.Url, err)
         return err
     }
 
-    _, err = backend.FileConsumer.Seek(off, io.SeekStart)
+    _, err = backend.Consumer.Seek(off, io.SeekStart)
     if err != nil {
-        util.Log.Errorf("err:%+v", err)
+        log.Printf("seek consumer error: %s %s", backend.Url, err)
         return err
     }
     return nil
 }
 
-func (backend *Backend) UpdateConsumerPos() error {
-    producerOffset, err := backend.FileProducer.Seek(0, io.SeekCurrent)
+func (backend *Backend) UpdateMeta() error {
+    producerOffset, err := backend.Producer.Seek(0, io.SeekCurrent)
     if err != nil {
-        util.Log.Errorf("err:%+v", err)
+        log.Printf("seek producer error: %s %s", backend.Url, err)
         return err
     }
 
-    consumerOffset, err := backend.FileConsumer.Seek(0, io.SeekCurrent)
+    offset, err := backend.Consumer.Seek(0, io.SeekCurrent)
     if err != nil {
-        util.Log.Errorf("err:%+v", err)
+        log.Printf("seek consumer error: %s %s", backend.Url, err)
         return err
     }
 
-    if producerOffset == consumerOffset {
+    if producerOffset == offset {
         err = backend.CleanUp()
         if err != nil {
-            util.Log.Errorf("err:%+v", err)
+            log.Printf("cleanup error: %s %s", backend.Url, err)
             return err
         }
-        consumerOffset = 0
+        offset = 0
     }
 
-    _, err = backend.FileConsumerPos.Seek(0, io.SeekStart)
+    _, err = backend.Meta.Seek(0, io.SeekStart)
     if err != nil {
-        util.Log.Errorf("err:%+v", err)
+        log.Printf("seek meta error: %s %s", backend.Url, err)
         return err
     }
 
-    err = binary.Write(backend.FileConsumerPos, binary.BigEndian, &consumerOffset)
+    log.Printf("write meta: %s, %d", backend.Url, offset)
+    err = binary.Write(backend.Meta, binary.BigEndian, &offset)
     if err != nil {
-        util.Log.Errorf("err:%+v", err)
+        log.Printf("write meta error: %s %s", backend.Url, err)
         return err
     }
 
-    err = backend.FileConsumerPos.Sync()
+    err = backend.Meta.Sync()
     if err != nil {
-        util.Log.Errorf("err:%+v", err)
+        log.Printf("sync meta error: %s %s", backend.Url, err)
         return err
     }
 
     return nil
 }
 
-// Write 写到文件中
 func (backend *Backend) WriteToFile(db string, p []byte) error {
     backend.LockFile.Lock()
     defer backend.LockFile.Unlock()
 
     err := backend.WriteLengthAndData(p, true)
     if err != nil {
-        util.Log.Errorf("db:%+v data_length:%+v err:%+v", db, len(p), err)
+        log.Printf("db: %s, data length: %d, error: %s", db, len(p), err)
         return err
     }
     err = backend.WriteLengthAndData([]byte(db), false)
     if err != nil {
-        util.Log.Errorf("db:%+v data_length:%+v err:%+v", db, len(p), err)
+        log.Printf("db: %s, data length: %d, error: %s", db, len(p), err)
         return err
     }
     return nil
@@ -160,31 +160,31 @@ func (backend *Backend) WriteLengthAndData(p []byte, compress bool) error {
     if compress {
         err = Compress(&buf, p)
         if err != nil {
-            util.Log.Errorf("Compress_err:%+v", err)
+            log.Print("compress error: ", err)
             return err
         }
         p = buf.Bytes()
     }
 
     var length = uint32(len(p))
-    err = binary.Write(backend.FileProducer, binary.BigEndian, length)
+    err = binary.Write(backend.Producer, binary.BigEndian, length)
     if err != nil {
-        util.Log.Errorf("data_length:%+v err:%+v", length, err)
+        log.Printf("data length: %d, error: %s", length, err)
         return err
     }
-    n, err := backend.FileProducer.Write(p)
+    n, err := backend.Producer.Write(p)
     if err != nil {
-        util.Log.Errorf("data_length:%+v err:%+v", length, err)
+        log.Printf("data length: %d, error: %s", length, err)
         return err
     }
     if n != len(p) {
-        util.Log.Errorf("data_length:%+v success_write:%+v", length, n)
+        log.Printf("data length: %d, success write: %d", length, n)
         return io.ErrShortWrite
     }
 
-    err = backend.FileProducer.Sync()
+    err = backend.Producer.Sync()
     if err != nil {
-        util.Log.Errorf("Sync err:%+V", err)
+        log.Print("sync error: ", err)
         return err
     }
     return nil
@@ -193,9 +193,8 @@ func (backend *Backend) WriteLengthAndData(p []byte, compress bool) error {
 func (backend *Backend) hasData() bool {
     backend.LockFile.RLock()
     defer backend.LockFile.RUnlock()
-
-    pro, _ := backend.FileProducer.Seek(0, io.SeekCurrent)
-    con, _ := backend.FileConsumer.Seek(0, io.SeekCurrent)
+    pro, _ := backend.Producer.Seek(0, io.SeekCurrent)
+    con, _ := backend.Consumer.Seek(0, io.SeekCurrent)
     return pro - con > 0
 }
 
@@ -205,43 +204,40 @@ func (backend *Backend) Read() ([]byte, error) {
     }
     var length uint32
 
-    err := binary.Read(backend.FileConsumer, binary.BigEndian, &length)
+    err := binary.Read(backend.Consumer, binary.BigEndian, &length)
     if err != nil {
-        util.Log.Errorf("err:%+v", err)
+        log.Print("read length error: ", err)
         return nil, err
     }
     p := make([]byte, length)
 
-    _, err = io.ReadFull(backend.FileConsumer, p)
+    _, err = io.ReadFull(backend.Consumer, p)
     if err != nil {
-        util.Log.Errorf("err:%+v", err)
+        log.Print("read error: ", err)
         return p, err
     }
     return p, nil
 }
 
-// CleanUp 清空文件
 func (backend *Backend) CleanUp() (err error) {
-    _, err = backend.FileConsumer.Seek(0, io.SeekStart)
+    _, err = backend.Consumer.Seek(0, io.SeekStart)
     if err != nil {
-        util.Log.Errorf("err:%+v", err)
+        log.Print("seek consumer error: ", err)
         return err
     }
-
-    err = backend.FileProducer.Truncate(0)
+    err = backend.Producer.Truncate(0)
     if err != nil {
-        util.Log.Errorf("err:%+v", err)
+        log.Print("truncate error: ", err)
         return err
     }
-    _, err = backend.FileProducer.Seek(0, io.SeekStart)
+    _, err = backend.Producer.Seek(0, io.SeekStart)
     if err != nil {
-        util.Log.Errorf("err:%+v", err)
+        log.Print("seek producer error: ", err)
         return err
     }
     return
 }
 
-// ListenLineChan 物理主机的守护进程用于写入数据
 func (backend *Backend) CheckBufferAndSync(syncDataTimeOut time.Duration) {
     for {
         select {
@@ -251,7 +247,7 @@ func (backend *Backend) CheckBufferAndSync(syncDataTimeOut time.Duration) {
                     backend.LockDbMap[db].Lock()
                     err := backend.checkBufferAndSync(db)
                     if err != nil {
-                        util.Log.Errorf("checkBufferAndSync db:%+v err:%+v", db, err)
+                        log.Printf("check buffer and sync error: %s %s", db, err)
                     }
                     backend.LockDbMap[db].Unlock()
                 }
@@ -269,16 +265,12 @@ func (backend *Backend) SyncFileData() {
     }
 }
 
-// 达到数量或者超时清空buffer到数据库
 func (backend *Backend) checkBufferAndSync(db string) error {
-    util.Log.Debugf("url:%+v db:%+v Counter%+v", backend.Url, db, backend.BufferMap[db].Counter)
     err := backend.WriteDataToDb(db)
     if err != nil {
-        util.Log.Errorf("db:%+v err:%+v", db, err)
+        log.Printf("write data to db error: %s %s", db, err)
         return err
     }
-
-    // 清空buffer和计数器
     backend.BufferMap[db].Counter = 0
     backend.BufferMap[db].Buffer.Truncate(0)
     return err
@@ -293,69 +285,61 @@ func (backend *Backend) syncFileDataToDb() {
 
         p, err := backend.Read()
         if err != nil {
-            util.Log.Errorf("err:%+v", err)
+            log.Print("sync file data to db read error", err)
         }
         db, err := backend.Read()
         if err != nil {
-            util.Log.Errorf("err:%+v", err)
+            log.Print("sync file data to db read db error", err)
         }
 
         err = backend.Write(string(db), p, false)
         if err != nil {
-            util.Log.Errorf("err:%+v", err)
+            log.Print("sync file data to db write error", err)
 
         }
-        backend.UpdateConsumerPos()
+        backend.UpdateMeta()
     }
 }
 
-// WriteDataToDb 写入对应backend的buffer中
 func (backend *Backend) WriteDataToBuffer(data *LineData, backendBufferMaxNum int) error {
     db := data.Db
-    // 获取当前实例中对应db的锁
     backend.LockDbMap[db].Lock()
     defer backend.LockDbMap[db].Unlock()
-    // 写数据并判断阈值
     backend.BufferMap[db].Buffer.Write(data.Line)
     backend.BufferMap[db].Counter++
 
     if backend.BufferMap[db].Counter > backendBufferMaxNum {
         err := backend.checkBufferAndSync(db)
         if err != nil {
-            util.Log.Errorf("db:%+v err:%+v", db, err)
+            log.Printf("check buffer and sync error: %s %s", db, err)
             return err
         }
     }
     return nil
 }
 
-// WriteDataToDb 达到某种条件后写入到db中，失败写文件
 func (backend *Backend) WriteDataToDb(db string) error {
-    // 没有数据返回nil error
     if backend.BufferMap[db].Buffer.Len() == 0 {
         return errors.New("length is zero")
     }
 
-    // 对应实例的机器如果存活，则写入数据库
     byteData := backend.BufferMap[db].Buffer.Bytes()
     if backend.Active {
         err := backend.Write(db, byteData, true)
         if err != nil {
-            util.Log.Errorf("db:%+v err:%+v", db, err)
+            log.Printf("write data error: %s %s", db, err)
         }
         return err
     }
 
-    // 写入数据库失败，则写到文件中，等待同步
     err := backend.WriteToFile(db, byteData)
     if err != nil {
-        util.Log.Errorf("db:%+v err:%+v", db, err)
+        log.Printf("write to file error: %s %s", db, err)
         return err
     }
     return nil
 }
 
-// CheckActive 验活
 func (backend *Backend) CheckActive() {
     for {
         backend.Active = backend.Ping()
@@ -363,43 +347,38 @@ func (backend *Backend) CheckActive() {
     }
 }
 
-// Ping ...
 func (backend *Backend) Ping() bool {
     resp, err := backend.Client.Get(backend.Url + "/ping")
     if err != nil {
-        util.Log.Print("http error: ", err)
+        log.Print("http error: ", err)
         return false
     }
     defer resp.Body.Close()
     if resp.StatusCode != 204 {
-        util.Log.Printf("ping status code: %d, the backend is %s\n", resp.StatusCode, backend.Url)
+        log.Printf("ping status code: %d, the backend is %s\n", resp.StatusCode, backend.Url)
         return false
     }
     return true
 }
 
-// WriteCompress 压缩在写入db
 func (backend *Backend) Write(db string, p []byte, compressed bool) error {
     var err error
     var buf *bytes.Buffer
-    // 压缩对象
     if compressed {
         buf = &bytes.Buffer{}
         err = Compress(buf, p)
         if err != nil {
-            util.Log.Errorf("err:%+v", err)
+            log.Print("compress error: ", err)
             return err
         }
     } else {
         buf = bytes.NewBuffer(p)
     }
 
-    // 发送http请求，写入数据库
     err = backend.WriteStream(db, buf, compressed)
     return err
 }
 
-// WriteStream 流式写入db
 func (backend *Backend) WriteStream(db string, stream io.Reader, compressed bool) error {
     q := url.Values{}
     q.Set("db", db)
@@ -410,7 +389,7 @@ func (backend *Backend) WriteStream(db string, stream io.Reader, compressed bool
     }
     resp, err := backend.Client.Do(req)
     if err != nil {
-        fmt.Printf("backend.Client.Do err:%+v\n", err)
+        log.Print("http error: ", err)
         backend.Active = false
         return err
     }
@@ -419,26 +398,35 @@ func (backend *Backend) WriteStream(db string, stream io.Reader, compressed bool
     if resp.StatusCode == 204 {
         return nil
     }
-    _, err = ioutil.ReadAll(resp.Body)
+    log.Print("write status code: ", resp.StatusCode)
+
+    respbuf, err := ioutil.ReadAll(resp.Body)
     if err != nil {
-        util.Log.Errorf("err:%+v", err)
+        log.Print("readall error: ", err)
         return err
+    }
+    log.Printf("error response: %s\n", respbuf)
+
+    switch resp.StatusCode {
+    case 400:
+        return errors.New("bad request")
+    case 404:
+        return errors.New("not found")
+    default: // mostly tcp connection timeout
+        return errors.New("unknown error")
     }
     return nil
 }
 
-// Compress 压缩存储数据
 func Compress(buf *bytes.Buffer, p []byte) (err error) {
     zip := gzip.NewWriter(buf)
     defer zip.Close()
     n, err := zip.Write(p)
     if err != nil {
-        util.Log.Errorf("err:%+v", err)
         return
     }
     if n != len(p) {
         err = io.ErrShortWrite
-        util.Log.Errorf("err:%+v", err)
         return
     }
     return
@@ -466,12 +454,14 @@ func (backend *Backend) Query(req *http.Request, w http.ResponseWriter, fromClus
 
     req.URL, err = url.Parse(backend.Url + "/query?" + req.Form.Encode())
     if err != nil {
-        util.Log.Errorf("internal url parse error: ", err)
+        log.Print("internal url parse error: ", err)
         return nil, err
     }
+
+    q := strings.TrimSpace(req.FormValue("q"))
     resp, err := backend.Transport.RoundTrip(req)
     if err != nil {
-        util.Log.Errorf("err:%+v", err)
+        log.Printf("query error: %s, the query is %s", err, q)
         return nil, err
     }
     defer resp.Body.Close()
@@ -484,7 +474,7 @@ func (backend *Backend) Query(req *http.Request, w http.ResponseWriter, fromClus
         respBody, err = gzip.NewReader(resp.Body)
         defer respBody.Close()
         if err != nil {
-            util.Log.Errorf("unable to decode gzip body\n")
+            log.Printf("unable to decode gzip body")
             return nil, err
         }
     }
