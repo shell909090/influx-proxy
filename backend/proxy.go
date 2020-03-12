@@ -3,7 +3,6 @@ package backend
 import (
     "bytes"
     "encoding/json"
-    "errors"
     "fmt"
     "github.com/chengshiwen/influx-proxy/util"
     "net/http"
@@ -237,38 +236,54 @@ func (proxy *Proxy) ClusterQuery(cmds []string) {
     }
 }
 
-func (proxy *Proxy) CheckMeasurementQuery(q string) error {
+func (proxy *Proxy) CheckMeasurementQuery(q string) bool {
     if len(proxy.ForbiddenQuery) != 0 {
         for _, fq := range proxy.ForbiddenQuery {
             if fq.MatchString(q) {
-                return errors.New("query forbidden")
+                return false
             }
         }
     }
-
     if len(proxy.ObligatedQuery) != 0 {
         for _, pq := range proxy.ObligatedQuery {
             if pq.MatchString(q) {
-                return nil
+                return true
             }
         }
-        return errors.New("query forbidden")
+        return false
     }
-
-    return nil
+    return true
 }
 
-func (proxy *Proxy) CheckClusterQuery(q string) error {
+func (proxy *Proxy) CheckClusterQuery(q string) bool {
     if len(proxy.ClusteredQuery) != 0 {
         for _, pq := range proxy.ClusteredQuery {
             if pq.MatchString(q) {
-                return nil
+                return true
             }
         }
-        return errors.New("query forbidden")
+        return false
     }
+    return true
+}
 
-    return nil
+func (proxy *Proxy) CheckCreateDatabaseQuery(q string) bool {
+    if len(proxy.ClusteredQuery) != 0 {
+        return proxy.ClusteredQuery[len(proxy.ClusteredQuery)-1].MatchString(q)
+    }
+    return false
+}
+
+func (proxy *Proxy) CreateDatabase(w http.ResponseWriter, req *http.Request) ([]byte, error) {
+    var body []byte
+    var err error
+    for _, circle := range proxy.Circles {
+        body, err = circle.QueryCluster(w, req)
+        if err != nil {
+            return nil, err
+        }
+    }
+    return body, nil
 }
 
 func (proxy *Proxy) Clear(dbs []string, circleNum int) error {

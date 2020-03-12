@@ -117,12 +117,16 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     }
 
     // 检查带measurement的查询语句
-    err := hs.CheckMeasurementQuery(q)
-    if err != nil {
+    if !hs.CheckMeasurementQuery(q) {
         // 检查集群查询语句，如show measurements
-        err = hs.CheckClusterQuery(q)
-        if err == nil {
-            body, err := circle.QueryCluster(w, req)
+        if hs.CheckClusterQuery(q) {
+            var body []byte
+            var err error
+            if hs.CheckCreateDatabaseQuery(q) {
+                body, err = hs.CreateDatabase(w, req)
+            } else {
+                body, err = circle.QueryCluster(w, req)
+            }
             if err != nil {
                 util.Log.Errorf("query cluster:%+v err:%+v", q, err)
                 w.WriteHeader(http.StatusBadRequest)

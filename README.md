@@ -123,6 +123,7 @@ Only support match the following commands.
 * `show stats`
 * `show retention policies`
 * `show databases`
+* `create database`
 
 License
 -------

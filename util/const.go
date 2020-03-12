@@ -23,5 +23,6 @@ var (
         "(?i:^show\\s+field\\s+keys|^show\\s+tag\\s+keys|^show\\s+tag\\s+values)",
         "(?i:^show\\s+stats)",
         "(?i:^show\\s+retention\\s+policies)",
+        "(?i:^create\\s+database)",
     }
 )
