@@ -3,6 +3,7 @@ bin/
 testbk*
 *.dat
 *.rec
+cert/
 test/
 log/
 .DS_Store

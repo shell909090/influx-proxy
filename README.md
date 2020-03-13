@@ -86,8 +86,8 @@ The configurations in `proxy.json` are the following:
   * `backends`: backend list belong to the circle
     * `name`: backend name
     * `url`: influxdb addr or other http backend which supports influxdb line protocol
-    * `username`: influxdb username with encryption
-    * `password`: influxdb password with encryption
+    * `username`: influxdb username, with encryption if proxy auth_secure is enabled
+    * `password`: influxdb password, with encryption if proxy auth_secure is enabled
 * `listen_addr`: proxy listen addr
 * `data_dir`: data dir to save .dat .rec, default is data
 * `db_list`: database list allowed to access
@@ -95,8 +95,9 @@ The configurations in `proxy.json` are the following:
 * `flush_size`: default config is 5000, wait 5000 points write
 * `flush_time`: default config is 1s, wait 1 second write whether point count has bigger than flush_size config
 * `migrate_max_cpus`: max cpus when migrating such as rebalance, recovery or resync
-* `username`: proxy username with encryption
-* `password`: proxy password with encryption
+* `username`: proxy username, with encryption if auth_secure is enabled
+* `password`: proxy password, with encryption if auth_secure is enabled
+* `auth_secure`: secure auth with encryption, default is false
 * `https_enabled`: enable https, default is false
 * `https_cert`: the ssl certificate to use when https is enabled
 * `https_key`: use a separate private key location

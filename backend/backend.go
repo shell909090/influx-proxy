@@ -31,6 +31,7 @@ type Backend struct {
     Url             string                      `json:"url"`               // backend 的数据库地址
     Username        string                      `json:"username"`          // backend 用户名
     Password        string                      `json:"password"`          // backend 密码
+    AuthSecure      bool                        `json:"auth_secure"`       // backend 认证加密开关
     BufferMap       map[string]*BufferCounter   `json:"buffer_map"`        // backend 写缓存
     Producer        *os.File                    `json:"producer"`          // backend 内容生产者
     Consumer        *os.File                    `json:"consumer"`          // backend 内容消费者
@@ -48,6 +49,40 @@ func NewClient(url string) *http.Client {
 
 func NewTransport(url string) *http.Transport {
     return &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: strings.HasPrefix(url, "https")}}
+}
+
+func Compress(buf *bytes.Buffer, p []byte) (err error) {
+    zip := gzip.NewWriter(buf)
+    defer zip.Close()
+    n, err := zip.Write(p)
+    if err != nil {
+        return
+    }
+    if n != len(p) {
+        err = io.ErrShortWrite
+        return
+    }
+    return
+}
+
+func NewRequest(db, query string) *http.Request {
+    return &http.Request{Form: url.Values{"db": []string{db}, "q": []string{query}}, Header:make(map[string][]string)}
+}
+
+func CopyHeader(dst, src http.Header) {
+    for k, vv := range src {
+        for _, v := range vv {
+            dst.Set(k, v)
+        }
+    }
+}
+
+func (backend *Backend) SetBasicAuth(req *http.Request) {
+    if backend.AuthSecure {
+        req.SetBasicAuth(util.AesDecrypt(backend.Username, util.CipherKey), util.AesDecrypt(backend.Password, util.CipherKey))
+    } else {
+        req.SetBasicAuth(backend.Username, backend.Password)
+    }
 }
 
 func (backend *Backend) CreateCacheFile(failDataDir string) {
@@ -393,7 +428,7 @@ func (backend *Backend) WriteStream(db string, stream io.Reader, compressed bool
     q.Set("db", db)
     req, err := http.NewRequest(http.MethodPost, backend.Url+"/write?"+q.Encode(), stream)
     if backend.Username != "" || backend.Password != "" {
-        req.SetBasicAuth(util.AesDecrypt(backend.Username, util.CipherKey), util.AesDecrypt(backend.Password, util.CipherKey))
+        backend.SetBasicAuth(req)
     }
     if compressed {
         req.Header.Add("Content-Encoding", "gzip")
@@ -430,32 +465,6 @@ func (backend *Backend) WriteStream(db string, stream io.Reader, compressed bool
     return nil
 }
 
-func Compress(buf *bytes.Buffer, p []byte) (err error) {
-    zip := gzip.NewWriter(buf)
-    defer zip.Close()
-    n, err := zip.Write(p)
-    if err != nil {
-        return
-    }
-    if n != len(p) {
-        err = io.ErrShortWrite
-        return
-    }
-    return
-}
-
-func NewRequest(db, query string) *http.Request {
-    return &http.Request{Form: url.Values{"db": []string{db}, "q": []string{query}}, Header:make(map[string][]string)}
-}
-
-func CopyHeader(dst, src http.Header) {
-    for k, vv := range src {
-        for _, v := range vv {
-            dst.Set(k, v)
-        }
-    }
-}
-
 func (backend *Backend) Query(req *http.Request, w http.ResponseWriter, fromCluster bool) ([]byte, error) {
     var err error
     if len(req.Form) == 0 {
@@ -465,7 +474,7 @@ func (backend *Backend) Query(req *http.Request, w http.ResponseWriter, fromClus
     req.Form.Del("p")
     req.ContentLength = 0
     if backend.Username != "" || backend.Password != "" {
-        req.SetBasicAuth(util.AesDecrypt(backend.Username, util.CipherKey), util.AesDecrypt(backend.Password, util.CipherKey))
+        backend.SetBasicAuth(req)
     }
 
     req.URL, err = url.Parse(backend.Url + "/query?" + req.Form.Encode())

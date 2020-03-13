@@ -593,16 +593,24 @@ func (hs *HttpService) AddHeader(w http.ResponseWriter) {
     w.Header().Add("X-Influxdb-Version", util.Version)
 }
 
+func (hs *HttpService) transAuth(ctx string) string {
+    if hs.AuthSecure {
+        return util.AesEncrypt(ctx, util.CipherKey)
+    } else {
+        return ctx
+    }
+}
+
 func (hs *HttpService) checkAuth(r *http.Request) bool {
     if hs.Username == "" && hs.Password == "" {
         return true
     }
     u, p := r.URL.Query().Get("u"), r.URL.Query().Get("p")
-    if util.AesEncrypt(u, util.CipherKey) == hs.Username && util.AesEncrypt(p, util.CipherKey) == hs.Password  {
+    if hs.transAuth(u) == hs.Username && hs.transAuth(p) == hs.Password  {
         return true
     }
     u, p, ok := r.BasicAuth()
-    if ok && util.AesEncrypt(u, util.CipherKey) == hs.Username && util.AesEncrypt(p, util.CipherKey) == hs.Password {
+    if ok && hs.transAuth(u) == hs.Username && hs.transAuth(p) == hs.Password {
         return true
     }
     return false

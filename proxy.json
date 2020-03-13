@@ -6,14 +6,14 @@
                 {
                     "name": "influxdb-1-1",
                     "url": "http://127.0.0.1:8086",
-                    "username": "PlfN1qeCOpETSk7RGLVqCg==",
-                    "password": "lcVJtnUr4XhdgIOMm1sLHg=="
+                    "username": "",
+                    "password": ""
                 },
                 {
                     "name": "influxdb-1-2",
                     "url": "http://127.0.0.1:8087",
-                    "username": "PlfN1qeCOpETSk7RGLVqCg==",
-                    "password": "lcVJtnUr4XhdgIOMm1sLHg=="
+                    "username": "",
+                    "password": ""
                 }
             ]
         },
@@ -23,14 +23,14 @@
                 {
                     "name": "influxdb-2-1",
                     "url": "http://127.0.0.1:8088",
-                    "username": "PlfN1qeCOpETSk7RGLVqCg==",
-                    "password": "lcVJtnUr4XhdgIOMm1sLHg=="
+                    "username": "",
+                    "password": ""
                 },
                 {
                     "name": "influxdb-2-2",
                     "url": "http://127.0.0.1:8089",
-                    "username": "PlfN1qeCOpETSk7RGLVqCg==",
-                    "password": "lcVJtnUr4XhdgIOMm1sLHg=="
+                    "username": "",
+                    "password": ""
                 }
             ]
         }
@@ -41,8 +41,9 @@
     "vnode_size": 256,
     "flush_size": 5000,
     "flush_time": 1,
-    "username": "QhaaJIbRM2RfuJLylnxPKQ==",
-    "password": "QhaaJIbRM2RfuJLylnxPKQ==",
+    "username": "",
+    "password": "",
+    "auth_secure": false,
     "https_enabled": false,
     "https_cert": "",
     "https_key": ""

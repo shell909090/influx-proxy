@@ -17,20 +17,21 @@ import (
 
 // Proxy 集群
 type Proxy struct {
-    Circles                []*Circle                    `json:"circles"`     // 集群列表
-    ListenAddr             string                       `json:"listen_addr"` // 服务监听地址
-    DataDir                string                       `json:"data_dir"`    // 缓存文件目录
-    DbList                 []string                     `json:"db_list"`     // 数据库列表
-    DbMap                  map[string]bool              `json:"db_map"`      // 数据库字典
-    VNodeSize              int                          `json:"vnode_size"`  // 虚拟节点数
-    FlushSize              int                          `json:"flush_size"`  // 实例的缓冲区大小
-    FlushTime              time.Duration                `json:"flush_time"`  // 实例的缓冲清空时间
-    MigrateMaxCpus         int                          `json:"migrate_max_cpus"` // 迁移时可用cpu数
-    Username               string                       `json:"username"`         // proxy用户
-    Password               string                       `json:"password"`         // proxy密码
-    HTTPSEnabled           bool                         `json:"https_enabled"`    // https开关
-    HTTPSCert              string                       `json:"https_cert"`       // https证书
-    HTTPSKey               string                       `json:"https_key"`        // https密钥
+    Circles                []*Circle                    `json:"circles"`            // 集群列表
+    ListenAddr             string                       `json:"listen_addr"`        // 服务监听地址
+    DataDir                string                       `json:"data_dir"`           // 缓存文件目录
+    DbList                 []string                     `json:"db_list"`            // 数据库列表
+    DbMap                  map[string]bool              `json:"db_map"`             // 数据库字典
+    VNodeSize              int                          `json:"vnode_size"`         // 虚拟节点数
+    FlushSize              int                          `json:"flush_size"`         // 实例的缓冲区大小
+    FlushTime              time.Duration                `json:"flush_time"`         // 实例的缓冲清空时间
+    MigrateMaxCpus         int                          `json:"migrate_max_cpus"`   // 迁移时可用cpu数
+    Username               string                       `json:"username"`           // proxy用户
+    Password               string                       `json:"password"`           // proxy密码
+    AuthSecure             bool                         `json:"auth_secure"`        // 认证加密开关
+    HTTPSEnabled           bool                         `json:"https_enabled"`      // https开关
+    HTTPSCert              string                       `json:"https_cert"`         // https证书
+    HTTPSKey               string                       `json:"https_key"`          // https私钥
     ForbiddenQuery         []*regexp.Regexp             `json:"forbidden_query"`
     ObligatedQuery         []*regexp.Regexp             `json:"obligated_query"`
     ClusteredQuery         []*regexp.Regexp             `json:"clustered_query"`
@@ -117,12 +118,13 @@ func (proxy *Proxy) initBackend(circle *Circle, backend *Backend) {
     circle.Router.Add(backend.Url)
     circle.UrlToBackend[backend.Url] = backend
 
+    backend.AuthSecure = proxy.AuthSecure
     backend.BufferMap = make(map[string]*BufferCounter)
-    backend.LockDbMap = make(map[string]*sync.RWMutex)
-    backend.LockFile = &sync.RWMutex{}
     backend.Client = NewClient(backend.Url)
     backend.Transport = NewTransport(backend.Url)
     backend.Active = true
+    backend.LockDbMap = make(map[string]*sync.RWMutex)
+    backend.LockFile = &sync.RWMutex{}
     backend.CreateCacheFile(proxy.DataDir)
 
     for _, db := range proxy.DbList {
