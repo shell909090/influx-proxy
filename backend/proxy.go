@@ -26,14 +26,17 @@ type Proxy struct {
     FlushSize              int                          `json:"flush_size"`  // 实例的缓冲区大小
     FlushTime              time.Duration                `json:"flush_time"`  // 实例的缓冲清空时间
     MigrateMaxCpus         int                          `json:"migrate_max_cpus"` // 迁移时可用cpu数
+    Username               string                       `json:"username"`         // proxy用户
+    Password               string                       `json:"password"`         // proxy密码
+    HTTPSEnabled           bool                         `json:"https_enabled"`    // https开关
+    HTTPSCert              string                       `json:"https_cert"`       // https证书
+    HTTPSKey               string                       `json:"https_key"`        // https密钥
     ForbiddenQuery         []*regexp.Regexp             `json:"forbidden_query"`
     ObligatedQuery         []*regexp.Regexp             `json:"obligated_query"`
     ClusteredQuery         []*regexp.Regexp             `json:"clustered_query"`
     BackendRebalanceStatus []map[string]*MigrationInfo  `json:"backend_re_balance_status"`
     BackendRecoveryStatus  []map[string]*MigrationInfo  `json:"backend_recovery_status"`
     BackendResyncStatus    []map[string]*MigrationInfo  `json:"backend_resync_status"`
-    Username               string                       `json:"username"`
-    Password               string                       `json:"password"`
 }
 
 // LineData 数据传输形式
@@ -54,8 +57,11 @@ type MigrationInfo struct {
 }
 
 // NewCluster 新建集群
-func NewProxy(file string) *Proxy {
-    proxy := loadProxyJson(file)
+func NewProxy(file string) (proxy *Proxy, err error) {
+    proxy, err = loadProxyJson(file)
+    if err != nil {
+        return
+    }
     proxy.BackendRebalanceStatus = make([]map[string]*MigrationInfo, len(proxy.Circles))
     proxy.BackendRecoveryStatus = make([]map[string]*MigrationInfo, len(proxy.Circles))
     proxy.BackendResyncStatus = make([]map[string]*MigrationInfo, len(proxy.Circles))
@@ -75,20 +81,20 @@ func NewProxy(file string) *Proxy {
     proxy.ForbidQuery(util.ForbidCmds)
     proxy.EnsureQuery(util.SupportCmds)
     proxy.ClusterQuery(util.ClusterCmds)
-    return proxy
+    return
 }
 
 // loadProxyJson 加载主机配置
-func loadProxyJson(file string) *Proxy {
-    proxy := &Proxy{}
+func loadProxyJson(file string) (proxy *Proxy, err error) {
+    proxy = &Proxy{}
     f, err := os.Open(file)
     defer f.Close()
     if err != nil {
-        panic(err)
+        return
     }
     dec := json.NewDecoder(f)
     err = dec.Decode(proxy)
-    return proxy
+    return
 }
 
 // initCircle 初始化哈希环

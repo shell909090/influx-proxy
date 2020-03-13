@@ -97,6 +97,9 @@ The configurations in `proxy.json` are the following:
 * `migrate_max_cpus`: max cpus when migrating such as rebalance, recovery or resync
 * `username`: proxy username with encryption
 * `password`: proxy password with encryption
+* `https_enabled`: enable https, default is false
+* `https_cert`: the ssl certificate to use when https is enabled
+* `https_key`: use a separate private key location
 
 Query Commands
 --------

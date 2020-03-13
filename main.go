@@ -10,6 +10,7 @@ import (
     "github.com/chengshiwen/influx-proxy/backend"
     "github.com/chengshiwen/influx-proxy/service"
     "github.com/chengshiwen/influx-proxy/util"
+    "log"
     "net/http"
     "runtime"
     "time"
@@ -35,7 +36,11 @@ func main() {
         return
     }
 
-    proxy := backend.NewProxy(ConfigFile)
+    proxy, err := backend.NewProxy(ConfigFile)
+    if err != nil {
+        fmt.Println("config source load failed")
+        return
+    }
     hs := service.HttpService{Proxy: proxy}
     mux := http.NewServeMux()
     hs.Register(mux)
@@ -45,8 +50,13 @@ func main() {
         Handler:     mux,
         IdleTimeout: util.IdleTimeOut * time.Second,
     }
-    err := server.ListenAndServe()
+    if proxy.HTTPSEnabled {
+        err = server.ListenAndServeTLS(proxy.HTTPSCert, proxy.HTTPSKey)
+    } else {
+        err = server.ListenAndServe()
+    }
     if err != nil {
-        panic(err)
+        log.Print(err)
+        return
     }
 }
