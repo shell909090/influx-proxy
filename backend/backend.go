@@ -3,6 +3,7 @@ package backend
 import (
     "bytes"
     "compress/gzip"
+    "crypto/tls"
     "encoding/binary"
     "errors"
     "fmt"
@@ -39,6 +40,14 @@ type Backend struct {
     Active          bool                        `json:"active"`            // backend http客户端状态
     LockDbMap       map[string]*sync.RWMutex    `json:"lock_db_map"`       // backend 锁
     LockFile        *sync.RWMutex               `json:"lock_file"`
+}
+
+func NewClient(url string) *http.Client {
+    return &http.Client{Transport: NewTransport(url)}
+}
+
+func NewTransport(url string) *http.Transport {
+    return &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: strings.HasPrefix(url, "https")}}
 }
 
 func (backend *Backend) CreateCacheFile(failDataDir string) {
