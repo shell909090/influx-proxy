@@ -66,6 +66,9 @@ func Compress(buf *bytes.Buffer, p []byte) (err error) {
 }
 
 func NewRequest(db, query string) *http.Request {
+    if db == "" {
+        return &http.Request{Form: url.Values{"q": []string{query}}, Header:make(map[string][]string)}
+    }
     return &http.Request{Form: url.Values{"db": []string{db}, "q": []string{query}}, Header:make(map[string][]string)}
 }
 
@@ -534,6 +537,10 @@ func (backend *Backend) GetSeriesValues(db, query string) []string {
         }
     }
     return values
+}
+
+func (backend *Backend) GetDatabases() []string {
+    return backend.GetSeriesValues("", "show databases")
 }
 
 func (backend *Backend) GetMeasurements(db string) []string {

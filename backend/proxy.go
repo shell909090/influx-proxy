@@ -271,6 +271,17 @@ func (proxy *Proxy) CreateDatabase(w http.ResponseWriter, req *http.Request) ([]
     return body, nil
 }
 
+func (proxy *Proxy) GetDatabases() []string {
+   for _, circle := range proxy.Circles {
+       for _, backend := range circle.Backends {
+           if backend.Active {
+               return backend.GetDatabases()
+           }
+       }
+   }
+   return nil
+}
+
 func (proxy *Proxy) Clear(dbs []string, circleId int) error {
     circle := proxy.Circles[circleId]
     for _, backend := range circle.Backends {
@@ -334,7 +345,7 @@ func (proxy *Proxy) Rebalance(circleId int, backends []*Backend, databases []str
     circle := proxy.Circles[circleId]
     circle.SetMigrating(true)
     if len(databases) == 0 {
-        databases = proxy.DbList
+        databases = proxy.GetDatabases()
     }
 
     for _, backend := range backends {
@@ -390,7 +401,7 @@ func (proxy *Proxy) Recovery(fromCircleId, toCircleId int, recoveryBackendUrls [
     fromCircle.SetMigrating(true)
     toCircle.SetMigrating(true)
     if len(databases) == 0 {
-        databases = proxy.DbList
+        databases = proxy.GetDatabases()
     }
     recoveryBackendUrlMap := make(map[string]bool)
     if len(recoveryBackendUrls) != 0 {
@@ -451,7 +462,7 @@ func (proxy *Proxy) RecoveryBackend(backend *Backend, fromCircle, toCircle *Circ
 func (proxy *Proxy) Resync(databases []string, seconds int) {
     util.SetMLog("./log/resync.log")
     if len(databases) == 0 {
-        databases = proxy.DbList
+        databases = proxy.GetDatabases()
     }
     proxy.SetResyncing(true)
     for _, circle := range proxy.Circles {
