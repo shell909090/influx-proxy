@@ -106,14 +106,25 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     }
 
     var circle *backend.Circle
+    var badIds map[int]bool
     for {
         id := rand.Intn(len(hs.Circles))
+        if _, ok := badIds[id]; ok {
+            continue
+        }
         circle = hs.Circles[id]
         if circle.IsMigrating {
+            badIds[id] = true
             continue
         }
         if circle.CheckStatus() {
             break
+        }
+        badIds[id] = true
+        if len(badIds) == len(hs.Circles) {
+            w.WriteHeader(400)
+            w.Write([]byte("query unavailable\n"))
+            return
         }
         time.Sleep(time.Microsecond)
     }
