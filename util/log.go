@@ -15,8 +15,7 @@ func init() {
     Mlog = log.New(os.Stdout, "", log.LstdFlags | log.Lmicroseconds | log.Lshortfile)
 }
 
-func SetMLog(logPath string, prefix string) {
-    Mlog.SetPrefix(prefix)
+func SetMLog(logPath string) {
     CheckPathAndCreate(filepath.Dir(logPath))
     if logPath == "" {
         Mlog.SetOutput(os.Stdout)

@@ -328,7 +328,7 @@ func (proxy *Proxy) ClearMigrateStatus(data map[string]*MigrationInfo) {
 }
 
 func (proxy *Proxy) Rebalance(circleId int, backends []*Backend, databases []string) {
-    util.SetMLog("./log/rebalance.log", "Rebalance: ")
+    util.SetMLog("./log/rebalance.log")
     circle := proxy.Circles[circleId]
     circle.SetMigrating(true)
     if len(databases) == 0 {
@@ -381,7 +381,7 @@ func (proxy *Proxy) RebalanceBackend(backend *Backend, circleId int, databases [
 }
 
 func (proxy *Proxy) Recovery(fromCircleId, toCircleId int, recoveryBackendUrls []string, databases []string) {
-    util.SetMLog("./log/recovery.log", "Recovery: ")
+    util.SetMLog("./log/recovery.log")
     fromCircle := proxy.Circles[fromCircleId]
     toCircle := proxy.Circles[toCircleId]
 
@@ -447,7 +447,7 @@ func (proxy *Proxy) RecoveryBackend(backend *Backend, fromCircle, toCircle *Circ
 }
 
 func (proxy *Proxy) Resync(databases []string, lastSeconds int) {
-    util.SetMLog("./log/resync.log", "Resync: ")
+    util.SetMLog("./log/resync.log")
     if len(databases) == 0 {
         databases = proxy.DbList
     }
