@@ -7,11 +7,13 @@ import (
     "fmt"
     "github.com/chengshiwen/influx-proxy/backend"
     "github.com/chengshiwen/influx-proxy/util"
+    "github.com/pkg/errors"
     "io/ioutil"
     "log"
     "math/rand"
     "net/http"
     "net/http/pprof"
+    "runtime"
     "strconv"
     "strings"
     "sync"
@@ -43,7 +45,7 @@ func (hs *HttpService)HandlerEncrypt(w http.ResponseWriter, req *http.Request)  
     defer req.Body.Close()
     if req.Method != http.MethodGet {
         w.WriteHeader(405)
-        w.Write(util.StatusText(405))
+        w.Write([]byte("method not allow\n"))
         return
     }
     ctx := req.URL.Query().Get("ctx")
@@ -56,7 +58,7 @@ func (hs *HttpService)HandlerDencrypt(w http.ResponseWriter, req *http.Request) 
     defer req.Body.Close()
     if req.Method != http.MethodGet {
         w.WriteHeader(405)
-        w.Write(util.StatusText(405))
+        w.Write([]byte("method not allow\n"))
         return
     }
     key := req.URL.Query().Get("key")
@@ -79,7 +81,7 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
 
     if req.Method != http.MethodGet && req.Method != http.MethodPost {
         w.WriteHeader(405)
-        w.Write(util.StatusText(405))
+        w.Write([]byte("method not allow\n"))
         return
     }
 
@@ -96,7 +98,7 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
         return
     }
 
-    db := req.URL.Query().Get("db")
+    db := req.FormValue("db")
     if len(hs.DbList) > 0 && !hs.checkDatabase(q) && !util.MapHasKey(hs.DbMap, db) {
         w.WriteHeader(400)
         w.Write([]byte("database not exist\n"))
@@ -105,8 +107,8 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
 
     var circle *backend.Circle
     for {
-        num := rand.Intn(len(hs.Circles))
-        circle = hs.Circles[num]
+        id := rand.Intn(len(hs.Circles))
+        circle = hs.Circles[id]
         if circle.IsMigrating {
             continue
         }
@@ -128,7 +130,7 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
             if err != nil {
                 log.Printf("query cluster is: %s, error: %s", q, err)
                 w.WriteHeader(400)
-                w.Write([]byte(err.Error()))
+                w.Write([]byte("query error\n"))
                 return
             }
             w.Write(body)
@@ -139,14 +141,14 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
         return
     }
 
-    resp, err := circle.Query(w, req)
+    res, err := circle.Query(w, req)
     if err != nil {
         log.Printf("query is: %s, error: %s", q, err)
         w.WriteHeader(400)
-        w.Write([]byte(err.Error()))
+        w.Write([]byte("query error\n"))
         return
     }
-    w.Write(resp)
+    w.Write(res)
     return
 }
 
@@ -156,7 +158,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
 
     if req.Method != http.MethodPost {
         w.WriteHeader(405)
-        w.Write(util.StatusText(405))
+        w.Write([]byte("method not allow\n"))
         return
     }
 
@@ -194,7 +196,6 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
     }
     p, err := ioutil.ReadAll(body)
     if err != nil {
-        log.Printf("err:%+v", err)
         w.WriteHeader(400)
         w.Write([]byte(err.Error()))
         return
@@ -222,25 +223,19 @@ func (hs *HttpService) HandlerClear(w http.ResponseWriter, req *http.Request) {
 
     if req.Method != http.MethodPost {
         w.WriteHeader(405)
-        w.Write(util.StatusText(405))
+        w.Write([]byte("method not allow\n"))
         return
     }
 
-    circleNum, err := strconv.Atoi(req.FormValue("circle_num"))
-    if err != nil || circleNum < 0 || circleNum >= len(hs.Circles) {
+    circleId, err := hs.formCircleId(req, "circle_id")
+    if err != nil {
         w.WriteHeader(400)
-        w.Write([]byte("invalid circle_num\n"))
+        w.Write([]byte(err.Error()+"\n"))
         return
     }
-    db := strings.Trim(req.FormValue("db"), ",")
-    if db == "" {
-        w.WriteHeader(400)
-        w.Write([]byte("empty database\n"))
-        return
-    }
-    dbs := strings.Split(db, ",")
-    go hs.Clear(dbs, circleNum)
 
+    dbs := hs.formValues(req, "db")
+    go hs.Clear(dbs, circleId)
     w.WriteHeader(202)
     w.Write([]byte("accepted\n"))
     return
@@ -250,41 +245,45 @@ func (hs *HttpService) HandlerMigrating(w http.ResponseWriter, req *http.Request
     defer req.Body.Close()
     hs.AddHeader(w)
 
-    if req.Method == http.MethodPost {
-        decoder := json.NewDecoder(req.Body)
-        var o struct {
-            circleNum int  `json:"circle_num"`
-            migrating bool `json:"migrating"`
-        }
-        err := decoder.Decode(&o)
-        if err != nil {
-            log.Printf("request body error: %s", err)
-            w.Write([]byte("illegal body\n"))
-            return
-        }
-        circle := hs.Circles[o.circleNum]
-        circle.SetMigrating(o.migrating)
-        res := map[string]interface{}{
-            "name": circle.Name,
-            "circle_num": circle.CircleNum,
-            "is_migrating": circle.IsMigrating,
-        }
-        resData, _ := json.Marshal(res)
-        w.Write(resData)
-    } else if req.Method == http.MethodGet {
+    if req.Method == http.MethodGet {
+        hs.AddJsonHeader(w)
         res := make([]map[string]interface{}, len(hs.Circles))
         for k, circle := range hs.Circles {
             res[k] = map[string]interface{}{
-                "name": circle.Name,
-                "circle_num": circle.CircleNum,
+                "circle_id": circle.CircleId,
                 "is_migrating": circle.IsMigrating,
             }
         }
         resData, _ := json.Marshal(res)
         w.Write(resData)
+        return
+    } else if req.Method == http.MethodPost {
+        circleId, err := hs.formCircleId(req, "circle_id")
+        if err != nil {
+            w.WriteHeader(400)
+            w.Write([]byte(err.Error()+"\n"))
+            return
+        }
+        migrating, err := hs.formBool(req, "migrating")
+        if err != nil {
+            w.WriteHeader(400)
+            w.Write([]byte("illegal migrating\n"))
+            return
+        }
+
+        hs.AddJsonHeader(w)
+        circle := hs.Circles[circleId]
+        circle.SetMigrating(migrating)
+        res := map[string]interface{}{
+            "circle_id": circle.CircleId,
+            "is_migrating": circle.IsMigrating,
+        }
+        resData, _ := json.Marshal(res)
+        w.Write(resData)
+        return
     } else {
         w.WriteHeader(405)
-        w.Write(util.StatusText(405))
+        w.Write([]byte("method not allow\n"))
         return
     }
 }
@@ -295,42 +294,29 @@ func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request
 
     if req.Method != http.MethodPost {
         w.WriteHeader(405)
-        w.Write(util.StatusText(405))
+        w.Write([]byte("method not allow\n"))
         return
     }
 
-    operateType := req.FormValue("operate_type")
-    if operateType != "add" && operateType != "del" {
+    circleId, err := hs.formCircleId(req, "circle_id")
+    if err != nil {
         w.WriteHeader(400)
-        w.Write([]byte("invalid operate_type\n"))
+        w.Write([]byte(err.Error()+"\n"))
         return
     }
-    circleNum, err := strconv.Atoi(req.FormValue("circle_num"))
-    if err != nil || circleNum < 0 || circleNum >= len(hs.Circles) {
+    operation := req.FormValue("operation")
+    if operation != "add" && operation != "rm" {
         w.WriteHeader(400)
-        w.Write([]byte("invalid circle_num\n"))
+        w.Write([]byte("invalid operation\n"))
         return
     }
-    db := strings.Trim(req.FormValue("db"), ",")
-    var dbs []string
-    if db != "" {
-        dbs = strings.Split(db, ",")
-    }
-
-    cpus, err := strconv.Atoi(req.FormValue("cpus"))
-    if err != nil || cpus <= 0 {
-        w.WriteHeader(400)
-        w.Write([]byte("invalid cpus\n"))
-        return
-    }
-    hs.MigrateMaxCpus = cpus
 
     var backends []*backend.Backend
-    if operateType == "del" {
-        backendUrls := strings.Split(strings.Trim(req.FormValue("backends"), ","), ",")
+    if operation == "rm" {
+        backendUrls := hs.formValues(req, "backend_urls")
         if len(backendUrls) == 0 {
             w.WriteHeader(400)
-            w.Write([]byte("invalid backends\n"))
+            w.Write([]byte("invalid backend_urls\n"))
             return
         }
         for _, url := range backendUrls {
@@ -339,17 +325,24 @@ func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request
                 Client: backend.NewClient(url),
                 Transport: backend.NewTransport(url)},
             )
-            hs.BackendRebalanceStatus[circleNum][url] = &backend.MigrationInfo{}
-            hs.Circles[circleNum].BackendWgMap[url] = &sync.WaitGroup{}
+            hs.BackendRebalanceStatus[circleId][url] = &backend.MigrationInfo{}
+            hs.Circles[circleId].BackendWgMap[url] = &sync.WaitGroup{}
         }
     }
-    for _, backend := range hs.Circles[circleNum].Backends {
+    for _, backend := range hs.Circles[circleId].Backends {
         backends = append(backends, backend)
     }
 
-    if hs.Circles[circleNum].IsMigrating {
+    err = hs.setCpus(req)
+    if err != nil {
+        w.WriteHeader(400)
+        w.Write([]byte(err.Error()+"\n"))
+        return
+    }
+
+    if hs.Circles[circleId].IsMigrating {
         w.WriteHeader(202)
-        w.Write([]byte(fmt.Sprintf("circle %d is migrating\n", circleNum)))
+        w.Write([]byte(fmt.Sprintf("circle %d is migrating\n", circleId)))
         return
     }
     if hs.IsResyncing {
@@ -358,7 +351,8 @@ func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request
         return
     }
 
-    go hs.Rebalance(backends, circleNum, dbs)
+    dbs := hs.formValues(req, "db")
+    go hs.Rebalance(circleId, backends, dbs)
     w.WriteHeader(202)
     w.Write([]byte("accepted\n"))
     return
@@ -370,45 +364,38 @@ func (hs *HttpService) HandlerRecovery(w http.ResponseWriter, req *http.Request)
 
     if req.Method != http.MethodPost {
         w.WriteHeader(405)
-        w.Write(util.StatusText(405))
+        w.Write([]byte("method not allow\n"))
         return
     }
 
-    fromCircleNum, err := strconv.Atoi(req.FormValue("from_circle_num"))
+    fromCircleId, err := hs.formCircleId(req, "from_circle_id")
     if err != nil {
         w.WriteHeader(400)
-        w.Write([]byte("invalid circle_num\n"))
+        w.Write([]byte(err.Error()+"\n"))
         return
     }
-    toCircleNum, err := strconv.Atoi(req.FormValue("to_circle_num"))
+    toCircleId, err := hs.formCircleId(req, "to_circle_id")
     if err != nil {
         w.WriteHeader(400)
-        w.Write([]byte("invalid circle_num\n"))
+        w.Write([]byte(err.Error()+"\n"))
         return
     }
-    if fromCircleNum < 0 || fromCircleNum >= len(hs.Circles) || toCircleNum < 0 || toCircleNum >= len(hs.Circles) || fromCircleNum == toCircleNum {
+    if fromCircleId == toCircleId {
         w.WriteHeader(400)
-        w.Write([]byte("invalid circle_num\n"))
+        w.Write([]byte("from_circle_id and to_circle_id cannot be same\n"))
         return
     }
 
-    db := strings.Trim(req.FormValue("db"), ",")
-    var dbs []string
-    if db != "" {
-        dbs = strings.Split(db, ",")
-    }
-
-    cpus, err := strconv.Atoi(req.FormValue("cpus"))
-    if err != nil || cpus <= 0 {
+    err = hs.setCpus(req)
+    if err != nil {
         w.WriteHeader(400)
-        w.Write([]byte("invalid cpus\n"))
+        w.Write([]byte(err.Error()+"\n"))
         return
     }
-    hs.MigrateMaxCpus = cpus
 
-    if hs.Circles[fromCircleNum].IsMigrating || hs.Circles[toCircleNum].IsMigrating {
+    if hs.Circles[fromCircleId].IsMigrating || hs.Circles[toCircleId].IsMigrating {
         w.WriteHeader(202)
-        w.Write([]byte(fmt.Sprintf("circle %d or %d is migrating\n", fromCircleNum, toCircleNum)))
+        w.Write([]byte(fmt.Sprintf("circle %d or %d is migrating\n", fromCircleId, toCircleId)))
         return
     }
     if hs.IsResyncing {
@@ -417,14 +404,9 @@ func (hs *HttpService) HandlerRecovery(w http.ResponseWriter, req *http.Request)
         return
     }
 
-    backendUrls := strings.Split(strings.Trim(req.FormValue("to_backends"), ","), ",")
-    if len(backendUrls) == 0 {
-        w.WriteHeader(400)
-        w.Write([]byte("invalid backends\n"))
-        return
-    }
-
-    go hs.Recovery(fromCircleNum, toCircleNum, backendUrls, dbs)
+    backendUrls := hs.formValues(req, "backend_urls")
+    dbs := hs.formValues(req, "db")
+    go hs.Recovery(fromCircleId, toCircleId, backendUrls, dbs)
     w.WriteHeader(202)
     w.Write([]byte("accepted\n"))
     return
@@ -436,39 +418,28 @@ func (hs *HttpService) HandlerResync(w http.ResponseWriter, req *http.Request) {
 
     if req.Method != http.MethodPost {
         w.WriteHeader(405)
-        w.Write(util.StatusText(405))
+        w.Write([]byte("method not allow\n"))
         return
     }
 
-    db := strings.Trim(req.FormValue("db"), ",")
-    var dbs []string
-    if db != "" {
-        dbs = strings.Split(db, ",")
-    }
-
-    cpus, err := strconv.Atoi(req.FormValue("cpus"))
-    if err != nil || cpus <= 0 {
+    seconds, err := hs.formSeconds(req)
+    if err != nil {
         w.WriteHeader(400)
-        w.Write([]byte("invalid cpus\n"))
+        w.Write([]byte(err.Error()+"\n"))
         return
     }
-    hs.MigrateMaxCpus = cpus
 
-    lastSecondsStr := req.FormValue("last_seconds")
-    if lastSecondsStr == "" {
-        lastSecondsStr = "0"
-    }
-    lastSeconds, err := strconv.Atoi(lastSecondsStr)
-    if err != nil || lastSeconds < 0 {
+    err = hs.setCpus(req)
+    if err != nil {
         w.WriteHeader(400)
-        w.Write([]byte("invalid latest_seconds\n"))
+        w.Write([]byte(err.Error()+"\n"))
         return
     }
 
     for _, circle := range hs.Circles {
         if circle.IsMigrating {
             w.WriteHeader(202)
-            w.Write([]byte(fmt.Sprintf("circle %d is migrating\n", circle.CircleNum)))
+            w.Write([]byte(fmt.Sprintf("circle %d is migrating\n", circle.CircleId)))
             return
         }
     }
@@ -478,7 +449,8 @@ func (hs *HttpService) HandlerResync(w http.ResponseWriter, req *http.Request) {
         return
     }
 
-    go hs.Resync(dbs, lastSeconds)
+    dbs := hs.formValues(req, "db")
+    go hs.Resync(dbs, seconds)
     w.WriteHeader(202)
     w.Write([]byte("accepted\n"))
     return
@@ -490,37 +462,42 @@ func (hs *HttpService) HandlerStatus(w http.ResponseWriter, req *http.Request) {
 
     if req.Method != http.MethodGet {
         w.WriteHeader(405)
-        w.Write(util.StatusText(405))
+        w.Write([]byte("method not allow\n"))
         return
     }
 
-    circleNumStr := req.FormValue("circle_num")
-    circleNum, err := strconv.Atoi(circleNumStr)
-    if err != nil || circleNum < 0 || circleNum >= len(hs.Circles) {
+    circleId, err := hs.formCircleId(req, "circle_id")
+    if err != nil {
         w.WriteHeader(400)
-        w.Write([]byte("invalid circle_num\n"))
+        w.Write([]byte(err.Error()+"\n"))
         return
     }
+
     var res []byte
     statusType := req.FormValue("type")
     if statusType == "rebalance" {
-        res, _ = json.Marshal(hs.BackendRebalanceStatus[circleNum])
+        res, _ = json.Marshal(hs.BackendRebalanceStatus[circleId])
     } else if statusType == "recovery" {
-        res, _ = json.Marshal(hs.BackendRecoveryStatus[circleNum])
+        res, _ = json.Marshal(hs.BackendRecoveryStatus[circleId])
     } else if statusType == "resync" {
-        res, _ = json.Marshal(hs.BackendResyncStatus[circleNum])
+        res, _ = json.Marshal(hs.BackendResyncStatus[circleId])
     } else {
         w.WriteHeader(400)
         w.Write([]byte("invalid status type\n"))
         return
     }
 
+    hs.AddJsonHeader(w)
     w.Write(res)
     return
 }
 
 func (hs *HttpService) AddHeader(w http.ResponseWriter) {
     w.Header().Add("X-Influxdb-Version", util.Version)
+}
+
+func (hs *HttpService) AddJsonHeader(w http.ResponseWriter) {
+    w.Header().Add("Content-Type", "application/json")
 }
 
 func (hs *HttpService) transAuth(ctx string) string {
@@ -549,4 +526,59 @@ func (hs *HttpService) checkAuth(r *http.Request) bool {
 func (hs *HttpService) checkDatabase(q string) bool {
     q = strings.ToLower(q)
     return (strings.HasPrefix(q, "show") && strings.Contains(q, "databases")) || (strings.HasPrefix(q, "create") && strings.Contains(q, "database"))
+}
+
+func (hs *HttpService) formValues(req *http.Request, key string) []string {
+    var values []string
+    str := strings.Trim(req.FormValue(key), ", ")
+    if str != "" {
+        values = strings.Split(str, ",")
+    }
+    return values
+}
+
+func (hs *HttpService) formPositiveInt(req *http.Request, key string) (int, bool) {
+    str := strings.TrimSpace(req.FormValue(key))
+    if str == "" {
+        return 0, true
+    }
+    value, err := strconv.Atoi(str)
+    return value, err == nil && value >= 0
+}
+
+func (hs *HttpService) formSeconds(req *http.Request) (int, error) {
+    days, ok1 := hs.formPositiveInt(req, "days")
+    hours, ok2 := hs.formPositiveInt(req, "hours")
+    minutes, ok3 := hs.formPositiveInt(req, "minutes")
+    seconds, ok4 := hs.formPositiveInt(req, "seconds")
+    if !ok1 || !ok2 || !ok3 || !ok4 {
+        return 0, errors.New("invalid days, hours, minutes or seconds")
+    }
+    return days * 86400 + hours * 3600 + minutes * 60 + seconds, nil
+}
+
+func (hs *HttpService) formCircleId(req *http.Request, key string) (int, error) {
+    circleId, err := strconv.Atoi(req.FormValue(key))
+    if err != nil || circleId < 0 || circleId >= len(hs.Circles) {
+        return circleId, errors.New("invalid " + key)
+    }
+    return circleId, nil
+}
+
+func (hs *HttpService) formBool(req *http.Request, key string) (bool, error) {
+    return strconv.ParseBool(req.FormValue(key))
+}
+
+func (hs *HttpService) setCpus(req *http.Request) error {
+    str := strings.TrimSpace(req.FormValue("cpus"))
+    if str != "" {
+        cpus, err := strconv.Atoi(str)
+        if err != nil || cpus <= 0 || cpus > 2 * runtime.NumCPU() {
+            return errors.New("invalid cpus")
+        }
+        hs.MigrateMaxCpus = cpus
+    } else {
+        hs.MigrateMaxCpus = 1
+    }
+    return nil
 }

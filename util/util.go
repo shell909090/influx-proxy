@@ -4,7 +4,6 @@ import (
     "bytes"
     "compress/gzip"
     "io"
-    "net/http"
     "os"
 )
 
@@ -37,10 +36,6 @@ func CheckPathAndCreate(StoreDir string) {
             return
         }
     }
-}
-
-func StatusText(status int) []byte {
-    return []byte(http.StatusText(status) + "\n")
 }
 
 func GzipCompress(b []byte) (cb []byte, err error) {

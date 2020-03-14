@@ -20,7 +20,7 @@ type Circle struct {
     Backends        []*Backend                  `json:"backends"`
     UrlToBackend    map[string]*Backend         `json:"url_to_backend"`
     BackendWgMap    map[string]*sync.WaitGroup  `json:"backend_wg_map"`
-    CircleNum       int                         `json:"circle_num"`
+    CircleId        int                         `json:"circle_id"`
     IsMigrating     bool                        `json:"is_migrating"`
     WgMigrate       *sync.WaitGroup             `json:"wg_migrate"`
     StatusLock      *sync.RWMutex               `json:"status_lock"`
