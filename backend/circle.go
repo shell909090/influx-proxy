@@ -66,7 +66,7 @@ func (circle *Circle) QueryCluster(w http.ResponseWriter, req *http.Request) ([]
         req.Body = ioutil.NopCloser(bytes.NewBuffer(reqBodyBytes))
         body, err := backend.Query(req, w, true)
         if err != nil {
-            log.Printf("req:%+v err:%+v", req, err)
+            log.Printf("backend query error: %s %s", backend.Url, err)
             return nil, err
         }
         if body != nil {
@@ -195,10 +195,10 @@ func (circle *Circle) concatByValues(bodies [][]byte) (body []byte, err error) {
     return
 }
 
-func (circle *Circle) Migrate(srcBackend *Backend, dstBackends []*Backend, db, measure string, lastSeconds int) error {
+func (circle *Circle) Migrate(srcBackend *Backend, dstBackends []*Backend, db, measure string, seconds int) error {
     timeClause := ""
-    if lastSeconds > 0 {
-        timeClause = fmt.Sprintf(" where time >= %ds", time.Now().Unix()-int64(lastSeconds))
+    if seconds > 0 {
+        timeClause = fmt.Sprintf(" where time >= %ds", time.Now().Unix()-int64(seconds))
     }
 
     rsp, err := srcBackend.QueryIQL(db, fmt.Sprintf("select * from \"%s\"%s", measure, timeClause))
