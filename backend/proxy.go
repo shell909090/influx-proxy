@@ -15,39 +15,38 @@ import (
     "time"
 )
 
-// Proxy 集群
 type Proxy struct {
-    Circles                []*Circle                    `json:"circles"`            // 集群列表
-    ListenAddr             string                       `json:"listen_addr"`        // 服务监听地址
-    DataDir                string                       `json:"data_dir"`           // 缓存文件目录
-    DbList                 []string                     `json:"db_list"`            // 数据库列表
-    DbMap                  map[string]bool              `json:"db_map"`             // 数据库字典
-    VNodeSize              int                          `json:"vnode_size"`         // 虚拟节点数
-    FlushSize              int                          `json:"flush_size"`         // 实例的缓冲区大小
-    FlushTime              time.Duration                `json:"flush_time"`         // 实例的缓冲清空时间
-    MigrateMaxCpus         int                          `json:"migrate_max_cpus"`   // 迁移时可用cpu数
-    Username               string                       `json:"username"`           // proxy用户
-    Password               string                       `json:"password"`           // proxy密码
-    AuthSecure             bool                         `json:"auth_secure"`        // 认证加密开关
-    HTTPSEnabled           bool                         `json:"https_enabled"`      // https开关
-    HTTPSCert              string                       `json:"https_cert"`         // https证书
-    HTTPSKey               string                       `json:"https_key"`          // https私钥
-    ForbiddenQuery         []*regexp.Regexp             `json:"forbidden_query"`
-    ObligatedQuery         []*regexp.Regexp             `json:"obligated_query"`
-    ClusteredQuery         []*regexp.Regexp             `json:"clustered_query"`
-    BackendRebalanceStatus []map[string]*MigrationInfo  `json:"backend_re_balance_status"`
-    BackendRecoveryStatus  []map[string]*MigrationInfo  `json:"backend_recovery_status"`
-    BackendResyncStatus    []map[string]*MigrationInfo  `json:"backend_resync_status"`
+    Circles                 []*Circle                       `json:"circles"`
+    ListenAddr              string                          `json:"listen_addr"`
+    DataDir                 string                          `json:"data_dir"`
+    DbList                  []string                        `json:"db_list"`
+    DbMap                   map[string]bool                 `json:"db_map"`
+    VNodeSize               int                             `json:"vnode_size"`
+    FlushSize               int                             `json:"flush_size"`
+    FlushTime               time.Duration                   `json:"flush_time"`
+    MigrateMaxCpus          int                             `json:"migrate_max_cpus"`
+    Username                string                          `json:"username"`
+    Password                string                          `json:"password"`
+    AuthSecure              bool                            `json:"auth_secure"`
+    HTTPSEnabled            bool                            `json:"https_enabled"`
+    HTTPSCert               string                          `json:"https_cert"`
+    HTTPSKey                string                          `json:"https_key"`
+    ForbiddenQuery          []*regexp.Regexp                `json:"forbidden_query"`
+    ObligatedQuery          []*regexp.Regexp                `json:"obligated_query"`
+    ClusteredQuery          []*regexp.Regexp                `json:"clustered_query"`
+    IsResyncing             bool                            `json:"is_resyncing"`
+    BackendRebalanceStatus  []map[string]*MigrationInfo     `json:"backend_re_balance_status"`
+    BackendRecoveryStatus   []map[string]*MigrationInfo     `json:"backend_recovery_status"`
+    BackendResyncStatus     []map[string]*MigrationInfo     `json:"backend_resync_status"`
+    StatusLock              *sync.RWMutex                   `json:"status_lock"`
 }
 
-// LineData 数据传输形式
 type LineData struct {
     Db        string `json:"db"`
     Line      []byte `json:"line"`
     Precision string `json:"precision"`
 }
 
-// MigrationInfo 迁移信息
 type MigrationInfo struct {
     CircleNum           int         `json:"circle_num"`
     Database            string      `json:"database"`
@@ -57,7 +56,6 @@ type MigrationInfo struct {
     BMNotMigrateCount   int         `json:"bm_not_migrate_count"`
 }
 
-// NewCluster 新建集群
 func NewProxy(file string) (proxy *Proxy, err error) {
     proxy, err = loadProxyJson(file)
     if err != nil {
@@ -85,7 +83,6 @@ func NewProxy(file string) (proxy *Proxy, err error) {
     return
 }
 
-// loadProxyJson 加载主机配置
 func loadProxyJson(file string) (proxy *Proxy, err error) {
     proxy = &Proxy{}
     f, err := os.Open(file)
@@ -98,14 +95,12 @@ func loadProxyJson(file string) (proxy *Proxy, err error) {
     return
 }
 
-// initCircle 初始化哈希环
 func (proxy *Proxy) initCircle(circle *Circle) {
     circle.Router = consistent.New()
     circle.Router.NumberOfReplicas = proxy.VNodeSize
     circle.UrlToBackend = make(map[string]*Backend)
     circle.BackendWgMap = make(map[string]*sync.WaitGroup)
     circle.WgMigrate = &sync.WaitGroup{}
-    circle.ReadyMigrating = false
     circle.IsMigrating = false
     circle.StatusLock = &sync.RWMutex{}
     for _, backend := range circle.Backends {
@@ -147,7 +142,6 @@ func (proxy *Proxy) initMigration(circle *Circle, circleNum int) {
     }
 }
 
-// GetMachines 获取数据对应的三台备份物理主机
 func (proxy *Proxy) GetMachines(key string) []*Backend {
     machines := make([]*Backend, 0)
     for circleNum, circle := range proxy.Circles {
@@ -162,9 +156,7 @@ func (proxy *Proxy) GetMachines(key string) []*Backend {
     return machines
 }
 
-// WriteData 写入数据操作
 func (proxy *Proxy) WriteData(data *LineData) {
-    // 根据 Precision 对line做相应的调整
     data.Line = LineToNano(data.Line, data.Precision)
 
     measure, err := ScanKey(data.Line)
@@ -172,7 +164,6 @@ func (proxy *Proxy) WriteData(data *LineData) {
         log.Printf("scan key error: %s\n", err)
         return
     }
-    // 得到对象将要存储的多个备份节点
     key := data.Db + "," + measure
     backends := proxy.GetMachines(key)
     // fmt.Printf("%s key: %s; backends:", time.Now().Format("2006-01-02 15:04:05"), key)
@@ -185,12 +176,10 @@ func (proxy *Proxy) WriteData(data *LineData) {
         return
     }
 
-    // 对象如果不是以\n结束的，则加上\n
     if !bytes.HasSuffix(data.Line, []byte("\n")) {
         data.Line = append(data.Line, []byte("\n")...)
     }
 
-    // 顺序存储到多个备份节点上
     for _, backend := range backends {
         err := backend.WriteDataToBuffer(data, proxy.FlushSize)
         if err != nil {
@@ -199,23 +188,6 @@ func (proxy *Proxy) WriteData(data *LineData) {
         }
     }
     return
-}
-
-func (proxy *Proxy) AddBackend(circleNum int) ([]*Backend, error) {
-    circle := proxy.Circles[circleNum]
-    var res []*Backend
-    for _, v := range circle.UrlToBackend {
-        res = append(res, v)
-    }
-    return res, nil
-}
-
-func (proxy *Proxy) DeleteBackend(backendUrls []string) ([]*Backend, error) {
-    var backends []*Backend
-    for _, url := range backendUrls {
-        backends = append(backends, &Backend{Url: url, Client: NewClient(url), Transport: NewTransport(url)})
-    }
-    return backends, nil
 }
 
 func (proxy *Proxy) ForbidQuery(cmds []string) {
@@ -358,7 +330,7 @@ func (proxy *Proxy) ClearMigrateStatus(data map[string]*MigrationInfo) {
 func (proxy *Proxy) Rebalance(backends []*Backend, circleNum int, databases []string) {
     util.SetMLog("./log/rebalance.log", "Rebalance: ")
     circle := proxy.Circles[circleNum]
-    circle.SetIsMigrating(true)
+    circle.SetMigrating(true)
     if len(databases) == 0 {
         databases = proxy.DbList
     }
@@ -368,7 +340,7 @@ func (proxy *Proxy) Rebalance(backends []*Backend, circleNum int, databases []st
         go proxy.RebalanceBackend(backend, circleNum, databases)
     }
     circle.WgMigrate.Wait()
-    circle.SetIsMigrating(false)
+    defer circle.SetMigrating(false)
     util.Mlog.Printf("rebalance done")
 }
 
@@ -413,10 +385,8 @@ func (proxy *Proxy) Recovery(fromCircleNum, toCircleNum int, recoveryBackendUrls
     fromCircle := proxy.Circles[fromCircleNum]
     toCircle := proxy.Circles[toCircleNum]
 
-    fromCircle.SetIsMigrating(true)
-    toCircle.SetIsMigrating(true)
-    defer fromCircle.SetIsMigrating(false)
-    defer toCircle.SetIsMigrating(false)
+    fromCircle.SetMigrating(true)
+    toCircle.SetMigrating(true)
     if len(databases) == 0 {
         databases = proxy.DbList
     }
@@ -424,11 +394,13 @@ func (proxy *Proxy) Recovery(fromCircleNum, toCircleNum int, recoveryBackendUrls
     for _, v := range recoveryBackendUrls {
         recoveryBackendUrlMap[v] = true
     }
-    for _, backend := range fromCircle.UrlToBackend {
+    for _, backend := range fromCircle.Backends {
         fromCircle.WgMigrate.Add(1)
         go proxy.RecoveryBackend(backend, fromCircle, toCircle, recoveryBackendUrlMap, databases)
     }
     fromCircle.WgMigrate.Wait()
+    defer fromCircle.SetMigrating(false)
+    defer toCircle.SetMigrating(false)
     util.Mlog.Printf("recovery done")
 }
 
@@ -473,16 +445,16 @@ func (proxy *Proxy) Resync(databases []string, lastSeconds int) {
     if len(databases) == 0 {
         databases = proxy.DbList
     }
+    proxy.SetResyncing(true)
     for _, circle := range proxy.Circles {
-        circle.SetIsMigrating(true)
-        for _, backend := range circle.UrlToBackend {
+        for _, backend := range circle.Backends {
             circle.WgMigrate.Add(1)
             go proxy.ResyncBackend(backend, circle, databases, lastSeconds)
         }
         circle.WgMigrate.Wait()
-        circle.SetIsMigrating(false)
         util.Mlog.Printf("resync %s(circle %d) done", circle.Name, circle.CircleNum)
     }
+    defer proxy.SetResyncing(false)
     util.Mlog.Printf("resync done")
 }
 
@@ -526,4 +498,10 @@ func (proxy *Proxy) ResyncBackend(backend *Backend, circle *Circle, databases []
             }
         }
     }
+}
+
+func (proxy *Proxy) SetResyncing(resyncing bool) {
+    proxy.StatusLock.Lock()
+    defer proxy.StatusLock.Unlock()
+    proxy.IsResyncing = resyncing
 }

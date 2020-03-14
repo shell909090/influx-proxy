@@ -4,6 +4,7 @@ import (
     "bytes"
     "compress/gzip"
     "encoding/json"
+    "fmt"
     "github.com/chengshiwen/influx-proxy/backend"
     "github.com/chengshiwen/influx-proxy/util"
     "io/ioutil"
@@ -21,7 +22,6 @@ type HttpService struct {
     *backend.Proxy
 }
 
-// Register 注册http方法
 func (hs *HttpService) Register(mux *http.ServeMux) {
     mux.HandleFunc("/encrypt", hs.HandlerEncrypt)
     mux.HandleFunc("/decrypt", hs.HandlerDencrypt)
@@ -29,8 +29,7 @@ func (hs *HttpService) Register(mux *http.ServeMux) {
     mux.HandleFunc("/query", hs.HandlerQuery)
     mux.HandleFunc("/write", hs.HandlerWrite)
     mux.HandleFunc("/clear", hs.HandlerClear)
-    mux.HandleFunc("/set_migrate_flag", hs.HandlerSetMigrateFlag)
-    mux.HandleFunc("/get_migrate_flag", hs.HandlerGetMigrateFlag)
+    mux.HandleFunc("/migrating", hs.HandlerMigrating)
     mux.HandleFunc("/rebalance", hs.HandlerRebalance)
     mux.HandleFunc("/recovery", hs.HandlerRecovery)
     mux.HandleFunc("/resync", hs.HandlerResync)
@@ -44,78 +43,71 @@ func (hs *HttpService)HandlerEncrypt(w http.ResponseWriter, req *http.Request)  
     defer req.Body.Close()
     if req.Method != http.MethodGet {
         w.WriteHeader(405)
-        w.Write([]byte("method not allow\n"))
+        w.Write(util.StatusText(405))
         return
     }
     ctx := req.URL.Query().Get("ctx")
     encrypt := util.AesEncrypt(ctx, util.CipherKey)
     w.WriteHeader(200)
-    w.Write([]byte(encrypt))
+    w.Write([]byte(encrypt+"\n"))
 }
 
 func (hs *HttpService)HandlerDencrypt(w http.ResponseWriter, req *http.Request)  {
     defer req.Body.Close()
     if req.Method != http.MethodGet {
         w.WriteHeader(405)
-        w.Write([]byte("method not allow\n"))
+        w.Write(util.StatusText(405))
         return
     }
     key := req.URL.Query().Get("key")
     ctx := req.URL.Query().Get("ctx")
     decrypt := util.AesDecrypt(ctx, key)
     w.WriteHeader(200)
-    w.Write([]byte(decrypt))
+    w.Write([]byte(decrypt+"\n"))
 }
 
 func (hs *HttpService) HandlerPing(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
     hs.AddHeader(w)
-    w.WriteHeader(http.StatusNoContent)
+    w.WriteHeader(204)
     return
 }
 
-// HandlerQuery query方法入口
 func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
     hs.AddHeader(w)
 
-    // 检查认证
+    if req.Method != http.MethodGet && req.Method != http.MethodPost {
+        w.WriteHeader(405)
+        w.Write(util.StatusText(405))
+        return
+    }
+
     if !hs.checkAuth(req) {
         w.WriteHeader(401)
         w.Write([]byte("authentication failed\n"))
         return
     }
 
-    // 检查请求方法
-    if req.Method != http.MethodPost && req.Method != http.MethodGet {
-        log.Printf("method:%+v", req.Method)
-        w.WriteHeader(http.StatusBadRequest)
-        w.Write([]byte("illegal method\n"))
-        return
-    }
-
-    // 检查查询语句
     q := strings.TrimSpace(req.FormValue("q"))
     if q == "" {
-        log.Printf("query:%+v", q)
-        w.WriteHeader(http.StatusBadRequest)
+        w.WriteHeader(400)
         w.Write([]byte("empty query\n"))
         return
     }
 
     db := req.URL.Query().Get("db")
     if len(hs.DbList) > 0 && !hs.checkDatabase(q) && !util.MapHasKey(hs.DbMap, db) {
-        w.WriteHeader(http.StatusBadRequest)
+        w.WriteHeader(400)
         w.Write([]byte("database not exist\n"))
         return
     }
 
-    // 选出一个状态良好的cluster
     var circle *backend.Circle
     for {
         num := rand.Intn(len(hs.Circles))
         circle = hs.Circles[num]
-        if circle.ReadyMigrating {
+        if circle.IsMigrating {
             continue
         }
         if circle.CheckStatus() {
@@ -124,9 +116,7 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
         time.Sleep(time.Microsecond)
     }
 
-    // 检查带measurement的查询语句
     if !hs.CheckMeasurementQuery(q) {
-        // 检查集群查询语句，如show measurements
         if hs.CheckClusterQuery(q) {
             var body []byte
             var err error
@@ -136,12 +126,11 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
                 body, err = circle.QueryCluster(w, req)
             }
             if err != nil {
-                log.Printf("query cluster:%+v err:%+v", q, err)
-                w.WriteHeader(http.StatusBadRequest)
+                log.Printf("query cluster is: %s, error: %s", q, err)
+                w.WriteHeader(400)
                 w.Write([]byte(err.Error()))
                 return
             }
-            w.WriteHeader(http.StatusOK)
             w.Write(body)
             return
         }
@@ -150,80 +139,67 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
         return
     }
 
-    // 执行查询
     resp, err := circle.Query(w, req)
     if err != nil {
-        log.Printf("err:%+v", err)
-        w.WriteHeader(http.StatusBadRequest)
+        log.Printf("query is: %s, error: %s", q, err)
+        w.WriteHeader(400)
         w.Write([]byte(err.Error()))
         return
     }
-    w.WriteHeader(http.StatusOK)
     w.Write(resp)
     return
 }
 
-// HandlerWrite write方法入口
 func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
     hs.AddHeader(w)
 
-    // 检查认证
+    if req.Method != http.MethodPost {
+        w.WriteHeader(405)
+        w.Write(util.StatusText(405))
+        return
+    }
+
     if !hs.checkAuth(req) {
         w.WriteHeader(401)
         w.Write([]byte("authentication failed\n"))
         return
     }
 
-    // 判断http方法
-    if req.Method != http.MethodPost {
-        log.Printf("req.Method:%+v err:nil", req.Method)
-        w.WriteHeader(http.StatusMethodNotAllowed)
-        w.Write(util.StatusText(http.StatusMethodNotAllowed))
-        return
-    }
-
-    // precision默认为ns
     precision := req.URL.Query().Get("precision")
     if precision == "" {
         precision = "ns"
     }
-    // db必须要给出
     db := req.URL.Query().Get("db")
     if db == "" {
-        w.WriteHeader(http.StatusBadRequest)
-        w.Write(util.StatusText(http.StatusBadRequest))
+        w.WriteHeader(400)
+        w.Write([]byte("empty database\n"))
         return
     }
     if len(hs.DbList) > 0 && !util.MapHasKey(hs.DbMap, db) {
-        w.WriteHeader(http.StatusBadRequest)
+        w.WriteHeader(400)
         w.Write([]byte("database not exist\n"))
         return
     }
 
     body := req.Body
-    // 压缩请求数据
     if req.Header.Get("Content-Encoding") == "gzip" {
         b, err := gzip.NewReader(body)
         defer b.Close()
         if err != nil {
-            log.Printf("err:%+v", err)
-            w.WriteHeader(http.StatusBadRequest)
-            w.Write([]byte(err.Error()))
+            w.Write([]byte("unable to decode gzip body\n"))
             return
         }
         body = b
     }
-    // 读出请求数据
     p, err := ioutil.ReadAll(body)
     if err != nil {
         log.Printf("err:%+v", err)
-        w.WriteHeader(http.StatusBadRequest)
+        w.WriteHeader(400)
         w.Write([]byte(err.Error()))
         return
     }
 
-    // 多个对象，遍历每一个对象
     lines := bytes.Split(p, []byte("\n"))
     for _, line := range lines {
         if len(line) == 0 {
@@ -236,7 +212,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
         }
         hs.WriteData(data)
     }
-    w.WriteHeader(http.StatusNoContent)
+    w.WriteHeader(204)
     return
 }
 
@@ -245,89 +221,72 @@ func (hs *HttpService) HandlerClear(w http.ResponseWriter, req *http.Request) {
     hs.AddHeader(w)
 
     if req.Method != http.MethodPost {
-        log.Printf("req.Method:%+v err:nil", req.Method)
-        w.WriteHeader(http.StatusMethodNotAllowed)
-        w.Write(util.StatusText(http.StatusMethodNotAllowed))
+        w.WriteHeader(405)
+        w.Write(util.StatusText(405))
         return
     }
+
     circleNum, err := strconv.Atoi(req.FormValue("circle_num"))
     if err != nil || circleNum < 0 || circleNum >= len(hs.Circles) {
-        w.WriteHeader(http.StatusBadRequest)
+        w.WriteHeader(400)
         w.Write([]byte("invalid circle_num\n"))
         return
     }
     db := strings.Trim(req.FormValue("db"), ",")
     if db == "" {
-        w.WriteHeader(http.StatusBadRequest)
-        w.Write(util.StatusText(http.StatusBadRequest))
+        w.WriteHeader(400)
+        w.Write([]byte("empty database\n"))
         return
     }
     dbs := strings.Split(db, ",")
     go hs.Clear(dbs, circleNum)
 
-    w.WriteHeader(http.StatusOK)
-    w.Write(util.StatusText(http.StatusOK))
+    w.WriteHeader(202)
+    w.Write([]byte("accepted\n"))
     return
 }
 
-func (hs *HttpService) HandlerSetMigrateFlag(w http.ResponseWriter, req *http.Request) {
+func (hs *HttpService) HandlerMigrating(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
     hs.AddHeader(w)
 
-    if req.Method != http.MethodPost {
-        w.WriteHeader(http.StatusMethodNotAllowed)
-        w.Write(util.StatusText(http.StatusMethodNotAllowed))
-        return
-    }
-
-    circleNumStr := req.FormValue("circle_num")
-    circleNumStrs := strings.Split(circleNumStr, ",")
-
-    flagStr := req.FormValue("flag")
-    flagStrs := strings.Split(flagStr, ",")
-    if len(circleNumStrs) != len(flagStrs) {
-        w.WriteHeader(http.StatusBadRequest)
-        w.Write(util.StatusText(http.StatusBadRequest))
-        return
-    }
-
-    for k, v := range circleNumStrs {
-        circleNum, err := strconv.Atoi(v)
-        if err != nil || circleNum < 0 || circleNum >= len(hs.Circles) {
-            w.WriteHeader(http.StatusBadRequest)
-            w.Write([]byte("invalid circle_num\n"))
-            return
+    if req.Method == http.MethodPost {
+        decoder := json.NewDecoder(req.Body)
+        var o struct {
+            circleNum int  `json:"circle_num"`
+            migrating bool `json:"migrating"`
         }
-
-        flag, err := strconv.ParseBool(flagStrs[k])
+        err := decoder.Decode(&o)
         if err != nil {
-            w.WriteHeader(http.StatusBadRequest)
-            w.Write([]byte(err.Error()))
+            log.Printf("request body error: %s", err)
+            w.Write([]byte("illegal body\n"))
             return
         }
-
-        hs.Circles[circleNum].SetReadyMigrating(flag)
-    }
-
-    w.WriteHeader(http.StatusOK)
-    w.Write(util.StatusText(http.StatusOK))
-}
-
-func (hs *HttpService) HandlerGetMigrateFlag(w http.ResponseWriter, req *http.Request) {
-    defer req.Body.Close()
-    hs.AddHeader(w)
-
-    resp := make([]*backend.MigrateFlagStatus, len(hs.Circles))
-    for k, v := range hs.Circles {
-        resp[k] = &backend.MigrateFlagStatus{
-            ReadyMigratingFlag: v.ReadyMigrating,
-            IsMigratingFlag: v.IsMigrating,
+        circle := hs.Circles[o.circleNum]
+        circle.SetMigrating(o.migrating)
+        res := map[string]interface{}{
+            "name": circle.Name,
+            "circle_num": circle.CircleNum,
+            "is_migrating": circle.IsMigrating,
         }
+        resData, _ := json.Marshal(res)
+        w.Write(resData)
+    } else if req.Method == http.MethodGet {
+        res := make([]map[string]interface{}, len(hs.Circles))
+        for k, circle := range hs.Circles {
+            res[k] = map[string]interface{}{
+                "name": circle.Name,
+                "circle_num": circle.CircleNum,
+                "is_migrating": circle.IsMigrating,
+            }
+        }
+        resData, _ := json.Marshal(res)
+        w.Write(resData)
+    } else {
+        w.WriteHeader(405)
+        w.Write(util.StatusText(405))
+        return
     }
-
-    respData, _ := json.Marshal(resp)
-    w.WriteHeader(http.StatusOK)
-    w.Write(respData)
 }
 
 func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request) {
@@ -335,20 +294,20 @@ func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request
     hs.AddHeader(w)
 
     if req.Method != http.MethodPost {
-        w.WriteHeader(http.StatusMethodNotAllowed)
-        w.Write(util.StatusText(http.StatusMethodNotAllowed))
+        w.WriteHeader(405)
+        w.Write(util.StatusText(405))
         return
     }
 
     operateType := req.FormValue("operate_type")
     if operateType != "add" && operateType != "del" {
-        w.WriteHeader(http.StatusBadRequest)
-        w.Write(util.StatusText(http.StatusBadRequest))
+        w.WriteHeader(400)
+        w.Write([]byte("invalid operate_type\n"))
         return
     }
     circleNum, err := strconv.Atoi(req.FormValue("circle_num"))
     if err != nil || circleNum < 0 || circleNum >= len(hs.Circles) {
-        w.WriteHeader(http.StatusBadRequest)
+        w.WriteHeader(400)
         w.Write([]byte("invalid circle_num\n"))
         return
     }
@@ -360,64 +319,48 @@ func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request
 
     cpus, err := strconv.Atoi(req.FormValue("cpus"))
     if err != nil || cpus <= 0 {
-        w.WriteHeader(http.StatusBadRequest)
+        w.WriteHeader(400)
         w.Write([]byte("invalid cpus\n"))
         return
     }
     hs.MigrateMaxCpus = cpus
 
-    // add or del backend in circle
     var backends []*backend.Backend
-    if operateType == "add" {
-        // 当前所有的实例列表
-        backends, err = hs.AddBackend(circleNum)
-        if err != nil {
-            w.WriteHeader(http.StatusBadRequest)
-            w.Write([]byte(err.Error()))
-            return
-        }
-    } else if operateType == "del" {
+    if operateType == "del" {
         backendUrls := strings.Split(strings.Trim(req.FormValue("backends"), ","), ",")
         if len(backendUrls) == 0 {
-            w.WriteHeader(http.StatusBadRequest)
-            w.Write(util.StatusText(http.StatusBadRequest))
+            w.WriteHeader(400)
+            w.Write([]byte("invalid backends\n"))
             return
         }
-        // 要删除的实例列表
-        backends, err = hs.DeleteBackend(backendUrls)
-        if err != nil {
-            w.WriteHeader(http.StatusBadRequest)
-            w.Write([]byte(err.Error()))
-            return
-        }
-
-        // backends也已经删除需要创建一个进度状态信息
-        for _, be := range backends {
-            hs.BackendRebalanceStatus[circleNum][be.Url] = &backend.MigrationInfo{}
-            hs.Circles[circleNum].BackendWgMap[be.Url] = &sync.WaitGroup{}
-        }
-        for _, backend := range hs.Circles[circleNum].Backends {
-            backends = append(backends, backend)
+        for _, url := range backendUrls {
+            backends = append(backends, &backend.Backend{
+                Url: url,
+                Client: backend.NewClient(url),
+                Transport: backend.NewTransport(url)},
+            )
+            hs.BackendRebalanceStatus[circleNum][url] = &backend.MigrationInfo{}
+            hs.Circles[circleNum].BackendWgMap[url] = &sync.WaitGroup{}
         }
     }
+    for _, backend := range hs.Circles[circleNum].Backends {
+        backends = append(backends, backend)
+    }
 
-    // 判断迁移是否已就绪
-    if !hs.Circles[circleNum].ReadyMigrating {
-        w.WriteHeader(http.StatusBadRequest)
-        w.Write([]byte("call all proxy to set_migrate_flag\n"))
+    if hs.Circles[circleNum].IsMigrating {
+        w.WriteHeader(202)
+        w.Write([]byte(fmt.Sprintf("circle %d is migrating\n", circleNum)))
+        return
+    }
+    if hs.IsResyncing {
+        w.WriteHeader(202)
+        w.Write([]byte("proxy is resyncing\n"))
         return
     }
 
-    // 判断是否正在迁移
-    if hs.Circles[circleNum].GetIsMigrating() {
-        w.WriteHeader(http.StatusAccepted)
-        w.Write(util.StatusText(http.StatusAccepted))
-        return
-    }
-    // rebalance
     go hs.Rebalance(backends, circleNum, dbs)
-    w.WriteHeader(http.StatusOK)
-    w.Write(util.StatusText(http.StatusOK))
+    w.WriteHeader(202)
+    w.Write([]byte("accepted\n"))
     return
 }
 
@@ -426,25 +369,25 @@ func (hs *HttpService) HandlerRecovery(w http.ResponseWriter, req *http.Request)
     hs.AddHeader(w)
 
     if req.Method != http.MethodPost {
-        w.WriteHeader(http.StatusMethodNotAllowed)
-        w.Write(util.StatusText(http.StatusMethodNotAllowed))
+        w.WriteHeader(405)
+        w.Write(util.StatusText(405))
         return
     }
 
     fromCircleNum, err := strconv.Atoi(req.FormValue("from_circle_num"))
     if err != nil {
-        w.WriteHeader(http.StatusBadRequest)
-        w.Write([]byte(err.Error()))
+        w.WriteHeader(400)
+        w.Write([]byte("invalid circle_num\n"))
         return
     }
     toCircleNum, err := strconv.Atoi(req.FormValue("to_circle_num"))
     if err != nil {
-        w.WriteHeader(http.StatusBadRequest)
-        w.Write([]byte(err.Error()))
+        w.WriteHeader(400)
+        w.Write([]byte("invalid circle_num\n"))
         return
     }
     if fromCircleNum < 0 || fromCircleNum >= len(hs.Circles) || toCircleNum < 0 || toCircleNum >= len(hs.Circles) || fromCircleNum == toCircleNum {
-        w.WriteHeader(http.StatusBadRequest)
+        w.WriteHeader(400)
         w.Write([]byte("invalid circle_num\n"))
         return
     }
@@ -457,35 +400,33 @@ func (hs *HttpService) HandlerRecovery(w http.ResponseWriter, req *http.Request)
 
     cpus, err := strconv.Atoi(req.FormValue("cpus"))
     if err != nil || cpus <= 0 {
-        w.WriteHeader(http.StatusBadRequest)
+        w.WriteHeader(400)
         w.Write([]byte("invalid cpus\n"))
         return
     }
     hs.MigrateMaxCpus = cpus
 
-    // 判断迁移是否已就绪
-    if !hs.Circles[toCircleNum].ReadyMigrating {
-        w.WriteHeader(http.StatusBadRequest)
-        w.Write([]byte("call all proxy to set_migrate_flag\n"))
+    if hs.Circles[fromCircleNum].IsMigrating || hs.Circles[toCircleNum].IsMigrating {
+        w.WriteHeader(202)
+        w.Write([]byte(fmt.Sprintf("circle %d or %d is migrating\n", fromCircleNum, toCircleNum)))
+        return
+    }
+    if hs.IsResyncing {
+        w.WriteHeader(202)
+        w.Write([]byte("proxy is resyncing\n"))
         return
     }
 
-    if hs.Circles[fromCircleNum].GetIsMigrating() || hs.Circles[toCircleNum].GetIsMigrating() {
-        w.WriteHeader(http.StatusAccepted)
-        w.Write(util.StatusText(http.StatusAccepted))
-        return
-    }
-
-    backendUrls := strings.Split(strings.Trim(req.FormValue("fault_backends"), ","), ",")
+    backendUrls := strings.Split(strings.Trim(req.FormValue("to_backends"), ","), ",")
     if len(backendUrls) == 0 {
-        w.WriteHeader(http.StatusBadRequest)
-        w.Write(util.StatusText(http.StatusBadRequest))
+        w.WriteHeader(400)
+        w.Write([]byte("invalid backends\n"))
         return
     }
 
     go hs.Recovery(fromCircleNum, toCircleNum, backendUrls, dbs)
-    w.WriteHeader(http.StatusOK)
-    w.Write(util.StatusText(http.StatusOK))
+    w.WriteHeader(202)
+    w.Write([]byte("accepted\n"))
     return
 }
 
@@ -494,8 +435,8 @@ func (hs *HttpService) HandlerResync(w http.ResponseWriter, req *http.Request) {
     hs.AddHeader(w)
 
     if req.Method != http.MethodPost {
-        w.WriteHeader(http.StatusMethodNotAllowed)
-        w.Write(util.StatusText(http.StatusMethodNotAllowed))
+        w.WriteHeader(405)
+        w.Write(util.StatusText(405))
         return
     }
 
@@ -507,7 +448,7 @@ func (hs *HttpService) HandlerResync(w http.ResponseWriter, req *http.Request) {
 
     cpus, err := strconv.Atoi(req.FormValue("cpus"))
     if err != nil || cpus <= 0 {
-        w.WriteHeader(http.StatusBadRequest)
+        w.WriteHeader(400)
         w.Write([]byte("invalid cpus\n"))
         return
     }
@@ -519,22 +460,27 @@ func (hs *HttpService) HandlerResync(w http.ResponseWriter, req *http.Request) {
     }
     lastSeconds, err := strconv.Atoi(lastSecondsStr)
     if err != nil || lastSeconds < 0 {
-        w.WriteHeader(http.StatusBadRequest)
+        w.WriteHeader(400)
         w.Write([]byte("invalid latest_seconds\n"))
         return
     }
 
     for _, circle := range hs.Circles {
-        if circle.GetIsMigrating() {
-            w.WriteHeader(http.StatusAccepted)
-            w.Write(util.StatusText(http.StatusAccepted))
+        if circle.IsMigrating {
+            w.WriteHeader(202)
+            w.Write([]byte(fmt.Sprintf("circle %d is migrating\n", circle.CircleNum)))
             return
         }
     }
+    if hs.IsResyncing {
+        w.WriteHeader(202)
+        w.Write([]byte("proxy is resyncing\n"))
+        return
+    }
 
     go hs.Resync(dbs, lastSeconds)
-    w.WriteHeader(http.StatusOK)
-    w.Write(util.StatusText(http.StatusOK))
+    w.WriteHeader(202)
+    w.Write([]byte("accepted\n"))
     return
 }
 
@@ -543,48 +489,32 @@ func (hs *HttpService) HandlerStatus(w http.ResponseWriter, req *http.Request) {
     hs.AddHeader(w)
 
     if req.Method != http.MethodGet {
-        w.WriteHeader(http.StatusMethodNotAllowed)
-        w.Write(util.StatusText(http.StatusMethodNotAllowed))
+        w.WriteHeader(405)
+        w.Write(util.StatusText(405))
         return
     }
 
     circleNumStr := req.FormValue("circle_num")
     circleNum, err := strconv.Atoi(circleNumStr)
     if err != nil || circleNum < 0 || circleNum >= len(hs.Circles) {
-        w.WriteHeader(http.StatusBadRequest)
+        w.WriteHeader(400)
         w.Write([]byte("invalid circle_num\n"))
         return
     }
     var res []byte
     statusType := req.FormValue("type")
     if statusType == "rebalance" {
-        res, err = json.Marshal(hs.BackendRebalanceStatus[circleNum])
-        if err != nil {
-            log.Printf("err:%+v", err)
-            w.WriteHeader(http.StatusBadRequest)
-            w.Write([]byte(err.Error()))
-        }
+        res, _ = json.Marshal(hs.BackendRebalanceStatus[circleNum])
     } else if statusType == "recovery" {
-        res, err = json.Marshal(hs.BackendRecoveryStatus[circleNum])
-        if err != nil {
-            log.Printf("err:%+v", err)
-            w.WriteHeader(http.StatusBadRequest)
-            w.Write([]byte(err.Error()))
-        }
+        res, _ = json.Marshal(hs.BackendRecoveryStatus[circleNum])
     } else if statusType == "resync" {
-        res, err = json.Marshal(hs.BackendResyncStatus[circleNum])
-        if err != nil {
-            log.Printf("err:%+v", err)
-            w.WriteHeader(http.StatusBadRequest)
-            w.Write([]byte(err.Error()))
-        }
+        res, _ = json.Marshal(hs.BackendResyncStatus[circleNum])
     } else {
-        w.WriteHeader(http.StatusBadRequest)
+        w.WriteHeader(400)
         w.Write([]byte("invalid status type\n"))
         return
     }
 
-    w.WriteHeader(http.StatusOK)
     w.Write(res)
     return
 }

@@ -25,21 +25,20 @@ type BufferCounter struct {
     Counter int           `json:"counter"`
 }
 
-// Backend 物理主机节点
 type Backend struct {
-    Name            string                      `json:"name"`              // backend 名称
-    Url             string                      `json:"url"`               // backend 的数据库地址
-    Username        string                      `json:"username"`          // backend 用户名
-    Password        string                      `json:"password"`          // backend 密码
-    AuthSecure      bool                        `json:"auth_secure"`       // backend 认证加密开关
-    BufferMap       map[string]*BufferCounter   `json:"buffer_map"`        // backend 写缓存
-    Producer        *os.File                    `json:"producer"`          // backend 内容生产者
-    Consumer        *os.File                    `json:"consumer"`          // backend 内容消费者
-    Meta            *os.File                    `json:"meta"`              // backend 消费位置信息
-    Client          *http.Client                `json:"client"`            // backend influxDb 客户端
-    Transport       *http.Transport             `json:"transport"`         // backend influxDb 客户端
-    Active          bool                        `json:"active"`            // backend http客户端状态
-    LockDbMap       map[string]*sync.RWMutex    `json:"lock_db_map"`       // backend 锁
+    Name            string                      `json:"name"`
+    Url             string                      `json:"url"`
+    Username        string                      `json:"username"`
+    Password        string                      `json:"password"`
+    AuthSecure      bool                        `json:"auth_secure"`
+    BufferMap       map[string]*BufferCounter   `json:"buffer_map"`
+    Producer        *os.File                    `json:"producer"`
+    Consumer        *os.File                    `json:"consumer"`
+    Meta            *os.File                    `json:"meta"`
+    Client          *http.Client                `json:"client"`
+    Transport       *http.Transport             `json:"transport"`
+    Active          bool                        `json:"active"`
+    LockDbMap       map[string]*sync.RWMutex    `json:"lock_db_map"`
     LockFile        *sync.RWMutex               `json:"lock_file"`
 }
 

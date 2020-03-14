@@ -15,21 +15,15 @@ import (
 )
 
 type Circle struct {
-    Name           string                     `json:"name"`
-    Router         *consistent.Consistent     `json:"router"`
-    Backends       []*Backend                 `json:"backends"`
-    UrlToBackend   map[string]*Backend        `json:"url_to_backend"`
-    BackendWgMap   map[string]*sync.WaitGroup `json:"backend_wg_map"`
-    CircleNum      int                        `json:"circle_num"`
-    ReadyMigrating bool                       `json:"ready_migrating"` // bool: 准备迁移标志，false: 取消准备迁移标志
-    IsMigrating    bool                       `json:"is_migrating"`    // true: 正在迁移 false: 未在迁移
-    WgMigrate      *sync.WaitGroup            `json:"wg_migrate"`
-    StatusLock     *sync.RWMutex              `json:"status_lock"`
-}
-
-type MigrateFlagStatus struct {
-    ReadyMigratingFlag bool `json:"ready_migrating_flag"`
-    IsMigratingFlag    bool `json:"is_migrating_flag"`
+    Name            string                      `json:"name"`
+    Router          *consistent.Consistent      `json:"router"`
+    Backends        []*Backend                  `json:"backends"`
+    UrlToBackend    map[string]*Backend         `json:"url_to_backend"`
+    BackendWgMap    map[string]*sync.WaitGroup  `json:"backend_wg_map"`
+    CircleNum       int                         `json:"circle_num"`
+    IsMigrating     bool                        `json:"is_migrating"`
+    WgMigrate       *sync.WaitGroup             `json:"wg_migrate"`
+    StatusLock      *sync.RWMutex               `json:"status_lock"`
 }
 
 func (circle *Circle) CheckStatus() bool {
@@ -42,7 +36,6 @@ func (circle *Circle) CheckStatus() bool {
 }
 
 func (circle *Circle) Query(w http.ResponseWriter, req *http.Request) ([]byte, error) {
-    // 得到key
     q := req.FormValue("q")
     measurement, e := GetMeasurementFromInfluxQL(q)
     if e != nil {
@@ -51,7 +44,6 @@ func (circle *Circle) Query(w http.ResponseWriter, req *http.Request) ([]byte, e
     db := req.FormValue("db")
     key := db + "," + measurement
 
-    // 得到目标数据库
     backendUrl, e := circle.Router.Get(key)
     if e != nil {
         return nil, e
@@ -69,7 +61,7 @@ func (circle *Circle) QueryCluster(w http.ResponseWriter, req *http.Request) ([]
         reqBodyBytes, _ = ioutil.ReadAll(req.Body)
     }
     bodies := make([][]byte, 0)
-    // 在环内的所有数据库实例上执行查询，再聚合在一起
+
     for _, backend := range circle.Backends {
         req.Body = ioutil.NopCloser(bytes.NewBuffer(reqBodyBytes))
         body, err := backend.Query(req, w, true)
@@ -82,7 +74,6 @@ func (circle *Circle) QueryCluster(w http.ResponseWriter, req *http.Request) ([]
         }
     }
 
-    // 针对集群语句特征执行不同的聚合过程
     var body []byte
     var err error
     q := strings.ToLower(strings.TrimSpace(req.FormValue("q")))
@@ -275,26 +266,8 @@ func (circle *Circle) Migrate(srcBackend *Backend, dstBackends []*Backend, db, m
     return nil
 }
 
-func (circle *Circle) GetIsMigrating() bool {
-    circle.StatusLock.RLock()
-    defer circle.StatusLock.RUnlock()
-    return circle.IsMigrating
-}
-
-func (circle *Circle) SetIsMigrating(b bool) {
+func (circle *Circle) SetMigrating(migrating bool) {
     circle.StatusLock.Lock()
     defer circle.StatusLock.Unlock()
-    circle.IsMigrating = b
-}
-
-func (circle *Circle) GetReadyMigrating() bool {
-    circle.StatusLock.RLock()
-    defer circle.StatusLock.RUnlock()
-    return circle.ReadyMigrating
-}
-
-func (circle *Circle) SetReadyMigrating(b bool) {
-    circle.StatusLock.Lock()
-    defer circle.StatusLock.Unlock()
-    circle.ReadyMigrating = b
+    circle.IsMigrating = migrating
 }
