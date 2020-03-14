@@ -39,6 +39,7 @@ type Backend struct {
     Transport       *http.Transport             `json:"transport"`
     Active          bool                        `json:"active"`
     LockDbMap       map[string]*sync.RWMutex    `json:"lock_db_map"`
+    LockBuffer      *sync.RWMutex               `json:"lock_buffer"`
     LockFile        *sync.RWMutex               `json:"lock_file"`
 }
 
@@ -281,6 +282,66 @@ func (backend *Backend) CleanUp() (err error) {
     return
 }
 
+func (backend *Backend) checkBufferAndLock(db string) {
+    if _, ok := backend.BufferMap[db]; !ok {
+        backend.LockBuffer.Lock()
+        backend.BufferMap[db] = &BufferCounter{Buffer: &bytes.Buffer{}}
+        backend.LockDbMap[db] = &sync.RWMutex{}
+        defer backend.LockBuffer.Unlock()
+    }
+}
+
+func (backend *Backend) WriteDataToBuffer(data *LineData, backendBufferMaxNum int) error {
+    db := data.Db
+    backend.checkBufferAndLock(db)
+    backend.LockDbMap[db].Lock()
+    defer backend.LockDbMap[db].Unlock()
+
+    backend.BufferMap[db].Buffer.Write(data.Line)
+    backend.BufferMap[db].Counter++
+    if backend.BufferMap[db].Counter > backendBufferMaxNum {
+        err := backend.checkBufferAndSync(db)
+        if err != nil {
+            log.Printf("check buffer and sync error: %s %s", db, err)
+            return err
+        }
+    }
+    return nil
+}
+
+func (backend *Backend) checkBufferAndSync(db string) error {
+    err := backend.WriteDataToDb(db)
+    if err != nil {
+        log.Printf("write data to db error: %s %s", db, err)
+        return err
+    }
+    backend.BufferMap[db].Counter = 0
+    backend.BufferMap[db].Buffer.Truncate(0)
+    return err
+}
+
+func (backend *Backend) WriteDataToDb(db string) error {
+    if backend.BufferMap[db].Buffer.Len() == 0 {
+        return errors.New("length is zero")
+    }
+
+    byteData := backend.BufferMap[db].Buffer.Bytes()
+    if backend.Active {
+        err := backend.Write(db, byteData, true)
+        if err != nil {
+            log.Printf("write data error: %s %s", db, err)
+        }
+        return err
+    }
+
+    err := backend.WriteToFile(db, byteData)
+    if err != nil {
+        log.Printf("write to file error: %s %s", db, err)
+        return err
+    }
+    return nil
+}
+
 func (backend *Backend) CheckBufferAndSync(syncDataTimeOut time.Duration) {
     for {
         select {
@@ -308,17 +369,6 @@ func (backend *Backend) SyncFileData() {
     }
 }
 
-func (backend *Backend) checkBufferAndSync(db string) error {
-    err := backend.WriteDataToDb(db)
-    if err != nil {
-        log.Printf("write data to db error: %s %s", db, err)
-        return err
-    }
-    backend.BufferMap[db].Counter = 0
-    backend.BufferMap[db].Buffer.Truncate(0)
-    return err
-}
-
 func (backend *Backend) syncFileDataToDb() {
     for backend.hasData() {
         if !backend.Active {
@@ -344,45 +394,6 @@ func (backend *Backend) syncFileDataToDb() {
     }
 }
 
-func (backend *Backend) WriteDataToBuffer(data *LineData, backendBufferMaxNum int) error {
-    db := data.Db
-    backend.LockDbMap[db].Lock()
-    defer backend.LockDbMap[db].Unlock()
-    backend.BufferMap[db].Buffer.Write(data.Line)
-    backend.BufferMap[db].Counter++
-
-    if backend.BufferMap[db].Counter > backendBufferMaxNum {
-        err := backend.checkBufferAndSync(db)
-        if err != nil {
-            log.Printf("check buffer and sync error: %s %s", db, err)
-            return err
-        }
-    }
-    return nil
-}
-
-func (backend *Backend) WriteDataToDb(db string) error {
-    if backend.BufferMap[db].Buffer.Len() == 0 {
-        return errors.New("length is zero")
-    }
-
-    byteData := backend.BufferMap[db].Buffer.Bytes()
-    if backend.Active {
-        err := backend.Write(db, byteData, true)
-        if err != nil {
-            log.Printf("write data error: %s %s", db, err)
-        }
-        return err
-    }
-
-    err := backend.WriteToFile(db, byteData)
-    if err != nil {
-        log.Printf("write to file error: %s %s", db, err)
-        return err
-    }
-    return nil
-}
-
 func (backend *Backend) CheckActive() {
     for {
         backend.Active = backend.Ping()
@@ -398,7 +409,7 @@ func (backend *Backend) Ping() bool {
     }
     defer resp.Body.Close()
     if resp.StatusCode != 204 {
-        log.Printf("ping status code: %d, the backend is %s\n", resp.StatusCode, backend.Url)
+        log.Printf("ping status code: %d, the backend is %s", resp.StatusCode, backend.Url)
         return false
     }
     return true
@@ -451,7 +462,7 @@ func (backend *Backend) WriteStream(db string, stream io.Reader, compressed bool
         log.Print("readall error: ", err)
         return err
     }
-    log.Printf("error response: %s\n", respbuf)
+    log.Printf("error response: %s", respbuf)
 
     switch resp.StatusCode {
     case 400:

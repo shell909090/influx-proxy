@@ -118,13 +118,10 @@ func (proxy *Proxy) initBackend(circle *Circle, backend *Backend) {
     backend.Transport = NewTransport(backend.Url)
     backend.Active = true
     backend.LockDbMap = make(map[string]*sync.RWMutex)
+    backend.LockBuffer = &sync.RWMutex{}
     backend.LockFile = &sync.RWMutex{}
     backend.CreateCacheFile(proxy.DataDir)
 
-    for _, db := range proxy.DbList {
-        backend.LockDbMap[db] = new(sync.RWMutex)
-        backend.BufferMap[db] = &BufferCounter{Buffer: &bytes.Buffer{}}
-    }
     go backend.CheckActive()
     go backend.CheckBufferAndSync(proxy.FlushTime)
     go backend.SyncFileData()
@@ -160,7 +157,7 @@ func (proxy *Proxy) WriteData(data *LineData) {
 
     measure, err := ScanKey(data.Line)
     if err != nil {
-        log.Printf("scan key error: %s\n", err)
+        log.Printf("scan key error: %s", err)
         return
     }
     key := data.Db + "," + measure
@@ -252,11 +249,14 @@ func (proxy *Proxy) CheckClusterQuery(q string) bool {
     return true
 }
 
-func (proxy *Proxy) CheckCreateDatabaseQuery(q string) bool {
+func (proxy *Proxy) CheckCreateDatabaseQuery(q string) (string, bool) {
     if len(proxy.ClusteredQuery) != 0 {
-        return proxy.ClusteredQuery[len(proxy.ClusteredQuery)-1].MatchString(q)
+        matches := proxy.ClusteredQuery[len(proxy.ClusteredQuery)-1].FindStringSubmatch(q)
+        if len(matches) == 2 {
+            return matches[1], true
+        }
     }
-    return false
+    return "", false
 }
 
 func (proxy *Proxy) CreateDatabase(w http.ResponseWriter, req *http.Request) ([]byte, error) {
@@ -310,10 +310,13 @@ func (proxy *Proxy) clearCircle(circle *Circle, backend *Backend, dbs []string) 
 func (proxy *Proxy) Migrate(backend *Backend, dstBackends []*Backend, circle *Circle, db, measure string, seconds int) {
     err := circle.Migrate(backend, dstBackends, db, measure, seconds)
     if err != nil {
-        log.Printf("migrate error: %s, %+v, %+v, %d, %s, %s, %d", err, backend, dstBackends, circle.CircleId, db, measure, seconds)
-        return
+        dstBackendUrls := make([]string, len(dstBackends))
+        for k, be := range dstBackends {
+            dstBackendUrls[k] = be.Url
+        }
+        log.Printf("migrate error: %s, %s, %v, %d, %s, %s, %d", err, backend.Url, dstBackendUrls, circle.CircleId, db, measure, seconds)
     }
-    circle.BackendWgMap[backend.Url].Done()
+    defer circle.BackendWgMap[backend.Url].Done()
 }
 
 func (proxy *Proxy) ClearMigrateStatus(data map[string]*MigrationInfo) {

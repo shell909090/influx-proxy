@@ -122,7 +122,12 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
         if hs.CheckClusterQuery(q) {
             var body []byte
             var err error
-            if hs.CheckCreateDatabaseQuery(q) {
+            if db, ok := hs.CheckCreateDatabaseQuery(q); ok {
+                if len(hs.DbList) > 0 && !util.MapHasKey(hs.DbMap, db) {
+                    w.WriteHeader(400)
+                    w.Write([]byte("database forbidden\n"))
+                    return
+                }
                 body, err = hs.CreateDatabase(w, req)
             } else {
                 body, err = circle.QueryCluster(w, req)
