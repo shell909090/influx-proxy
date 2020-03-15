@@ -115,7 +115,7 @@ func (proxy *Proxy) initBackend(circle *Circle, backend *Backend) {
     circle.UrlToBackend[backend.Url] = backend
 
     backend.AuthSecure = proxy.AuthSecure
-    backend.BufferMap = make(map[string]*BufferCounter)
+    backend.BufferMap = make(map[string]*CBuffer)
     backend.Client = NewClient(backend.Url)
     backend.Transport = NewTransport(backend.Url)
     backend.Active = true
@@ -183,7 +183,7 @@ func (proxy *Proxy) WriteData(data *LineData) {
     }
 
     for _, backend := range backends {
-        err := backend.WriteToBuffer(data, proxy.FlushSize)
+        err := backend.WriteBuffer(data, proxy.FlushSize)
         if err != nil {
             log.Print("write data to buffer: ", backend.Url, data, err)
             return

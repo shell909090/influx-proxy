@@ -26,7 +26,7 @@ var (
     ErrUnknown    = errors.New("unknown error")
 )
 
-type BufferCounter struct {
+type CBuffer struct {
     Buffer  *bytes.Buffer `json:"buffer"`
     Counter int           `json:"counter"`
 }
@@ -37,7 +37,7 @@ type Backend struct {
     Username        string                      `json:"username"`
     Password        string                      `json:"password"`
     AuthSecure      bool                        `json:"auth_secure"`
-    BufferMap       map[string]*BufferCounter   `json:"buffer_map"`
+    BufferMap       map[string]*CBuffer         `json:"buffer_map"`
     DataFlag        bool                        `json:"data_flag"`
     Producer        *os.File                    `json:"producer"`
     Consumer        *os.File                    `json:"consumer"`
@@ -241,13 +241,13 @@ func (backend *Backend) Close() {
 func (backend *Backend) CheckBufferMapAndLockDbMap(db string) {
     if _, ok := backend.BufferMap[db]; !ok {
         backend.LockBuffer.Lock()
-        backend.BufferMap[db] = &BufferCounter{Buffer: &bytes.Buffer{}}
+        backend.BufferMap[db] = &CBuffer{Buffer: &bytes.Buffer{}}
         backend.LockDbMap[db] = &sync.RWMutex{}
         defer backend.LockBuffer.Unlock()
     }
 }
 
-func (backend *Backend) WriteToBuffer(data *LineData, bufferMaxSize int) (err error) {
+func (backend *Backend) WriteBuffer(data *LineData, bufferMaxSize int) (err error) {
     db := data.Db
     backend.CheckBufferMapAndLockDbMap(db)
     backend.LockDbMap[db].Lock()
