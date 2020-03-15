@@ -48,7 +48,7 @@ func main() {
     server := &http.Server{
         Addr:        proxy.ListenAddr,
         Handler:     mux,
-        IdleTimeout: util.IdleTimeOut * time.Second,
+        IdleTimeout: util.IdleTimeout * time.Second,
     }
     if proxy.HTTPSEnabled {
         err = server.ListenAndServeTLS(proxy.HTTPSCert, proxy.HTTPSKey)

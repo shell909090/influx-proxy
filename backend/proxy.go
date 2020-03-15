@@ -121,11 +121,11 @@ func (proxy *Proxy) initBackend(circle *Circle, backend *Backend) {
     backend.LockDbMap = make(map[string]*sync.RWMutex)
     backend.LockBuffer = &sync.RWMutex{}
     backend.LockFile = &sync.RWMutex{}
-    backend.CreateCacheFile(proxy.DataDir)
+    backend.OpenCacheFile(proxy.DataDir)
 
     go backend.CheckActive()
-    go backend.CheckBufferAndSync(proxy.FlushTime)
-    go backend.SyncFileData()
+    go backend.FlushBufferLoop(proxy.FlushTime)
+    go backend.RewriteLoop()
 }
 
 func (proxy *Proxy) initMigration(circle *Circle, circleId int) {
@@ -182,7 +182,7 @@ func (proxy *Proxy) WriteData(data *LineData) {
     }
 
     for _, backend := range backends {
-        err := backend.WriteDataToBuffer(data, proxy.FlushSize)
+        err := backend.WriteToBuffer(data, proxy.FlushSize)
         if err != nil {
             log.Print("write data to buffer: ", backend.Url, data, err)
             return

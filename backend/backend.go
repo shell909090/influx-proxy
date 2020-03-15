@@ -20,6 +20,12 @@ import (
     "time"
 )
 
+var (
+    ErrBadRequest = errors.New("bad request")
+    ErrNotFound   = errors.New("not found")
+    ErrUnknown    = errors.New("unknown error")
+)
+
 type BufferCounter struct {
     Buffer  *bytes.Buffer `json:"buffer"`
     Counter int           `json:"counter"`
@@ -32,6 +38,7 @@ type Backend struct {
     Password        string                      `json:"password"`
     AuthSecure      bool                        `json:"auth_secure"`
     BufferMap       map[string]*BufferCounter   `json:"buffer_map"`
+    DataFlag        bool                        `json:"data_flag"`
     Producer        *os.File                    `json:"producer"`
     Consumer        *os.File                    `json:"consumer"`
     Meta            *os.File                    `json:"meta"`
@@ -42,6 +49,323 @@ type Backend struct {
     LockBuffer      *sync.RWMutex               `json:"lock_buffer"`
     LockFile        *sync.RWMutex               `json:"lock_file"`
 }
+
+// handle file
+
+func (backend *Backend) OpenCacheFile(failDataDir string) {
+    var err error
+    fileNamePrefix := filepath.Join(failDataDir, backend.Name)
+    backend.Producer, err = os.OpenFile(fileNamePrefix+".dat", os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
+    if err != nil {
+        log.Printf("open producer error: %s %s", backend.Url, err)
+        panic(err)
+    }
+    _, err = backend.Producer.Seek(0, io.SeekEnd)
+    if err != nil {
+        log.Printf("seek producer error: %s %s", backend.Url, err)
+        panic(err)
+    }
+
+    backend.Consumer, err = os.OpenFile(fileNamePrefix+".dat", os.O_RDONLY, 0644)
+    if err != nil {
+        log.Printf("open consumer error: %s %s", backend.Url, err)
+        panic(err)
+    }
+
+    backend.Meta, err = os.OpenFile(fileNamePrefix+".rec", os.O_RDWR|os.O_CREATE, 0644)
+    if err != nil {
+        log.Printf("open meta error: %s %s", backend.Url, err)
+        panic(err)
+    }
+
+    backend.RollbackMeta()
+}
+
+func (backend *Backend) Write(p []byte) (err error) {
+    backend.LockFile.Lock()
+    defer backend.LockFile.Unlock()
+
+    var length = uint32(len(p))
+    err = binary.Write(backend.Producer, binary.BigEndian, length)
+    if err != nil {
+        log.Print("write length error: ", err)
+        return
+    }
+
+    n, err := backend.Producer.Write(p)
+    if err != nil {
+        log.Print("write error: ", err)
+        return
+    }
+    if n != len(p) {
+        return io.ErrShortWrite
+    }
+
+    err = backend.Producer.Sync()
+    if err != nil {
+        log.Print("sync meta error: ", err)
+        return
+    }
+
+    backend.DataFlag = true
+    return
+}
+
+func (backend *Backend) IsData() bool {
+    backend.LockFile.Lock()
+    defer backend.LockFile.Unlock()
+    return backend.DataFlag
+}
+
+func (backend *Backend) Read() (p []byte, err error) {
+    if !backend.IsData() {
+        return nil, nil
+    }
+    var length uint32
+
+    err = binary.Read(backend.Consumer, binary.BigEndian, &length)
+    if err != nil {
+        log.Print("read length error: ", err)
+        return
+    }
+    p = make([]byte, length)
+
+    _, err = io.ReadFull(backend.Consumer, p)
+    if err != nil {
+        log.Print("read error: ", err)
+        return
+    }
+    return
+}
+
+func (backend *Backend) RollbackMeta() (err error) {
+    backend.LockFile.Lock()
+    defer backend.LockFile.Unlock()
+
+    _, err = backend.Meta.Seek(0, io.SeekStart)
+    if err != nil {
+        log.Printf("seek meta error: %s %s", backend.Url, err)
+        return
+    }
+
+    var offset int64
+    err = binary.Read(backend.Meta, binary.BigEndian, &offset)
+    if err != nil {
+        log.Printf("read meta error: %s %s", backend.Url, err)
+        return
+    }
+
+    _, err = backend.Consumer.Seek(offset, io.SeekStart)
+    if err != nil {
+        log.Printf("seek consumer error: %s %s", backend.Url, err)
+        return
+    }
+    return
+}
+
+func (backend *Backend) UpdateMeta() (err error) {
+    backend.LockFile.Lock()
+    defer backend.LockFile.Unlock()
+
+    producerOffset, err := backend.Producer.Seek(0, io.SeekCurrent)
+    if err != nil {
+        log.Printf("seek producer error: %s %s", backend.Url, err)
+        return
+    }
+
+    offset, err := backend.Consumer.Seek(0, io.SeekCurrent)
+    if err != nil {
+        log.Printf("seek consumer error: %s %s", backend.Url, err)
+        return
+    }
+
+    if producerOffset == offset {
+        err = backend.CleanUp()
+        if err != nil {
+            log.Printf("cleanup error: %s %s", backend.Url, err)
+            return
+        }
+        offset = 0
+    }
+
+    _, err = backend.Meta.Seek(0, io.SeekStart)
+    if err != nil {
+        log.Printf("seek meta error: %s %s", backend.Url, err)
+        return
+    }
+
+    log.Printf("write meta: %s, %d", backend.Url, offset)
+    err = binary.Write(backend.Meta, binary.BigEndian, &offset)
+    if err != nil {
+        log.Printf("write meta error: %s %s", backend.Url, err)
+        return
+    }
+
+    err = backend.Meta.Sync()
+    if err != nil {
+        log.Printf("sync meta error: %s %s", backend.Url, err)
+        return
+    }
+
+    return
+}
+
+func (backend *Backend) CleanUp() (err error) {
+    _, err = backend.Consumer.Seek(0, io.SeekStart)
+    if err != nil {
+        log.Print("seek consumer error: ", err)
+        return
+    }
+    err = backend.Producer.Truncate(0)
+    if err != nil {
+        log.Print("truncate error: ", err)
+        return
+    }
+    _, err = backend.Producer.Seek(0, io.SeekStart)
+    if err != nil {
+        log.Print("seek producer error: ", err)
+        return
+    }
+    backend.DataFlag = false
+    return
+}
+
+func (backend *Backend) Close() {
+    backend.Producer.Close()
+    backend.Consumer.Close()
+    backend.Meta.Close()
+}
+
+// handle write buffer
+
+func (backend *Backend) CheckBufferMapAndLockDbMap(db string) {
+    if _, ok := backend.BufferMap[db]; !ok {
+        backend.LockBuffer.Lock()
+        backend.BufferMap[db] = &BufferCounter{Buffer: &bytes.Buffer{}}
+        backend.LockDbMap[db] = &sync.RWMutex{}
+        defer backend.LockBuffer.Unlock()
+    }
+}
+
+func (backend *Backend) WriteToBuffer(data *LineData, bufferMaxSize int) (err error) {
+    db := data.Db
+    backend.CheckBufferMapAndLockDbMap(db)
+    backend.LockDbMap[db].Lock()
+    defer backend.LockDbMap[db].Unlock()
+
+    backend.BufferMap[db].Buffer.Write(data.Line)
+    backend.BufferMap[db].Counter++
+    if backend.BufferMap[db].Counter > bufferMaxSize {
+        err = backend.flushBuffer(db)
+        if err != nil {
+            log.Printf("flush buffer error: %s %s", db, err)
+            return
+        }
+    }
+    return
+}
+
+func (backend *Backend) flushBuffer(db string) (err error) {
+    bc := backend.BufferMap[db]
+    p := bc.Buffer.Bytes()
+    bc.Buffer.Truncate(0)
+    bc.Counter = 0
+    if len(p) == 0 {
+        return
+    }
+
+    var buf bytes.Buffer
+    err = Compress(&buf, p)
+    if err != nil {
+        log.Print("compress buffer error: ", err)
+        return
+    }
+
+    p = buf.Bytes()
+
+    if backend.Active {
+        err = backend.WriteCompressed(db, p)
+        switch err {
+        case nil:
+            return
+        case ErrBadRequest:
+            log.Printf("bad request, drop all data")
+            return
+        case ErrNotFound:
+            log.Printf("bad backend, drop all data")
+            return
+        default:
+            log.Printf("unknown error %s", err)
+        }
+    }
+
+    b := bytes.Join([][]byte{[]byte(db), p}, []byte(" "))
+    err = backend.Write(b)
+    if err != nil {
+        log.Printf("write db and data to file error with db: %s, length: %d error: %s", db, len(p), err)
+        return
+    }
+    return
+}
+
+// handle loop
+
+func (backend *Backend) FlushBufferLoop(flushTimeout time.Duration) {
+    for {
+        select {
+        case <- time.After(flushTimeout * time.Second):
+            for db := range backend.BufferMap {
+                if backend.BufferMap[db].Counter > 0 {
+                    backend.LockDbMap[db].Lock()
+                    err := backend.flushBuffer(db)
+                    if err != nil {
+                        log.Printf("flush buffer error: %s %s", db, err)
+                    }
+                    backend.LockDbMap[db].Unlock()
+                }
+            }
+        }
+    }
+}
+
+func (backend *Backend) RewriteLoop() {
+    for {
+        select {
+        case <- time.After(util.RewriteInterval * time.Second):
+            backend.Rewrite()
+        }
+    }
+}
+
+func (backend *Backend) Rewrite() {
+    for backend.IsData() {
+        if !backend.Active {
+            time.Sleep(time.Second * util.WaitActiveInterval)
+            continue
+        }
+
+        b, err := backend.Read()
+        if err != nil {
+            log.Print("rewrite read data error: ", err)
+        }
+        p := bytes.SplitN(b, []byte(" "), 2)
+
+        err = backend.WriteCompressed(string(p[0]), p[1])
+        if err != nil {
+            log.Print("rewrite write compressed error: ", err)
+        }
+        backend.UpdateMeta()
+    }
+}
+
+func (backend *Backend) CheckActive() {
+    for {
+        backend.Active = backend.Ping()
+        time.Sleep(util.CheckPingInterval * time.Second)
+    }
+}
+
+// handle http
 
 func NewClient(url string) *http.Client {
     return &http.Client{Transport: NewTransport(url)}
@@ -88,322 +412,6 @@ func (backend *Backend) SetBasicAuth(req *http.Request) {
     }
 }
 
-func (backend *Backend) CreateCacheFile(failDataDir string) {
-    var err error
-    fileNamePrefix := filepath.Join(failDataDir, backend.Name)
-    backend.Producer, err = os.OpenFile(fileNamePrefix+".dat", os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
-    if err != nil {
-        log.Printf("open producer error: %s %s", backend.Url, err)
-        panic(err)
-    }
-    _, err = backend.Producer.Seek(0, io.SeekEnd)
-    if err != nil {
-        log.Printf("seek producer error: %s %s", backend.Url, err)
-        panic(err)
-    }
-
-    backend.Consumer, err = os.OpenFile(fileNamePrefix+".dat", os.O_RDONLY, 0644)
-    if err != nil {
-        log.Printf("open consumer error: %s %s", backend.Url, err)
-        panic(err)
-    }
-
-    backend.Meta, err = os.OpenFile(fileNamePrefix+".rec", os.O_RDWR|os.O_CREATE, 0644)
-    if err != nil {
-        log.Printf("open meta error: %s %s", backend.Url, err)
-        panic(err)
-    }
-
-    err = backend.RollbackMeta()
-}
-
-func (backend *Backend) RollbackMeta() error {
-    _, err := backend.Meta.Seek(0, io.SeekStart)
-    if err != nil {
-        log.Printf("seek meta error: %s %s", backend.Url, err)
-        return err
-    }
-
-    var off int64
-    err = binary.Read(backend.Meta, binary.BigEndian, &off)
-    if err != nil {
-        log.Printf("read meta error: %s %s", backend.Url, err)
-        return err
-    }
-
-    _, err = backend.Consumer.Seek(off, io.SeekStart)
-    if err != nil {
-        log.Printf("seek consumer error: %s %s", backend.Url, err)
-        return err
-    }
-    return nil
-}
-
-func (backend *Backend) UpdateMeta() error {
-    producerOffset, err := backend.Producer.Seek(0, io.SeekCurrent)
-    if err != nil {
-        log.Printf("seek producer error: %s %s", backend.Url, err)
-        return err
-    }
-
-    offset, err := backend.Consumer.Seek(0, io.SeekCurrent)
-    if err != nil {
-        log.Printf("seek consumer error: %s %s", backend.Url, err)
-        return err
-    }
-
-    if producerOffset == offset {
-        err = backend.CleanUp()
-        if err != nil {
-            log.Printf("cleanup error: %s %s", backend.Url, err)
-            return err
-        }
-        offset = 0
-    }
-
-    _, err = backend.Meta.Seek(0, io.SeekStart)
-    if err != nil {
-        log.Printf("seek meta error: %s %s", backend.Url, err)
-        return err
-    }
-
-    log.Printf("write meta: %s, %d", backend.Url, offset)
-    err = binary.Write(backend.Meta, binary.BigEndian, &offset)
-    if err != nil {
-        log.Printf("write meta error: %s %s", backend.Url, err)
-        return err
-    }
-
-    err = backend.Meta.Sync()
-    if err != nil {
-        log.Printf("sync meta error: %s %s", backend.Url, err)
-        return err
-    }
-
-    return nil
-}
-
-func (backend *Backend) WriteToFile(db string, p []byte) error {
-    backend.LockFile.Lock()
-    defer backend.LockFile.Unlock()
-
-    err := backend.WriteLengthAndData(p, true)
-    if err != nil {
-        log.Printf("db: %s, data length: %d, error: %s", db, len(p), err)
-        return err
-    }
-    err = backend.WriteLengthAndData([]byte(db), false)
-    if err != nil {
-        log.Printf("db: %s, data length: %d, error: %s", db, len(p), err)
-        return err
-    }
-    return nil
-}
-
-func (backend *Backend) WriteLengthAndData(p []byte, compress bool) error {
-    var err error
-    var buf bytes.Buffer
-
-    if compress {
-        err = Compress(&buf, p)
-        if err != nil {
-            log.Print("compress error: ", err)
-            return err
-        }
-        p = buf.Bytes()
-    }
-
-    var length = uint32(len(p))
-    err = binary.Write(backend.Producer, binary.BigEndian, length)
-    if err != nil {
-        log.Printf("data length: %d, error: %s", length, err)
-        return err
-    }
-    n, err := backend.Producer.Write(p)
-    if err != nil {
-        log.Printf("data length: %d, error: %s", length, err)
-        return err
-    }
-    if n != len(p) {
-        log.Printf("data length: %d, success write: %d", length, n)
-        return io.ErrShortWrite
-    }
-
-    err = backend.Producer.Sync()
-    if err != nil {
-        log.Print("sync error: ", err)
-        return err
-    }
-    return nil
-}
-
-func (backend *Backend) hasData() bool {
-    backend.LockFile.RLock()
-    defer backend.LockFile.RUnlock()
-    pro, _ := backend.Producer.Seek(0, io.SeekCurrent)
-    con, _ := backend.Consumer.Seek(0, io.SeekCurrent)
-    return pro - con > 0
-}
-
-func (backend *Backend) Read() ([]byte, error) {
-    if !backend.hasData() {
-        return nil, nil
-    }
-    var length uint32
-
-    err := binary.Read(backend.Consumer, binary.BigEndian, &length)
-    if err != nil {
-        log.Print("read length error: ", err)
-        return nil, err
-    }
-    p := make([]byte, length)
-
-    _, err = io.ReadFull(backend.Consumer, p)
-    if err != nil {
-        log.Print("read error: ", err)
-        return p, err
-    }
-    return p, nil
-}
-
-func (backend *Backend) CleanUp() (err error) {
-    _, err = backend.Consumer.Seek(0, io.SeekStart)
-    if err != nil {
-        log.Print("seek consumer error: ", err)
-        return err
-    }
-    err = backend.Producer.Truncate(0)
-    if err != nil {
-        log.Print("truncate error: ", err)
-        return err
-    }
-    _, err = backend.Producer.Seek(0, io.SeekStart)
-    if err != nil {
-        log.Print("seek producer error: ", err)
-        return err
-    }
-    return
-}
-
-func (backend *Backend) checkBufferAndLock(db string) {
-    if _, ok := backend.BufferMap[db]; !ok {
-        backend.LockBuffer.Lock()
-        backend.BufferMap[db] = &BufferCounter{Buffer: &bytes.Buffer{}}
-        backend.LockDbMap[db] = &sync.RWMutex{}
-        defer backend.LockBuffer.Unlock()
-    }
-}
-
-func (backend *Backend) WriteDataToBuffer(data *LineData, backendBufferMaxNum int) error {
-    db := data.Db
-    backend.checkBufferAndLock(db)
-    backend.LockDbMap[db].Lock()
-    defer backend.LockDbMap[db].Unlock()
-
-    backend.BufferMap[db].Buffer.Write(data.Line)
-    backend.BufferMap[db].Counter++
-    if backend.BufferMap[db].Counter > backendBufferMaxNum {
-        err := backend.checkBufferAndSync(db)
-        if err != nil {
-            log.Printf("check buffer and sync error: %s %s", db, err)
-            return err
-        }
-    }
-    return nil
-}
-
-func (backend *Backend) checkBufferAndSync(db string) error {
-    err := backend.WriteDataToDb(db)
-    if err != nil {
-        log.Printf("write data to db error: %s %s", db, err)
-        return err
-    }
-    backend.BufferMap[db].Counter = 0
-    backend.BufferMap[db].Buffer.Truncate(0)
-    return err
-}
-
-func (backend *Backend) WriteDataToDb(db string) error {
-    if backend.BufferMap[db].Buffer.Len() == 0 {
-        return errors.New("length is zero")
-    }
-
-    byteData := backend.BufferMap[db].Buffer.Bytes()
-    if backend.Active {
-        err := backend.Write(db, byteData, true)
-        if err != nil {
-            log.Printf("write data error: %s %s", db, err)
-        }
-        return err
-    }
-
-    err := backend.WriteToFile(db, byteData)
-    if err != nil {
-        log.Printf("write to file error: %s %s", db, err)
-        return err
-    }
-    return nil
-}
-
-func (backend *Backend) CheckBufferAndSync(syncDataTimeOut time.Duration) {
-    for {
-        select {
-        case <- time.After(syncDataTimeOut * time.Second):
-            for db := range backend.BufferMap {
-                if backend.BufferMap[db].Counter > 0 {
-                    backend.LockDbMap[db].Lock()
-                    err := backend.checkBufferAndSync(db)
-                    if err != nil {
-                        log.Printf("check buffer and sync error: %s %s", db, err)
-                    }
-                    backend.LockDbMap[db].Unlock()
-                }
-            }
-        }
-    }
-}
-
-func (backend *Backend) SyncFileData() {
-    for {
-        select {
-        case <- time.After(util.SyncFileInterval * time.Second):
-            backend.syncFileDataToDb()
-        }
-    }
-}
-
-func (backend *Backend) syncFileDataToDb() {
-    for backend.hasData() {
-        if !backend.Active {
-            time.Sleep(time.Second * util.WaitActiveInterval)
-            continue
-        }
-
-        p, err := backend.Read()
-        if err != nil {
-            log.Print("sync file data to db read error", err)
-        }
-        db, err := backend.Read()
-        if err != nil {
-            log.Print("sync file data to db read db error", err)
-        }
-
-        err = backend.Write(string(db), p, false)
-        if err != nil {
-            log.Print("sync file data to db write error", err)
-
-        }
-        backend.UpdateMeta()
-    }
-}
-
-func (backend *Backend) CheckActive() {
-    for {
-        backend.Active = backend.Ping()
-        time.Sleep(util.CheckPingInterval * time.Second)
-    }
-}
-
 func (backend *Backend) Ping() bool {
     resp, err := backend.Client.Get(backend.Url + "/ping")
     if err != nil {
@@ -418,22 +426,9 @@ func (backend *Backend) Ping() bool {
     return true
 }
 
-func (backend *Backend) Write(db string, p []byte, compressed bool) error {
-    var err error
-    var buf *bytes.Buffer
-    if compressed {
-        buf = &bytes.Buffer{}
-        err = Compress(buf, p)
-        if err != nil {
-            log.Print("compress error: ", err)
-            return err
-        }
-    } else {
-        buf = bytes.NewBuffer(p)
-    }
-
-    err = backend.WriteStream(db, buf, compressed)
-    return err
+func (backend *Backend) WriteCompressed(db string, p []byte) error {
+    buf := bytes.NewBuffer(p)
+    return backend.WriteStream(db, buf, true)
 }
 
 func (backend *Backend) WriteStream(db string, stream io.Reader, compressed bool) error {
@@ -469,11 +464,11 @@ func (backend *Backend) WriteStream(db string, stream io.Reader, compressed bool
 
     switch resp.StatusCode {
     case 400:
-        return errors.New("bad request")
+        return ErrBadRequest
     case 404:
-        return errors.New("not found")
+        return ErrNotFound
     default: // mostly tcp connection timeout
-        return errors.New("unknown error")
+        return ErrUnknown
     }
     return nil
 }

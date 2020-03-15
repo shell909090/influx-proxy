@@ -253,7 +253,7 @@ func (circle *Circle) Migrate(srcBackend *Backend, dstBackends []*Backend, db, m
             if len(lines) != 0 {
                 lineData := strings.Join(lines, "\n")
                 for _, dstBackend := range dstBackends {
-                    err = dstBackend.Write(db, []byte(lineData), true)
+                    err = dstBackend.WriteCompressed(db, []byte(lineData))
                     if err != nil {
                         return err
                     }
