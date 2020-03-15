@@ -63,6 +63,7 @@ func NewProxy(file string) (proxy *Proxy, err error) {
     proxy.BackendRebalanceStatus = make([]map[string]*MigrationInfo, len(proxy.Circles))
     proxy.BackendRecoveryStatus = make([]map[string]*MigrationInfo, len(proxy.Circles))
     proxy.BackendResyncStatus = make([]map[string]*MigrationInfo, len(proxy.Circles))
+    proxy.StatusLock = &sync.RWMutex{}
     util.CheckPathAndCreate(proxy.DataDir)
     if proxy.MigrateMaxCpus == 0 {
         proxy.MigrateMaxCpus = 1
@@ -99,8 +100,8 @@ func (proxy *Proxy) initCircle(circle *Circle) {
     circle.Router.NumberOfReplicas = proxy.VNodeSize
     circle.UrlToBackend = make(map[string]*Backend)
     circle.BackendWgMap = make(map[string]*sync.WaitGroup)
-    circle.WgMigrate = &sync.WaitGroup{}
     circle.IsMigrating = false
+    circle.WgMigrate = &sync.WaitGroup{}
     circle.StatusLock = &sync.RWMutex{}
     for _, backend := range circle.Backends {
         circle.BackendWgMap[backend.Url] = &sync.WaitGroup{}
@@ -286,14 +287,18 @@ func (proxy *Proxy) GetDatabases() []string {
    return nil
 }
 
+func (proxy *Proxy) GetBackendUrls(backends []*Backend) []string {
+    backendUrls := make([]string, len(backends))
+    for k, be := range backends {
+        backendUrls[k] = be.Url
+    }
+    return backendUrls
+}
+
 func (proxy *Proxy) Migrate(backend *Backend, dstBackends []*Backend, circle *Circle, db, measure string, seconds int) {
     err := circle.Migrate(backend, dstBackends, db, measure, seconds)
     if err != nil {
-        dstBackendUrls := make([]string, len(dstBackends))
-        for k, be := range dstBackends {
-            dstBackendUrls[k] = be.Url
-        }
-        util.Mlog.Printf("migrate error:%s src:%s dst:%v circle:%d db:%s measurement:%s seconds:%d", err, backend.Url, dstBackendUrls, circle.CircleId, db, measure, seconds)
+        util.Mlog.Printf("migrate error:%s src:%s dst:%v circle:%d db:%s measurement:%s seconds:%d", err, backend.Url, proxy.GetBackendUrls(dstBackends), circle.CircleId, db, measure, seconds)
     }
     defer circle.BackendWgMap[backend.Url].Done()
 }
@@ -433,7 +438,7 @@ func (proxy *Proxy) Resync(databases []string, seconds int) {
             go proxy.ResyncBackend(backend, circle, databases, seconds)
         }
         circle.WgMigrate.Wait()
-        util.Mlog.Printf("resync %s(circle %d) done", circle.Name, circle.CircleId)
+        util.Mlog.Printf("circle %d resync done", circle.CircleId)
     }
     defer proxy.SetResyncing(false)
     util.Mlog.Printf("resync done")
@@ -468,7 +473,7 @@ func (proxy *Proxy) ResyncBackend(backend *Backend, circle *Circle, databases []
             }
             if len(dstBackends) > 0 {
                 resyncStatus.BMNeedMigrateCount++
-                util.Mlog.Printf("src:%s dst:%d db:%s measurement:%s", backend.Url, len(dstBackends), db, measure)
+                util.Mlog.Printf("src:%s dst:%v db:%s measurement:%s", backend.Url, proxy.GetBackendUrls(dstBackends), db, measure)
                 migrateCount++
                 circle.BackendWgMap[backend.Url].Add(1)
                 go proxy.Migrate(backend, dstBackends, circle, db, measure, seconds)
