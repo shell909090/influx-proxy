@@ -13,6 +13,7 @@ import (
     "log"
     "strconv"
     "strings"
+    "time"
 )
 
 var (
@@ -231,6 +232,10 @@ func LineToNano(line []byte, precision string) []byte {
                 bytenano := Int64ToBytes(nano)
                 return bytes.Join([][]byte{line[:pos], bytenano}, []byte(" "))
             }
+        }
+    } else {
+        if _, found := ScanTime(line); !found {
+            return append(line, []byte(" " + strconv.FormatInt(time.Now().UnixNano(), 10))...)
         }
     }
     return line
