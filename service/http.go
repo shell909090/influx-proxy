@@ -317,7 +317,7 @@ func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request
                 Client: backend.NewClient(url),
                 Transport: backend.NewTransport(url)},
             )
-            hs.BackendRebalanceStatus[circleId][url] = &backend.MigrationInfo{}
+            hs.RebalanceMigrateStatus[circleId][url] = &backend.MigrateProgress{}
             hs.Circles[circleId].BackendWgMap[url] = &sync.WaitGroup{}
         }
     }
@@ -491,11 +491,11 @@ func (hs *HttpService) HandlerStatus(w http.ResponseWriter, req *http.Request) {
     var res []byte
     statusType := req.FormValue("type")
     if statusType == "rebalance" {
-        res, _ = json.Marshal(hs.BackendRebalanceStatus[circleId])
+        res, _ = json.Marshal(hs.RebalanceMigrateStatus[circleId])
     } else if statusType == "recovery" {
-        res, _ = json.Marshal(hs.BackendRecoveryStatus[circleId])
+        res, _ = json.Marshal(hs.RecoveryMigrateStatus[circleId])
     } else if statusType == "resync" {
-        res, _ = json.Marshal(hs.BackendResyncStatus[circleId])
+        res, _ = json.Marshal(hs.ResyncMigrateStatus[circleId])
     } else {
         w.WriteHeader(400)
         w.Write([]byte("invalid status type\n"))
