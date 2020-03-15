@@ -30,11 +30,11 @@ func (hs *HttpService) Register(mux *http.ServeMux) {
     mux.HandleFunc("/ping", hs.HandlerPing)
     mux.HandleFunc("/query", hs.HandlerQuery)
     mux.HandleFunc("/write", hs.HandlerWrite)
-    mux.HandleFunc("/clear", hs.HandlerClear)
     mux.HandleFunc("/migrating", hs.HandlerMigrating)
     mux.HandleFunc("/rebalance", hs.HandlerRebalance)
     mux.HandleFunc("/recovery", hs.HandlerRecovery)
     mux.HandleFunc("/resync", hs.HandlerResync)
+    mux.HandleFunc("/clear", hs.HandlerClear)
     mux.HandleFunc("/status", hs.HandlerStatus)
     mux.HandleFunc("/debug/pprof/", pprof.Index)
     mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
@@ -230,30 +230,6 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
         hs.WriteData(data)
     }
     w.WriteHeader(204)
-    return
-}
-
-func (hs *HttpService) HandlerClear(w http.ResponseWriter, req *http.Request) {
-    defer req.Body.Close()
-    hs.AddHeader(w)
-
-    if req.Method != http.MethodPost {
-        w.WriteHeader(405)
-        w.Write([]byte("method not allow\n"))
-        return
-    }
-
-    circleId, err := hs.formCircleId(req, "circle_id")
-    if err != nil {
-        w.WriteHeader(400)
-        w.Write([]byte(err.Error()+"\n"))
-        return
-    }
-
-    dbs := hs.formValues(req, "db")
-    go hs.Clear(dbs, circleId)
-    w.WriteHeader(202)
-    w.Write([]byte("accepted\n"))
     return
 }
 
@@ -467,6 +443,29 @@ func (hs *HttpService) HandlerResync(w http.ResponseWriter, req *http.Request) {
 
     dbs := hs.formValues(req, "db")
     go hs.Resync(dbs, seconds)
+    w.WriteHeader(202)
+    w.Write([]byte("accepted\n"))
+    return
+}
+
+func (hs *HttpService) HandlerClear(w http.ResponseWriter, req *http.Request) {
+    defer req.Body.Close()
+    hs.AddHeader(w)
+
+    if req.Method != http.MethodPost {
+        w.WriteHeader(405)
+        w.Write([]byte("method not allow\n"))
+        return
+    }
+
+    circleId, err := hs.formCircleId(req, "circle_id")
+    if err != nil {
+        w.WriteHeader(400)
+        w.Write([]byte(err.Error()+"\n"))
+        return
+    }
+
+    go hs.Clear(circleId)
     w.WriteHeader(202)
     w.Write([]byte("accepted\n"))
     return

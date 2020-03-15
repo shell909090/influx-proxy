@@ -286,52 +286,6 @@ func (proxy *Proxy) GetDatabases() []string {
    return nil
 }
 
-func (proxy *Proxy) Clear(dbs []string, circleId int) error {
-    circle := proxy.Circles[circleId]
-    for _, backend := range circle.Backends {
-        circle.WgMigrate.Add(1)
-        go proxy.clearCircle(circle, backend, dbs)
-    }
-    circle.WgMigrate.Wait()
-    return nil
-}
-
-func (proxy *Proxy) clearCircle(circle *Circle, backend *Backend, dbs []string) {
-    defer circle.WgMigrate.Done()
-
-    for _, db := range dbs {
-        measures := backend.GetMeasurements(db)
-        log.Printf("clear circle db: %s, measurement number: %d", db, len(measures))
-        for _, measure := range measures {
-            key := GetKey(db, measure)
-            dstBackendUrl, err := circle.Router.Get(key)
-            if err != nil {
-                log.Printf("router get key error: %s, %s", key, err)
-                continue
-            }
-
-            if dstBackendUrl != backend.Url {
-                log.Printf("src: %s dst: %s", backend.Url, dstBackendUrl)
-                _, e := backend.DropMeasurement(db, measure)
-                if e != nil {
-                    log.Printf("drop measurement error: %s", e)
-                    continue
-                }
-            }
-        }
-    }
-}
-
-func (proxy *Proxy) ClearMigrateStatus(data map[string]*MigrationInfo) {
-    for _, backend := range data {
-        backend.Database = ""
-        backend.Measurement = ""
-        backend.BackendMeasureTotal = 0
-        backend.BMNeedMigrateCount = 0
-        backend.BMNotMigrateCount = 0
-    }
-}
-
 func (proxy *Proxy) Migrate(backend *Backend, dstBackends []*Backend, circle *Circle, db, measure string, seconds int) {
     err := circle.Migrate(backend, dstBackends, db, measure, seconds)
     if err != nil {
@@ -525,6 +479,59 @@ func (proxy *Proxy) ResyncBackend(backend *Backend, circle *Circle, databases []
                 resyncStatus.BMNotMigrateCount++
             }
         }
+    }
+}
+
+func (proxy *Proxy) Clear(circleId int) {
+    util.SetMLog("./log/clear.log")
+    util.Mlog.Printf("clear start")
+    circle := proxy.Circles[circleId]
+    for _, backend := range circle.Backends {
+        circle.WgMigrate.Add(1)
+        go proxy.ClearBackend(backend, circle)
+    }
+    circle.WgMigrate.Wait()
+    util.Mlog.Printf("clear done")
+}
+
+func (proxy *Proxy) ClearBackend(backend *Backend, circle *Circle) {
+    defer circle.WgMigrate.Done()
+    if !backend.Active {
+        util.Mlog.Printf("backend not active: %s", backend.Url)
+        return
+    }
+    databases := backend.GetDatabases()
+    for _, db := range databases {
+        measures := backend.GetMeasurements(db)
+        for _, measure := range measures {
+            util.Mlog.Printf("check backend:%s db:%s measurement:%s", backend.Url, db, measure)
+            key := GetKey(db, measure)
+            dstBackendUrl, err := circle.Router.Get(key)
+            if err != nil {
+                util.Mlog.Printf("router get key error: %s, %s", key, err)
+                continue
+            }
+            if dstBackendUrl != backend.Url {
+                util.Mlog.Printf("backend:%s db:%s measurement:%s should migrate to %s", backend.Url, db, measure, dstBackendUrl)
+                _, err := backend.DropMeasurement(db, measure)
+                if err == nil {
+                    util.Mlog.Printf("clear backend:%s db:%s measurement:%s done", backend.Url, db, measure)
+                    continue
+                } else {
+                    util.Mlog.Printf("clear backend:%s db:%s measurement:%s error: %s", backend.Url, db, measure, err)
+                }
+            }
+        }
+    }
+}
+
+func (proxy *Proxy) ClearMigrateStatus(data map[string]*MigrationInfo) {
+    for _, backend := range data {
+        backend.Database = ""
+        backend.Measurement = ""
+        backend.BackendMeasureTotal = 0
+        backend.BMNeedMigrateCount = 0
+        backend.BMNotMigrateCount = 0
     }
 }
 
