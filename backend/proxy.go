@@ -5,6 +5,7 @@ import (
     "encoding/json"
     "fmt"
     "github.com/chengshiwen/influx-proxy/util"
+    "github.com/pkg/errors"
     "log"
     "net/http"
     "os"
@@ -267,6 +268,11 @@ func (proxy *Proxy) CheckCreateDatabaseQuery(q string) (string, bool) {
 func (proxy *Proxy) CreateDatabase(w http.ResponseWriter, req *http.Request) ([]byte, error) {
     var body []byte
     var err error
+    for _, circle := range proxy.Circles {
+        if !circle.CheckStatus() {
+            return nil, errors.New(fmt.Sprintf("circle %d not health", circle.CircleId))
+        }
+    }
     for _, circle := range proxy.Circles {
         body, err = circle.QueryCluster(w, req)
         if err != nil {

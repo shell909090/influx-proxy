@@ -106,7 +106,7 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     }
 
     var circle *backend.Circle
-    var badIds map[int]bool
+    badIds := make(map[int]bool)
     for {
         id := rand.Intn(len(hs.Circles))
         if _, ok := badIds[id]; ok {
@@ -146,7 +146,7 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
             if err != nil {
                 log.Printf("query cluster is: %s, error: %s", q, err)
                 w.WriteHeader(400)
-                w.Write([]byte("query error\n"))
+                w.Write([]byte("query error: "+err.Error()+"\n"))
                 return
             }
             w.Write(body)
@@ -161,7 +161,7 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     if err != nil {
         log.Printf("query is: %s, error: %s", q, err)
         w.WriteHeader(400)
-        w.Write([]byte("query error\n"))
+        w.Write([]byte("query error: "+err.Error()+"\n"))
         return
     }
     w.Write(res)
