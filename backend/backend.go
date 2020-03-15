@@ -52,7 +52,7 @@ type Backend struct {
 
 // handle file
 
-func (backend *Backend) OpenCacheFile(failDataDir string) {
+func (backend *Backend) OpenFile(failDataDir string) {
     var err error
     fileNamePrefix := filepath.Join(failDataDir, backend.Name)
     backend.Producer, err = os.OpenFile(fileNamePrefix+".dat", os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
@@ -81,7 +81,7 @@ func (backend *Backend) OpenCacheFile(failDataDir string) {
     backend.RollbackMeta()
 }
 
-func (backend *Backend) Write(p []byte) (err error) {
+func (backend *Backend) WriteFile(p []byte) (err error) {
     backend.LockFile.Lock()
     defer backend.LockFile.Unlock()
 
@@ -117,7 +117,7 @@ func (backend *Backend) IsData() bool {
     return backend.DataFlag
 }
 
-func (backend *Backend) Read() (p []byte, err error) {
+func (backend *Backend) ReadFile() (p []byte, err error) {
     if !backend.IsData() {
         return nil, nil
     }
@@ -256,7 +256,7 @@ func (backend *Backend) WriteBuffer(data *LineData, bufferMaxSize int) (err erro
     backend.BufferMap[db].Buffer.Write(data.Line)
     backend.BufferMap[db].Counter++
     if backend.BufferMap[db].Counter > bufferMaxSize {
-        err = backend.flushBuffer(db)
+        err = backend.FlushBuffer(db)
         if err != nil {
             log.Printf("flush buffer error: %s %s", db, err)
             return
@@ -265,7 +265,7 @@ func (backend *Backend) WriteBuffer(data *LineData, bufferMaxSize int) (err erro
     return
 }
 
-func (backend *Backend) flushBuffer(db string) (err error) {
+func (backend *Backend) FlushBuffer(db string) (err error) {
     bc := backend.BufferMap[db]
     p := bc.Buffer.Bytes()
     bc.Buffer.Truncate(0)
@@ -300,7 +300,7 @@ func (backend *Backend) flushBuffer(db string) (err error) {
     }
 
     b := bytes.Join([][]byte{[]byte(db), p}, []byte(" "))
-    err = backend.Write(b)
+    err = backend.WriteFile(b)
     if err != nil {
         log.Printf("write db and data to file error with db: %s, length: %d error: %s", db, len(p), err)
         return
@@ -317,7 +317,7 @@ func (backend *Backend) FlushBufferLoop(flushTimeout time.Duration) {
             for db := range backend.BufferMap {
                 if backend.BufferMap[db].Counter > 0 {
                     backend.LockDbMap[db].Lock()
-                    err := backend.flushBuffer(db)
+                    err := backend.FlushBuffer(db)
                     if err != nil {
                         log.Printf("flush buffer error: %s %s", db, err)
                     }
@@ -344,7 +344,7 @@ func (backend *Backend) Rewrite() {
             continue
         }
 
-        b, err := backend.Read()
+        b, err := backend.ReadFile()
         if err != nil {
             log.Print("rewrite read data error: ", err)
         }
@@ -424,6 +424,16 @@ func (backend *Backend) Ping() bool {
         return false
     }
     return true
+}
+
+func (backend *Backend) Write(db string, p []byte) (err error) {
+    var buf bytes.Buffer
+    err = Compress(&buf, p)
+    if err != nil {
+        log.Print("compress error: ", err)
+        return
+    }
+    return backend.WriteStream(db, &buf, true)
 }
 
 func (backend *Backend) WriteCompressed(db string, p []byte) error {

@@ -121,7 +121,7 @@ func (proxy *Proxy) initBackend(circle *Circle, backend *Backend) {
     backend.LockDbMap = make(map[string]*sync.RWMutex)
     backend.LockBuffer = &sync.RWMutex{}
     backend.LockFile = &sync.RWMutex{}
-    backend.OpenCacheFile(proxy.DataDir)
+    backend.OpenFile(proxy.DataDir)
 
     go backend.CheckActive()
     go backend.FlushBufferLoop(proxy.FlushTime)
