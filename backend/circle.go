@@ -42,8 +42,7 @@ func (circle *Circle) Query(w http.ResponseWriter, req *http.Request) ([]byte, e
         return nil, e
     }
     db := req.FormValue("db")
-    key := db + "," + measurement
-
+    key := GetKey(db, measurement)
     backendUrl, e := circle.Router.Get(key)
     if e != nil {
         return nil, e
