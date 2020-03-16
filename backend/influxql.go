@@ -17,6 +17,18 @@ import (
 )
 
 var (
+    ForbidCmds  = []string{"(?i:^grant|^revoke|select.+into.+from)"}
+    SupportCmds = []string{"(?i:from|^drop\\s+measurement)"}
+    ClusterCmds = []string{
+        "(?i:^show\\s+measurements|^show\\s+series|^show\\s+databases$)",
+        "(?i:^show\\s+field\\s+keys|^show\\s+tag\\s+keys|^show\\s+tag\\s+values)",
+        "(?i:^show\\s+stats)",
+        "(?i:^show\\s+retention\\s+policies)",
+        "(?i:^create\\s+database\\s+\"*([^\\s\";]+))",
+    }
+)
+
+var (
     ErrWrongQuote     = errors.New("wrong quote")
     ErrUnmatchedQuote = errors.New("unmatched quote")
     ErrUnclosed       = errors.New("unclosed parenthesis")

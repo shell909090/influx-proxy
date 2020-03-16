@@ -3,9 +3,9 @@ package backend
 import (
     "bytes"
     "encoding/json"
+    "errors"
     "fmt"
     "github.com/chengshiwen/influx-proxy/util"
-    "github.com/pkg/errors"
     "log"
     "net/http"
     "os"
@@ -77,9 +77,9 @@ func NewProxy(file string) (proxy *Proxy, err error) {
     for _, db := range proxy.DbList {
         proxy.DbMap[db] = true
     }
-    proxy.ForbidQuery(util.ForbidCmds)
-    proxy.EnsureQuery(util.SupportCmds)
-    proxy.ClusterQuery(util.ClusterCmds)
+    proxy.ForbidQuery(ForbidCmds)
+    proxy.EnsureQuery(SupportCmds)
+    proxy.ClusterQuery(ClusterCmds)
     return
 }
 

@@ -14,15 +14,3 @@ const (
     CipherKey          = "3kcdplq90m438j5h3n3es0lm"
     Version            = "2.3.2"
 )
-
-var (
-    ForbidCmds  = []string{"(?i:^grant|^revoke|^select.+into.+from)"}
-    SupportCmds = []string{"(?i:from|^drop\\s+measurement)"}
-    ClusterCmds = []string{
-        "(?i:^show\\s+measurements|^show\\s+series|^show\\s+databases$)",
-        "(?i:^show\\s+field\\s+keys|^show\\s+tag\\s+keys|^show\\s+tag\\s+values)",
-        "(?i:^show\\s+stats)",
-        "(?i:^show\\s+retention\\s+policies)",
-        "(?i:^create\\s+database\\s+\"*([^\\s\";]+))",
-    }
-)
