@@ -8,8 +8,8 @@ import (
     "flag"
     "fmt"
     "github.com/chengshiwen/influx-proxy/backend"
+    "github.com/chengshiwen/influx-proxy/config"
     "github.com/chengshiwen/influx-proxy/service"
-    "github.com/chengshiwen/influx-proxy/util"
     "log"
     "net/http"
     "runtime"
@@ -28,7 +28,7 @@ func main() {
     flag.BoolVar(&Version, "version", false, "proxy version")
     flag.Parse()
     if Version {
-        fmt.Printf("Version:    %s\n", util.Version)
+        fmt.Printf("Version:    %s\n", config.Version)
         fmt.Printf("Git commit: %s\n", GitCommit)
         fmt.Printf("Go version: %s\n", runtime.Version())
         fmt.Printf("Build time: %s\n", BuildTime)
@@ -48,7 +48,7 @@ func main() {
     server := &http.Server{
         Addr:        proxy.ListenAddr,
         Handler:     mux,
-        IdleTimeout: util.IdleTimeout * time.Second,
+        IdleTimeout: config.IdleTimeout * time.Second,
     }
     if proxy.HTTPSEnabled {
         err = server.ListenAndServeTLS(proxy.HTTPSCert, proxy.HTTPSKey)

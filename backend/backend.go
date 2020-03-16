@@ -7,6 +7,7 @@ import (
     "encoding/binary"
     "errors"
     "fmt"
+    "github.com/chengshiwen/influx-proxy/config"
     "github.com/chengshiwen/influx-proxy/util"
     "io"
     "io/ioutil"
@@ -331,7 +332,7 @@ func (backend *Backend) FlushBufferLoop(flushTimeout time.Duration) {
 func (backend *Backend) RewriteLoop() {
     for {
         select {
-        case <- time.After(util.RewriteInterval * time.Second):
+        case <- time.After(config.RewriteInterval * time.Second):
             backend.Rewrite()
         }
     }
@@ -340,7 +341,7 @@ func (backend *Backend) RewriteLoop() {
 func (backend *Backend) Rewrite() {
     for backend.IsData() {
         if !backend.Active {
-            time.Sleep(time.Second * util.WaitActiveInterval)
+            time.Sleep(time.Second * config.WaitActiveInterval)
             continue
         }
 
@@ -361,7 +362,7 @@ func (backend *Backend) Rewrite() {
 func (backend *Backend) CheckActive() {
     for {
         backend.Active = backend.Ping()
-        time.Sleep(util.CheckPingInterval * time.Second)
+        time.Sleep(config.CheckPingInterval * time.Second)
     }
 }
 
@@ -406,7 +407,7 @@ func CopyHeader(dst, src http.Header) {
 
 func (backend *Backend) SetBasicAuth(req *http.Request) {
     if backend.AuthSecure {
-        req.SetBasicAuth(util.AesDecrypt(backend.Username, util.CipherKey), util.AesDecrypt(backend.Password, util.CipherKey))
+        req.SetBasicAuth(util.AesDecrypt(backend.Username, config.CipherKey), util.AesDecrypt(backend.Password, config.CipherKey))
     } else {
         req.SetBasicAuth(backend.Username, backend.Password)
     }

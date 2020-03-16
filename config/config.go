@@ -1,11 +1,6 @@
-package util
-
-import (
-    "math"
-)
+package config
 
 const (
-    MaxUint32          = math.MaxUint32 + 1
     IdleTimeout        = 10
     CheckPingInterval  = 1
     WaitActiveInterval = 10

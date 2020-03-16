@@ -7,6 +7,7 @@ import (
     "errors"
     "fmt"
     "github.com/chengshiwen/influx-proxy/backend"
+    "github.com/chengshiwen/influx-proxy/config"
     "github.com/chengshiwen/influx-proxy/util"
     "io/ioutil"
     "log"
@@ -49,7 +50,7 @@ func (hs *HttpService)HandlerEncrypt(w http.ResponseWriter, req *http.Request)  
         return
     }
     ctx := req.URL.Query().Get("ctx")
-    encrypt := util.AesEncrypt(ctx, util.CipherKey)
+    encrypt := util.AesEncrypt(ctx, config.CipherKey)
     w.WriteHeader(200)
     w.Write([]byte(encrypt+"\n"))
 }
@@ -508,7 +509,7 @@ func (hs *HttpService) HandlerStatus(w http.ResponseWriter, req *http.Request) {
 }
 
 func (hs *HttpService) AddHeader(w http.ResponseWriter) {
-    w.Header().Add("X-Influxdb-Version", util.Version)
+    w.Header().Add("X-Influxdb-Version", config.Version)
 }
 
 func (hs *HttpService) AddJsonHeader(w http.ResponseWriter) {
@@ -517,7 +518,7 @@ func (hs *HttpService) AddJsonHeader(w http.ResponseWriter) {
 
 func (hs *HttpService) transAuth(ctx string) string {
     if hs.AuthSecure {
-        return util.AesEncrypt(ctx, util.CipherKey)
+        return util.AesEncrypt(ctx, config.CipherKey)
     } else {
         return ctx
     }
