@@ -89,8 +89,9 @@ The configurations in `proxy.json` are the following:
     * `username`: influxdb username, with encryption if proxy auth_secure is enabled
     * `password`: influxdb password, with encryption if proxy auth_secure is enabled
 * `listen_addr`: proxy listen addr
-* `data_dir`: data dir to save .dat .rec, default is data
 * `db_list`: database list permitted to access
+* `data_dir`: data dir to save .dat .rec, default is data
+* `mlog_dir`: log dir to save rebalance, recovery, resync or clear operation
 * `vnode_size`: the size of virtual nodes for consistent hash
 * `flush_size`: default config is 5000, wait 5000 points write
 * `flush_time`: default config is 1s, wait 1 second write whether point count has bigger than flush_size config

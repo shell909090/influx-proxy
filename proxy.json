@@ -36,8 +36,9 @@
         }
     ],
     "listen_addr": ":7076",
-    "data_dir": "data",
     "db_list": ["db1", "db2"],
+    "data_dir": "data",
+    "mlog_dir": "log",
     "vnode_size": 256,
     "flush_size": 5000,
     "flush_time": 1,

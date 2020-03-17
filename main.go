@@ -38,7 +38,7 @@ func main() {
 
     proxy, err := backend.NewProxy(ConfigFile)
     if err != nil {
-        fmt.Println("config source load failed")
+        fmt.Println("config source load failed:", err.Error())
         return
     }
     hs := service.HttpService{Proxy: proxy}

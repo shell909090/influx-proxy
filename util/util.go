@@ -14,7 +14,7 @@ func MapHasKey(m map[string]bool, k string) bool {
     return false
 }
 
-func PathExists(path string) (bool, error) {
+func PathExist(path string) (bool, error) {
     _, err := os.Stat(path)
     if err == nil {
         return true, nil
@@ -25,17 +25,18 @@ func PathExists(path string) (bool, error) {
     return false, err
 }
 
-func CheckPathAndCreate(StoreDir string) {
-    exist, err := PathExists(StoreDir)
+func MakeDir(dir string) (err error) {
+    exist, err := PathExist(dir)
     if err != nil {
         return
     }
     if !exist {
-        err = os.MkdirAll(StoreDir, os.ModePerm)
+        err = os.MkdirAll(dir, os.ModePerm)
         if err != nil {
             return
         }
     }
+    return
 }
 
 func GzipCompress(b []byte) (cb []byte, err error) {

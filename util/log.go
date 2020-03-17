@@ -15,11 +15,12 @@ func init() {
     Mlog = log.New(os.Stdout, "", log.LstdFlags | log.Lmicroseconds | log.Lshortfile)
 }
 
-func SetMLog(logPath string) {
-    CheckPathAndCreate(filepath.Dir(logPath))
+func SetMLog(dir, name string) {
+    logPath := filepath.Join(dir, name)
     if logPath == "" {
         Mlog.SetOutput(os.Stdout)
     } else {
+        MakeDir(dir)
         Mlog.SetOutput(&lumberjack.Logger{
             Filename:   logPath,
             MaxSize:    100,

@@ -18,9 +18,10 @@ import (
 type Proxy struct {
     Circles                 []*Circle                       `json:"circles"`
     ListenAddr              string                          `json:"listen_addr"`
-    DataDir                 string                          `json:"data_dir"`
     DbList                  []string                        `json:"db_list"`
     DbMap                   map[string]bool                 `json:"db_map"`
+    DataDir                 string                          `json:"data_dir"`
+    MlogDir                 string                          `json:"mlog_dir"`
     VNodeSize               int                             `json:"vnode_size"`
     FlushSize               int                             `json:"flush_size"`
     FlushTime               time.Duration                   `json:"flush_time"`
@@ -60,11 +61,14 @@ func NewProxy(file string) (proxy *Proxy, err error) {
     if err != nil {
         return
     }
+    err = util.MakeDir(proxy.DataDir)
+    if err != nil {
+        return
+    }
     proxy.RebalanceMigrateStatus = make([]map[string]*MigrateProgress, len(proxy.Circles))
     proxy.RecoveryMigrateStatus = make([]map[string]*MigrateProgress, len(proxy.Circles))
     proxy.ResyncMigrateStatus = make([]map[string]*MigrateProgress, len(proxy.Circles))
     proxy.StatusLock = &sync.RWMutex{}
-    util.CheckPathAndCreate(proxy.DataDir)
     if proxy.MigrateMaxCpus == 0 {
         proxy.MigrateMaxCpus = 1
     }
@@ -309,7 +313,7 @@ func (proxy *Proxy) Migrate(backend *Backend, dstBackends []*Backend, circle *Ci
 }
 
 func (proxy *Proxy) Rebalance(circleId int, backends []*Backend, databases []string) {
-    util.SetMLog("./log/rebalance.log")
+    util.SetMLog(proxy.MlogDir, "rebalance.log")
     util.Mlog.Printf("rebalance start")
     circle := proxy.Circles[circleId]
     circle.SetMigrating(true)
@@ -361,7 +365,7 @@ func (proxy *Proxy) RebalanceBackend(backend *Backend, circle *Circle, databases
 }
 
 func (proxy *Proxy) Recovery(fromCircleId, toCircleId int, recoveryUrls []string, databases []string) {
-    util.SetMLog("./log/recovery.log")
+    util.SetMLog(proxy.MlogDir, "recovery.log")
     util.Mlog.Printf("recovery start")
     fromCircle := proxy.Circles[fromCircleId]
     toCircle := proxy.Circles[toCircleId]
@@ -427,7 +431,7 @@ func (proxy *Proxy) RecoveryBackend(backend *Backend, fromCircle, toCircle *Circ
 }
 
 func (proxy *Proxy) Resync(databases []string, seconds int) {
-    util.SetMLog("./log/resync.log")
+    util.SetMLog(proxy.MlogDir, "resync.log")
     util.Mlog.Printf("resync start")
     if len(databases) == 0 {
         databases = proxy.GetDatabases()
@@ -487,7 +491,7 @@ func (proxy *Proxy) ResyncBackend(backend *Backend, circle *Circle, databases []
 }
 
 func (proxy *Proxy) Clear(circleId int) {
-    util.SetMLog("./log/clear.log")
+    util.SetMLog(proxy.MlogDir, "clear.log")
     util.Mlog.Printf("clear start")
     circle := proxy.Circles[circleId]
     for _, backend := range circle.Backends {
