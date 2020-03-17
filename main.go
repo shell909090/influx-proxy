@@ -51,8 +51,10 @@ func main() {
         IdleTimeout: config.IdleTimeout * time.Second,
     }
     if proxy.HTTPSEnabled {
+        log.Printf("https service start, listen on %s", server.Addr)
         err = server.ListenAndServeTLS(proxy.HTTPSCert, proxy.HTTPSKey)
     } else {
+        log.Printf("http service start, listen on %s", server.Addr)
         err = server.ListenAndServe()
     }
     if err != nil {

@@ -105,6 +105,10 @@ func LoadProxyConfig(file string) (proxy *Proxy, err error) {
     if proxy.MlogDir == "" {
         proxy.MlogDir = "log"
     }
+    log.Printf("%d circles loaded from file", len(proxy.Circles))
+    for id, circle := range proxy.Circles {
+        log.Printf("circle %d: %d backends loaded", id, len(circle.Backends))
+    }
     return
 }
 

@@ -151,7 +151,7 @@ func (backend *Backend) RollbackMeta() (err error) {
 
     var offset int64
     err = binary.Read(backend.Meta, binary.BigEndian, &offset)
-    if err != nil {
+    if err != nil && err != io.EOF {
         log.Printf("read meta error: %s %s", backend.Url, err)
         return
     }
