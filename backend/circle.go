@@ -17,13 +17,13 @@ import (
 
 type Circle struct {
     Name            string                      `json:"name"`
+    CircleId        int                         `json:"circle_id"`
     Router          *consistent.Consistent      `json:"router"`
     Backends        []*Backend                  `json:"backends"`
     UrlToBackend    map[string]*Backend         `json:"url_to_backend"`
     BackendWgMap    map[string]*sync.WaitGroup  `json:"backend_wg_map"`
-    CircleId        int                         `json:"circle_id"`
     IsMigrating     bool                        `json:"is_migrating"`
-    WgMigrate       *sync.WaitGroup             `json:"wg_migrate"`
+    MigrateWg       *sync.WaitGroup             `json:"migrate_wg"`
     Lock            *sync.RWMutex               `json:"lock"`
 }
 

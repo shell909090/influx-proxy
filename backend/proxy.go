@@ -116,7 +116,7 @@ func (proxy *Proxy) initCircle(circle *Circle) {
     circle.UrlToBackend = make(map[string]*Backend)
     circle.BackendWgMap = make(map[string]*sync.WaitGroup)
     circle.IsMigrating = false
-    circle.WgMigrate = &sync.WaitGroup{}
+    circle.MigrateWg = &sync.WaitGroup{}
     circle.Lock = &sync.RWMutex{}
     for _, backend := range circle.Backends {
         circle.BackendWgMap[backend.Url] = &sync.WaitGroup{}
@@ -330,17 +330,17 @@ func (proxy *Proxy) Rebalance(circleId int, backends []*Backend, databases []str
     }
     proxy.ClearMigrateStats()
     for _, backend := range backends {
-        circle.WgMigrate.Add(1)
+        circle.MigrateWg.Add(1)
         go proxy.RebalanceBackend(backend, circle, databases)
     }
-    circle.WgMigrate.Wait()
+    circle.MigrateWg.Wait()
     defer circle.SetMigrating(false)
     util.Mlog.Printf("rebalance done")
 }
 
 func (proxy *Proxy) RebalanceBackend(backend *Backend, circle *Circle, databases []string) {
     var migrateCount int
-    defer circle.WgMigrate.Done()
+    defer circle.MigrateWg.Done()
     circleId := circle.CircleId
     if !backend.Active {
         util.Mlog.Printf("backend not active: %s", backend.Url)
@@ -404,17 +404,17 @@ func (proxy *Proxy) Recovery(fromCircleId, toCircleId int, recoveryUrls []string
     }
     proxy.ClearMigrateStats()
     for _, backend := range fromCircle.Backends {
-        fromCircle.WgMigrate.Add(1)
+        fromCircle.MigrateWg.Add(1)
         go proxy.RecoveryBackend(backend, fromCircle, toCircle, recoveryUrlMap, databases)
     }
-    fromCircle.WgMigrate.Wait()
+    fromCircle.MigrateWg.Wait()
     defer toCircle.SetMigrating(false)
     util.Mlog.Printf("recovery done")
 }
 
 func (proxy *Proxy) RecoveryBackend(backend *Backend, fromCircle, toCircle *Circle, recoveryUrlMap map[string]bool, databases []string) {
     var migrateCount int
-    defer fromCircle.WgMigrate.Done()
+    defer fromCircle.MigrateWg.Done()
     fromCircleId := fromCircle.CircleId
     if !backend.Active {
         util.Mlog.Printf("backend not active: %s", backend.Url)
@@ -466,10 +466,10 @@ func (proxy *Proxy) Resync(databases []string, seconds int) {
     proxy.ClearMigrateStats()
     for _, circle := range proxy.Circles {
         for _, backend := range circle.Backends {
-            circle.WgMigrate.Add(1)
+            circle.MigrateWg.Add(1)
             go proxy.ResyncBackend(backend, circle, databases, seconds)
         }
-        circle.WgMigrate.Wait()
+        circle.MigrateWg.Wait()
         util.Mlog.Printf("circle %d resync done", circle.CircleId)
     }
     defer proxy.SetResyncing(false)
@@ -478,7 +478,7 @@ func (proxy *Proxy) Resync(databases []string, seconds int) {
 
 func (proxy *Proxy) ResyncBackend(backend *Backend, circle *Circle, databases []string, seconds int) {
     var migrateCount int
-    defer circle.WgMigrate.Done()
+    defer circle.MigrateWg.Done()
     circleId := circle.CircleId
     if !backend.Active {
         util.Mlog.Printf("backend not active: %s", backend.Url)
@@ -533,17 +533,17 @@ func (proxy *Proxy) Clear(circleId int) {
     circle.SetMigrating(true)
     proxy.ClearMigrateStats()
     for _, backend := range circle.Backends {
-        circle.WgMigrate.Add(1)
+        circle.MigrateWg.Add(1)
         go proxy.ClearBackend(backend, circle)
     }
-    circle.WgMigrate.Wait()
+    circle.MigrateWg.Wait()
     defer circle.SetMigrating(false)
     util.Mlog.Printf("clear done")
 }
 
 func (proxy *Proxy) ClearBackend(backend *Backend, circle *Circle) {
     var migrateCount int
-    defer circle.WgMigrate.Done()
+    defer circle.MigrateWg.Done()
     circleId := circle.CircleId
     if !backend.Active {
         util.Mlog.Printf("backend not active: %s", backend.Url)
