@@ -180,8 +180,8 @@ func (proxy *Proxy) WriteData(data *LineData) {
     key := data.Db + "," + measure
     backends := proxy.GetMachines(key)
     // fmt.Printf("%s key: %s; backends:", time.Now().Format("2006-01-02 15:04:05"), key)
-    // for _, be := range backends {
-    //     fmt.Printf(" %s", be.Name)
+    // for _, b := range backends {
+    //     fmt.Printf(" %s", b.Name)
     // }
     // fmt.Printf("\n")
     if len(backends) < 1 {
@@ -306,8 +306,8 @@ func (proxy *Proxy) GetDatabases() []string {
 
 func (proxy *Proxy) GetBackendUrls(backends []*Backend) []string {
     backendUrls := make([]string, len(backends))
-    for k, be := range backends {
-        backendUrls[k] = be.Url
+    for k, b := range backends {
+        backendUrls[k] = b.Url
     }
     return backendUrls
 }

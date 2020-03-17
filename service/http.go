@@ -306,21 +306,28 @@ func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request
 
     var backends []*backend.Backend
     if operation == "rm" {
-        backendUrls := hs.formValues(req, "backend_urls")
-        if len(backendUrls) == 0 {
+        var body struct {
+            Backends []*backend.Backend `json:"backends"`
+        }
+        decoder := json.NewDecoder(req.Body)
+        err := decoder.Decode(&body)
+        if err != nil {
             w.WriteHeader(400)
-            w.Write([]byte("invalid backend_urls\n"))
+            w.Write([]byte("invalid backends from body\n"))
             return
         }
-        for _, url := range backendUrls {
+        for _, b := range body.Backends {
             backends = append(backends, &backend.Backend{
-                Url: url,
-                Client: backend.NewClient(url),
-                Transport: backend.NewTransport(url),
+                Name: b.Name,
+                Url: b.Url,
+                Username: b.Username,
+                Password: b.Password,
+                AuthSecure: hs.AuthSecure,
+                Transport: backend.NewTransport(b.Url),
                 Active: true,
             })
-            hs.MigrateStats[circleId][url] = &backend.MigrateInfo{}
-            hs.Circles[circleId].BackendWgMap[url] = &sync.WaitGroup{}
+            hs.MigrateStats[circleId][b.Url] = &backend.MigrateInfo{}
+            hs.Circles[circleId].BackendWgMap[b.Url] = &sync.WaitGroup{}
         }
     }
     for _, backend := range hs.Circles[circleId].Backends {
