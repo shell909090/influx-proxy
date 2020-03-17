@@ -29,7 +29,6 @@ type Proxy struct {
     Username                string                          `json:"username"`
     Password                string                          `json:"password"`
     AuthSecure              bool                            `json:"auth_secure"`
-    MigrateMaxCpus          int                             `json:"migrate_max_cpus"`
     HTTPSEnabled            bool                            `json:"https_enabled"`
     HTTPSCert               string                          `json:"https_cert"`
     HTTPSKey                string                          `json:"https_key"`
@@ -37,6 +36,7 @@ type Proxy struct {
     ObligatedQuery          []*regexp.Regexp                `json:"obligated_query"`
     ClusteredQuery          []*regexp.Regexp                `json:"clustered_query"`
     IsResyncing             bool                            `json:"is_resyncing"`
+    MigrateCpus             int                             `json:"migrate_cpus"`
     MigrateStats            []map[string]*MigrateInfo       `json:"migrate_stats"`
     StatusLock              *sync.RWMutex                   `json:"status_lock"`
 }
@@ -67,9 +67,6 @@ func NewProxy(file string) (proxy *Proxy, err error) {
     }
     proxy.MigrateStats = make([]map[string]*MigrateInfo, len(proxy.Circles))
     proxy.StatusLock = &sync.RWMutex{}
-    if proxy.MigrateMaxCpus == 0 {
-        proxy.MigrateMaxCpus = 1
-    }
     for circleId, circle := range proxy.Circles {
         circle.CircleId = circleId
         proxy.initCircle(circle)
@@ -102,6 +99,9 @@ func LoadProxyConfig(file string) (proxy *Proxy, err error) {
     }
     if proxy.MlogDir == "" {
         proxy.MlogDir = "log"
+    }
+    if proxy.MigrateCpus <= 0 {
+        proxy.MigrateCpus = 1
     }
     log.Printf("%d circles loaded from file", len(proxy.Circles))
     for id, circle := range proxy.Circles {
@@ -369,7 +369,7 @@ func (proxy *Proxy) RebalanceBackend(backend *Backend, circle *Circle, databases
                 migrateCount++
                 circle.BackendWgMap[backend.Url].Add(1)
                 go proxy.Migrate(backend, []*Backend{dstBackend}, circle, db, measure, 0)
-                if migrateCount % proxy.MigrateMaxCpus == 0 {
+                if migrateCount % proxy.MigrateCpus == 0 {
                     circle.BackendWgMap[backend.Url].Wait()
                 }
                 atomic.AddInt32(&stats.MigrateCount, 1)
@@ -443,7 +443,7 @@ func (proxy *Proxy) RecoveryBackend(backend *Backend, fromCircle, toCircle *Circ
                 migrateCount++
                 fromCircle.BackendWgMap[backend.Url].Add(1)
                 go proxy.Migrate(backend, []*Backend{dstBackend}, fromCircle, db, measure, 0)
-                if migrateCount % proxy.MigrateMaxCpus == 0 {
+                if migrateCount % proxy.MigrateCpus == 0 {
                     fromCircle.BackendWgMap[backend.Url].Wait()
                 }
                 atomic.AddInt32(&stats.MigrateCount, 1)
@@ -513,7 +513,7 @@ func (proxy *Proxy) ResyncBackend(backend *Backend, circle *Circle, databases []
                 migrateCount++
                 circle.BackendWgMap[backend.Url].Add(1)
                 go proxy.Migrate(backend, dstBackends, circle, db, measure, seconds)
-                if migrateCount % proxy.MigrateMaxCpus == 0 {
+                if migrateCount % proxy.MigrateCpus == 0 {
                     circle.BackendWgMap[backend.Url].Wait()
                 }
                 atomic.AddInt32(&stats.MigrateCount, 1)
@@ -581,7 +581,7 @@ func (proxy *Proxy) ClearBackend(backend *Backend, circle *Circle) {
                     }
                     defer circle.BackendWgMap[backend.Url].Done()
                 }()
-                if migrateCount % proxy.MigrateMaxCpus == 0 {
+                if migrateCount % proxy.MigrateCpus == 0 {
                     circle.BackendWgMap[backend.Url].Wait()
                 }
                 atomic.AddInt32(&stats.MigrateCount, 1)

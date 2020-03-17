@@ -604,9 +604,9 @@ func (hs *HttpService) setCpus(req *http.Request) error {
         if err != nil || cpus <= 0 || cpus > runtime.NumCPU() {
             return errors.New("invalid cpus")
         }
-        hs.MigrateMaxCpus = cpus
+        hs.MigrateCpus = cpus
     } else {
-        hs.MigrateMaxCpus = 1
+        hs.MigrateCpus = 1
     }
     return nil
 }

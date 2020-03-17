@@ -98,7 +98,6 @@ The configurations in `proxy.json` are the following:
 * `username`: proxy username, with encryption if auth_secure is enabled
 * `password`: proxy password, with encryption if auth_secure is enabled
 * `auth_secure`: secure auth with encryption, default is false
-* `migrate_max_cpus`: max cpus when migrating such as rebalance, recovery or resync
 * `https_enabled`: enable https, default is false
 * `https_cert`: the ssl certificate to use when https is enabled
 * `https_key`: use a separate private key location
