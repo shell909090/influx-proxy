@@ -57,7 +57,7 @@ type MigrateProgress struct {
 }
 
 func NewProxy(file string) (proxy *Proxy, err error) {
-    proxy, err = loadProxyJson(file)
+    proxy, err = LoadProxyConfig(file)
     if err != nil {
         return
     }
@@ -87,7 +87,7 @@ func NewProxy(file string) (proxy *Proxy, err error) {
     return
 }
 
-func loadProxyJson(file string) (proxy *Proxy, err error) {
+func LoadProxyConfig(file string) (proxy *Proxy, err error) {
     proxy = &Proxy{}
     f, err := os.Open(file)
     defer f.Close()
@@ -96,6 +96,15 @@ func loadProxyJson(file string) (proxy *Proxy, err error) {
     }
     dec := json.NewDecoder(f)
     err = dec.Decode(proxy)
+    if err != nil {
+        return
+    }
+    if proxy.DataDir == "" {
+        proxy.DataDir = "data"
+    }
+    if proxy.MlogDir == "" {
+        proxy.MlogDir = "log"
+    }
     return
 }
 

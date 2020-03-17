@@ -53,9 +53,9 @@ type Backend struct {
 
 // handle file
 
-func (backend *Backend) OpenFile(failDataDir string) {
+func (backend *Backend) OpenFile(dataDir string) {
     var err error
-    fileNamePrefix := filepath.Join(failDataDir, backend.Name)
+    fileNamePrefix := filepath.Join(dataDir, backend.Name)
     backend.Producer, err = os.OpenFile(fileNamePrefix+".dat", os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
     if err != nil {
         log.Printf("open producer error: %s %s", backend.Url, err)
@@ -391,10 +391,11 @@ func Compress(buf *bytes.Buffer, p []byte) (err error) {
 }
 
 func NewRequest(db, query string) *http.Request {
+    header := map[string][]string{"Accept-Encoding": {"gzip"}}
     if db == "" {
-        return &http.Request{Form: url.Values{"q": []string{query}}, Header:make(map[string][]string)}
+        return &http.Request{Form: url.Values{"q": []string{query}}, Header: header}
     }
-    return &http.Request{Form: url.Values{"db": []string{db}, "q": []string{query}}, Header:make(map[string][]string)}
+    return &http.Request{Form: url.Values{"db": []string{db}, "q": []string{query}}, Header: header}
 }
 
 func CopyHeader(dst, src http.Header) {
@@ -484,7 +485,7 @@ func (backend *Backend) WriteStream(db string, stream io.Reader, compressed bool
     return nil
 }
 
-func (backend *Backend) Query(req *http.Request, w http.ResponseWriter, fromCluster bool) ([]byte, error) {
+func (backend *Backend) Query(req *http.Request, w http.ResponseWriter, decompressed bool) ([]byte, error) {
     var err error
     if len(req.Form) == 0 {
         req.Form = url.Values{}
@@ -514,7 +515,7 @@ func (backend *Backend) Query(req *http.Request, w http.ResponseWriter, fromClus
     }
 
     respBody := resp.Body
-    if fromCluster && resp.Header.Get("Content-Encoding") == "gzip" {
+    if decompressed && resp.Header.Get("Content-Encoding") == "gzip" {
         respBody, err = gzip.NewReader(resp.Body)
         defer respBody.Close()
         if err != nil {
@@ -527,11 +528,11 @@ func (backend *Backend) Query(req *http.Request, w http.ResponseWriter, fromClus
 }
 
 func (backend *Backend) QueryIQL(db, query string) ([]byte, error) {
-    return backend.Query(NewRequest(db, query), nil, false)
+    return backend.Query(NewRequest(db, query), nil, true)
 }
 
 func (backend *Backend) GetSeriesValues(db, query string) []string {
-    p, _ := backend.Query(NewRequest(db, query), nil, false)
+    p, _ := backend.Query(NewRequest(db, query), nil, true)
     series, _ := SeriesFromResponseBytes(p)
     var values []string
     for _, s := range series {
@@ -559,7 +560,7 @@ func (backend *Backend) GetTagKeys(db, measure string) []string {
 
 func (backend *Backend) GetFieldKeys(db, measure string) map[string]string {
     query := fmt.Sprintf("show field keys from \"%s\"", measure)
-    p, _ := backend.Query(NewRequest(db, query), nil, false)
+    p, _ := backend.Query(NewRequest(db, query), nil, true)
     series, _ := SeriesFromResponseBytes(p)
     fieldKeys := make(map[string]string)
     for _, s := range series {
@@ -572,5 +573,5 @@ func (backend *Backend) GetFieldKeys(db, measure string) map[string]string {
 
 func (backend *Backend) DropMeasurement(db, measure string) ([]byte, error) {
     query := fmt.Sprintf("drop measurement \"%s\"", measure)
-    return backend.Query(NewRequest(db, query), nil, false)
+    return backend.Query(NewRequest(db, query), nil, true)
 }
