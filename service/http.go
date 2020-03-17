@@ -36,7 +36,7 @@ func (hs *HttpService) Register(mux *http.ServeMux) {
     mux.HandleFunc("/recovery", hs.HandlerRecovery)
     mux.HandleFunc("/resync", hs.HandlerResync)
     mux.HandleFunc("/clear", hs.HandlerClear)
-    mux.HandleFunc("/status", hs.HandlerStatus)
+    mux.HandleFunc("/stats", hs.HandlerStats)
     mux.HandleFunc("/debug/pprof/", pprof.Index)
     mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
     return
@@ -316,9 +316,10 @@ func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request
             backends = append(backends, &backend.Backend{
                 Url: url,
                 Client: backend.NewClient(url),
-                Transport: backend.NewTransport(url)},
-            )
-            hs.RebalanceMigrateStatus[circleId][url] = &backend.MigrateProgress{}
+                Transport: backend.NewTransport(url),
+                Active: true,
+            })
+            hs.MigrateStats[circleId][url] = &backend.MigrateInfo{}
             hs.Circles[circleId].BackendWgMap[url] = &sync.WaitGroup{}
         }
     }
@@ -466,13 +467,31 @@ func (hs *HttpService) HandlerClear(w http.ResponseWriter, req *http.Request) {
         return
     }
 
+    err = hs.setCpus(req)
+    if err != nil {
+        w.WriteHeader(400)
+        w.Write([]byte(err.Error()+"\n"))
+        return
+    }
+
+    if hs.Circles[circleId].IsMigrating {
+        w.WriteHeader(202)
+        w.Write([]byte(fmt.Sprintf("circle %d is migrating\n", circleId)))
+        return
+    }
+    if hs.IsResyncing {
+        w.WriteHeader(202)
+        w.Write([]byte("proxy is resyncing\n"))
+        return
+    }
+
     go hs.Clear(circleId)
     w.WriteHeader(202)
     w.Write([]byte("accepted\n"))
     return
 }
 
-func (hs *HttpService) HandlerStatus(w http.ResponseWriter, req *http.Request) {
+func (hs *HttpService) HandlerStats(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
     hs.AddHeader(w)
 
@@ -489,22 +508,15 @@ func (hs *HttpService) HandlerStatus(w http.ResponseWriter, req *http.Request) {
         return
     }
 
-    var res []byte
-    statusType := req.FormValue("type")
-    if statusType == "rebalance" {
-        res, _ = json.Marshal(hs.RebalanceMigrateStatus[circleId])
-    } else if statusType == "recovery" {
-        res, _ = json.Marshal(hs.RecoveryMigrateStatus[circleId])
-    } else if statusType == "resync" {
-        res, _ = json.Marshal(hs.ResyncMigrateStatus[circleId])
+    statsType := req.FormValue("type")
+    if statsType == "rebalance" || statsType == "recovery" || statsType == "resync" || statsType == "clear" {
+        hs.AddJsonHeader(w)
+        res, _ := json.Marshal(hs.MigrateStats[circleId])
+        w.Write(res)
     } else {
         w.WriteHeader(400)
-        w.Write([]byte("invalid status type\n"))
-        return
+        w.Write([]byte("invalid stats type\n"))
     }
-
-    hs.AddJsonHeader(w)
-    w.Write(res)
     return
 }
 
@@ -589,7 +601,7 @@ func (hs *HttpService) setCpus(req *http.Request) error {
     str := strings.TrimSpace(req.FormValue("cpus"))
     if str != "" {
         cpus, err := strconv.Atoi(str)
-        if err != nil || cpus <= 0 || cpus > 2 * runtime.NumCPU() {
+        if err != nil || cpus <= 0 || cpus > runtime.NumCPU() {
             return errors.New("invalid cpus")
         }
         hs.MigrateMaxCpus = cpus

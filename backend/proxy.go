@@ -12,6 +12,7 @@ import (
     "regexp"
     "stathat.com/c/consistent"
     "sync"
+    "sync/atomic"
     "time"
 )
 
@@ -25,10 +26,10 @@ type Proxy struct {
     VNodeSize               int                             `json:"vnode_size"`
     FlushSize               int                             `json:"flush_size"`
     FlushTime               time.Duration                   `json:"flush_time"`
-    MigrateMaxCpus          int                             `json:"migrate_max_cpus"`
     Username                string                          `json:"username"`
     Password                string                          `json:"password"`
     AuthSecure              bool                            `json:"auth_secure"`
+    MigrateMaxCpus          int                             `json:"migrate_max_cpus"`
     HTTPSEnabled            bool                            `json:"https_enabled"`
     HTTPSCert               string                          `json:"https_cert"`
     HTTPSKey                string                          `json:"https_key"`
@@ -36,9 +37,7 @@ type Proxy struct {
     ObligatedQuery          []*regexp.Regexp                `json:"obligated_query"`
     ClusteredQuery          []*regexp.Regexp                `json:"clustered_query"`
     IsResyncing             bool                            `json:"is_resyncing"`
-    RebalanceMigrateStatus  []map[string]*MigrateProgress   `json:"rebalance_migrate_status"`
-    RecoveryMigrateStatus   []map[string]*MigrateProgress   `json:"recovery_migrate_status"`
-    ResyncMigrateStatus     []map[string]*MigrateProgress   `json:"resync_migrate_status"`
+    MigrateStats            []map[string]*MigrateInfo       `json:"migrate_stats"`
     StatusLock              *sync.RWMutex                   `json:"status_lock"`
 }
 
@@ -48,12 +47,13 @@ type LineData struct {
     Precision string `json:"precision"`
 }
 
-type MigrateProgress struct {
-    DatabaseTotal    int `json:"database_total"`
-    DatabaseCount    int `json:"database_count"`
-    MeasurementTotal int `json:"measurement_total"`
-    MeasurementCount int `json:"measurement_count"`
-    MigrationCount   int `json:"migration_count"`
+type MigrateInfo struct {
+    DatabaseTotal    int32 `json:"database_total"`
+    DatabaseDone     int32 `json:"database_done"`
+    MeasurementTotal int32 `json:"measurement_total"`
+    MeasurementDone  int32 `json:"measurement_done"`
+    MigrateCount     int32 `json:"migrate_count"`
+    InPlaceCount     int32 `json:"inplace_count"`
 }
 
 func NewProxy(file string) (proxy *Proxy, err error) {
@@ -65,17 +65,15 @@ func NewProxy(file string) (proxy *Proxy, err error) {
     if err != nil {
         return
     }
-    proxy.RebalanceMigrateStatus = make([]map[string]*MigrateProgress, len(proxy.Circles))
-    proxy.RecoveryMigrateStatus = make([]map[string]*MigrateProgress, len(proxy.Circles))
-    proxy.ResyncMigrateStatus = make([]map[string]*MigrateProgress, len(proxy.Circles))
+    proxy.MigrateStats = make([]map[string]*MigrateInfo, len(proxy.Circles))
     proxy.StatusLock = &sync.RWMutex{}
     if proxy.MigrateMaxCpus == 0 {
         proxy.MigrateMaxCpus = 1
     }
     for circleId, circle := range proxy.Circles {
         circle.CircleId = circleId
-        proxy.initMigration(circle, circleId)
         proxy.initCircle(circle)
+        proxy.initMigrateStats(circle)
     }
     proxy.DbMap = make(map[string]bool)
     for _, db := range proxy.DbList {
@@ -145,14 +143,11 @@ func (proxy *Proxy) initBackend(circle *Circle, backend *Backend) {
     go backend.RewriteLoop()
 }
 
-func (proxy *Proxy) initMigration(circle *Circle, circleId int) {
-    proxy.RebalanceMigrateStatus[circleId] = make(map[string]*MigrateProgress)
-    proxy.RecoveryMigrateStatus[circleId] = make(map[string]*MigrateProgress)
-    proxy.ResyncMigrateStatus[circleId] = make(map[string]*MigrateProgress)
+func (proxy *Proxy) initMigrateStats(circle *Circle) {
+    circleId := circle.CircleId
+    proxy.MigrateStats[circleId] = make(map[string]*MigrateInfo)
     for _, backend := range circle.Backends {
-        proxy.RebalanceMigrateStatus[circleId][backend.Url] = &MigrateProgress{}
-        proxy.RecoveryMigrateStatus[circleId][backend.Url] = &MigrateProgress{}
-        proxy.ResyncMigrateStatus[circleId][backend.Url] = &MigrateProgress{}
+        proxy.MigrateStats[circleId][backend.Url] = &MigrateInfo{}
     }
 }
 
@@ -333,7 +328,7 @@ func (proxy *Proxy) Rebalance(circleId int, backends []*Backend, databases []str
     if len(databases) == 0 {
         databases = proxy.GetDatabases()
     }
-    proxy.ClearCircleMigrateStatus(proxy.RebalanceMigrateStatus[circleId])
+    proxy.ClearMigrateStats()
     for _, backend := range backends {
         circle.WgMigrate.Add(1)
         go proxy.RebalanceBackend(backend, circle, databases)
@@ -347,17 +342,25 @@ func (proxy *Proxy) RebalanceBackend(backend *Backend, circle *Circle, databases
     var migrateCount int
     defer circle.WgMigrate.Done()
     circleId := circle.CircleId
+    if !backend.Active {
+        util.Mlog.Printf("backend not active: %s", backend.Url)
+        return
+    }
 
-    rebalanceStatus := proxy.RebalanceMigrateStatus[circleId][backend.Url]
-    rebalanceStatus.DatabaseTotal = len(databases)
+    stats := proxy.MigrateStats[circleId][backend.Url]
+    stats.DatabaseTotal = int32(len(databases))
+    measuresOfDbs := make([][]string, len(databases))
     for i, db := range databases {
-        measures := backend.GetMeasurements(db)
-        rebalanceStatus.MeasurementTotal = len(measures)
-        for j, measure := range measures {
+        measuresOfDbs[i] = backend.GetMeasurements(db)
+        stats.MeasurementTotal += int32(len(measuresOfDbs[i]))
+    }
+
+    for i, db := range databases {
+        for _, measure := range measuresOfDbs[i] {
             key := GetKey(db, measure)
             dstBackendUrl, err := circle.Router.Get(key)
             if err != nil {
-                util.Mlog.Printf("router get error: %s(%d) %s %s %s", circle.Name, circle.CircleId, db, measure, err)
+                util.Mlog.Printf("router get error: %s(%d) %s %s", circle.Name, circle.CircleId, key, err)
                 continue
             }
             if dstBackendUrl != backend.Url {
@@ -369,11 +372,13 @@ func (proxy *Proxy) RebalanceBackend(backend *Backend, circle *Circle, databases
                 if migrateCount % proxy.MigrateMaxCpus == 0 {
                     circle.BackendWgMap[backend.Url].Wait()
                 }
-                rebalanceStatus.MigrationCount++
+                atomic.AddInt32(&stats.MigrateCount, 1)
+            } else {
+                atomic.AddInt32(&stats.InPlaceCount, 1)
             }
-            rebalanceStatus.MeasurementCount = j + 1
+            atomic.AddInt32(&stats.MeasurementDone, 1)
         }
-        rebalanceStatus.DatabaseCount = i + 1
+        atomic.AddInt32(&stats.DatabaseDone, 1)
     }
 }
 
@@ -383,7 +388,6 @@ func (proxy *Proxy) Recovery(fromCircleId, toCircleId int, recoveryUrls []string
     fromCircle := proxy.Circles[fromCircleId]
     toCircle := proxy.Circles[toCircleId]
 
-    fromCircle.SetMigrating(true)
     toCircle.SetMigrating(true)
     if len(databases) == 0 {
         databases = proxy.GetDatabases()
@@ -398,13 +402,12 @@ func (proxy *Proxy) Recovery(fromCircleId, toCircleId int, recoveryUrls []string
             recoveryUrlMap[u] = true
         }
     }
-    proxy.ClearCircleMigrateStatus(proxy.RecoveryMigrateStatus[fromCircleId])
+    proxy.ClearMigrateStats()
     for _, backend := range fromCircle.Backends {
         fromCircle.WgMigrate.Add(1)
         go proxy.RecoveryBackend(backend, fromCircle, toCircle, recoveryUrlMap, databases)
     }
     fromCircle.WgMigrate.Wait()
-    defer fromCircle.SetMigrating(false)
     defer toCircle.SetMigrating(false)
     util.Mlog.Printf("recovery done")
 }
@@ -413,17 +416,25 @@ func (proxy *Proxy) RecoveryBackend(backend *Backend, fromCircle, toCircle *Circ
     var migrateCount int
     defer fromCircle.WgMigrate.Done()
     fromCircleId := fromCircle.CircleId
+    if !backend.Active {
+        util.Mlog.Printf("backend not active: %s", backend.Url)
+        return
+    }
 
-    recoveryStatus := proxy.RecoveryMigrateStatus[fromCircleId][backend.Url]
-    recoveryStatus.DatabaseTotal = len(databases)
+    stats := proxy.MigrateStats[fromCircleId][backend.Url]
+    stats.DatabaseTotal = int32(len(databases))
+    measuresOfDbs := make([][]string, len(databases))
     for i, db := range databases {
-        measures := backend.GetMeasurements(db)
-        recoveryStatus.MeasurementTotal = len(measures)
-        for j, measure := range measures {
+        measuresOfDbs[i] = backend.GetMeasurements(db)
+        stats.MeasurementTotal += int32(len(measuresOfDbs[i]))
+    }
+
+    for i, db := range databases {
+        for _, measure := range measuresOfDbs[i] {
             key := GetKey(db, measure)
             dstBackendUrl, err := toCircle.Router.Get(key)
             if err != nil {
-                util.Mlog.Printf("router get error: %s(%d) %s(%d) %s %s %s", fromCircle.Name, fromCircle.CircleId, toCircle.Name, toCircle.CircleId, db, measure, err)
+                util.Mlog.Printf("router get error: %s(%d) %s(%d) %s %s", fromCircle.Name, fromCircle.CircleId, toCircle.Name, toCircle.CircleId, key, err)
                 continue
             }
             if _, ok := recoveryUrlMap[dstBackendUrl]; ok {
@@ -435,11 +446,13 @@ func (proxy *Proxy) RecoveryBackend(backend *Backend, fromCircle, toCircle *Circ
                 if migrateCount % proxy.MigrateMaxCpus == 0 {
                     fromCircle.BackendWgMap[backend.Url].Wait()
                 }
-                recoveryStatus.MigrationCount++
+                atomic.AddInt32(&stats.MigrateCount, 1)
+            } else {
+                atomic.AddInt32(&stats.InPlaceCount, 1)
             }
-            recoveryStatus.MeasurementCount = j + 1
+            atomic.AddInt32(&stats.MeasurementDone, 1)
         }
-        recoveryStatus.DatabaseCount = i + 1
+        atomic.AddInt32(&stats.DatabaseDone, 1)
     }
 }
 
@@ -450,7 +463,7 @@ func (proxy *Proxy) Resync(databases []string, seconds int) {
         databases = proxy.GetDatabases()
     }
     proxy.SetResyncing(true)
-    proxy.ClearProxyMigrateStatus(proxy.ResyncMigrateStatus)
+    proxy.ClearMigrateStats()
     for _, circle := range proxy.Circles {
         for _, backend := range circle.Backends {
             circle.WgMigrate.Add(1)
@@ -467,20 +480,28 @@ func (proxy *Proxy) ResyncBackend(backend *Backend, circle *Circle, databases []
     var migrateCount int
     defer circle.WgMigrate.Done()
     circleId := circle.CircleId
+    if !backend.Active {
+        util.Mlog.Printf("backend not active: %s", backend.Url)
+        return
+    }
 
-    resyncStatus := proxy.ResyncMigrateStatus[circleId][backend.Url]
-    resyncStatus.DatabaseTotal = len(databases)
+    stats := proxy.MigrateStats[circleId][backend.Url]
+    stats.DatabaseTotal = int32(len(databases))
+    measuresOfDbs := make([][]string, len(databases))
     for i, db := range databases {
-        measures := backend.GetMeasurements(db)
-        resyncStatus.MeasurementTotal = len(measures)
-        for j, measure := range measures {
+        measuresOfDbs[i] = backend.GetMeasurements(db)
+        stats.MeasurementTotal += int32(len(measuresOfDbs[i]))
+    }
+
+    for i, db := range databases {
+        for _, measure := range measuresOfDbs[i] {
             key := GetKey(db, measure)
             dstBackends := make([]*Backend, 0)
             for _, toCircle := range proxy.Circles {
                 if toCircle.CircleId != circleId {
                     dstBackendUrl, err := toCircle.Router.Get(key)
                     if err != nil {
-                        util.Mlog.Printf("router get error: %s(%d) %s(%d) %s %s %s", circle.Name, circle.CircleId, toCircle.Name, toCircle.CircleId, db, measure, err)
+                        util.Mlog.Printf("router get error: %s(%d) %s(%d) %s %s", circle.Name, circle.CircleId, toCircle.Name, toCircle.CircleId, key, err)
                         continue
                     }
                     dstBackend := toCircle.UrlToBackend[dstBackendUrl]
@@ -495,11 +516,13 @@ func (proxy *Proxy) ResyncBackend(backend *Backend, circle *Circle, databases []
                 if migrateCount % proxy.MigrateMaxCpus == 0 {
                     circle.BackendWgMap[backend.Url].Wait()
                 }
-                resyncStatus.MigrationCount++
+                atomic.AddInt32(&stats.MigrateCount, 1)
+            } else {
+                atomic.AddInt32(&stats.InPlaceCount, 1)
             }
-            resyncStatus.MeasurementCount = j + 1
+            atomic.AddInt32(&stats.MeasurementDone, 1)
         }
-        resyncStatus.DatabaseCount = i + 1
+        atomic.AddInt32(&stats.DatabaseDone, 1)
     }
 }
 
@@ -507,58 +530,80 @@ func (proxy *Proxy) Clear(circleId int) {
     util.SetMLog(proxy.MlogDir, "clear.log")
     util.Mlog.Printf("clear start")
     circle := proxy.Circles[circleId]
+    circle.SetMigrating(true)
+    proxy.ClearMigrateStats()
     for _, backend := range circle.Backends {
         circle.WgMigrate.Add(1)
         go proxy.ClearBackend(backend, circle)
     }
     circle.WgMigrate.Wait()
+    defer circle.SetMigrating(false)
     util.Mlog.Printf("clear done")
 }
 
 func (proxy *Proxy) ClearBackend(backend *Backend, circle *Circle) {
+    var migrateCount int
     defer circle.WgMigrate.Done()
+    circleId := circle.CircleId
     if !backend.Active {
         util.Mlog.Printf("backend not active: %s", backend.Url)
         return
     }
+
     databases := backend.GetDatabases()
-    for _, db := range databases {
-        measures := backend.GetMeasurements(db)
-        for _, measure := range measures {
+    stats := proxy.MigrateStats[circleId][backend.Url]
+    stats.DatabaseTotal = int32(len(databases))
+    measuresOfDbs := make([][]string, len(databases))
+    for i, db := range databases {
+        measuresOfDbs[i] = backend.GetMeasurements(db)
+        stats.MeasurementTotal += int32(len(measuresOfDbs[i]))
+    }
+
+    for i, db := range databases {
+        for _, measure := range measuresOfDbs[i] {
             util.Mlog.Printf("check backend:%s db:%s measurement:%s", backend.Url, db, measure)
             key := GetKey(db, measure)
             dstBackendUrl, err := circle.Router.Get(key)
             if err != nil {
-                util.Mlog.Printf("router get key error: %s, %s", key, err)
+                util.Mlog.Printf("router get error: %s(%d) %s %s", circle.Name, circle.CircleId, key, err)
                 continue
             }
             if dstBackendUrl != backend.Url {
                 util.Mlog.Printf("backend:%s db:%s measurement:%s should migrate to %s", backend.Url, db, measure, dstBackendUrl)
-                _, err := backend.DropMeasurement(db, measure)
-                if err == nil {
-                    util.Mlog.Printf("clear backend:%s db:%s measurement:%s done", backend.Url, db, measure)
-                    continue
-                } else {
-                    util.Mlog.Printf("clear backend:%s db:%s measurement:%s error: %s", backend.Url, db, measure, err)
+                migrateCount++
+                circle.BackendWgMap[backend.Url].Add(1)
+                go func () {
+                    _, err := backend.DropMeasurement(db, measure)
+                    if err == nil {
+                        util.Mlog.Printf("clear backend:%s db:%s measurement:%s done", backend.Url, db, measure)
+                    } else {
+                        util.Mlog.Printf("clear backend:%s db:%s measurement:%s error: %s", backend.Url, db, measure, err)
+                    }
+                    defer circle.BackendWgMap[backend.Url].Done()
+                }()
+                if migrateCount % proxy.MigrateMaxCpus == 0 {
+                    circle.BackendWgMap[backend.Url].Wait()
                 }
+                atomic.AddInt32(&stats.MigrateCount, 1)
+            } else {
+                atomic.AddInt32(&stats.InPlaceCount, 1)
             }
+            atomic.AddInt32(&stats.MeasurementDone, 1)
         }
+        atomic.AddInt32(&stats.DatabaseDone, 1)
     }
 }
 
-func (proxy *Proxy) ClearCircleMigrateStatus(mpMap map[string]*MigrateProgress) {
-    for _, mp := range mpMap {
-        mp.DatabaseTotal = 0
-        mp.DatabaseCount = 0
-        mp.MeasurementTotal = 0
-        mp.MeasurementCount = 0
-        mp.MigrationCount = 0
-    }
-}
-
-func (proxy *Proxy) ClearProxyMigrateStatus(status []map[string]*MigrateProgress) {
-    for _, mpMap := range status {
-        proxy.ClearCircleMigrateStatus(mpMap)
+func (proxy *Proxy) ClearMigrateStats() {
+    for _, stats := range proxy.MigrateStats {
+        for _, mi := range stats {
+            mi.DatabaseTotal = 0
+            mi.DatabaseDone = 0
+            mi.MeasurementTotal = 0
+            mi.MeasurementDone = 0
+            mi.MigrateCount = 0
+            mi.InPlaceCount = 0
+        }
     }
 }
 
