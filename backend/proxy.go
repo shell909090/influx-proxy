@@ -38,7 +38,7 @@ type Proxy struct {
     IsResyncing             bool                            `json:"is_resyncing"`
     MigrateCpus             int                             `json:"migrate_cpus"`
     MigrateStats            []map[string]*MigrateInfo       `json:"migrate_stats"`
-    StatusLock              *sync.RWMutex                   `json:"status_lock"`
+    Lock                    *sync.RWMutex                   `json:"lock"`
 }
 
 type LineData struct {
@@ -66,7 +66,7 @@ func NewProxy(file string) (proxy *Proxy, err error) {
         return
     }
     proxy.MigrateStats = make([]map[string]*MigrateInfo, len(proxy.Circles))
-    proxy.StatusLock = &sync.RWMutex{}
+    proxy.Lock = &sync.RWMutex{}
     for circleId, circle := range proxy.Circles {
         circle.CircleId = circleId
         proxy.initCircle(circle)
@@ -117,7 +117,7 @@ func (proxy *Proxy) initCircle(circle *Circle) {
     circle.BackendWgMap = make(map[string]*sync.WaitGroup)
     circle.IsMigrating = false
     circle.WgMigrate = &sync.WaitGroup{}
-    circle.StatusLock = &sync.RWMutex{}
+    circle.Lock = &sync.RWMutex{}
     for _, backend := range circle.Backends {
         circle.BackendWgMap[backend.Url] = &sync.WaitGroup{}
         proxy.initBackend(circle, backend)
@@ -608,7 +608,7 @@ func (proxy *Proxy) ClearMigrateStats() {
 }
 
 func (proxy *Proxy) SetResyncing(resyncing bool) {
-    proxy.StatusLock.Lock()
-    defer proxy.StatusLock.Unlock()
+    proxy.Lock.Lock()
+    defer proxy.Lock.Unlock()
     proxy.IsResyncing = resyncing
 }

@@ -24,7 +24,7 @@ type Circle struct {
     CircleId        int                         `json:"circle_id"`
     IsMigrating     bool                        `json:"is_migrating"`
     WgMigrate       *sync.WaitGroup             `json:"wg_migrate"`
-    StatusLock      *sync.RWMutex               `json:"status_lock"`
+    Lock            *sync.RWMutex               `json:"lock"`
 }
 
 func (circle *Circle) CheckStatus() bool {
@@ -267,7 +267,7 @@ func (circle *Circle) Migrate(srcBackend *Backend, dstBackends []*Backend, db, m
 }
 
 func (circle *Circle) SetMigrating(migrating bool) {
-    circle.StatusLock.Lock()
-    defer circle.StatusLock.Unlock()
+    circle.Lock.Lock()
+    defer circle.Lock.Unlock()
     circle.IsMigrating = migrating
 }
