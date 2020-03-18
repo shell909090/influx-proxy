@@ -572,7 +572,7 @@ func (proxy *Proxy) ClearBackend(backend *Backend, circle *Circle) {
                 util.Mlog.Printf("backend:%s db:%s measurement:%s should migrate to %s", backend.Url, db, measure, dstBackendUrl)
                 migrateCount++
                 circle.BackendWgMap[backend.Url].Add(1)
-                go func () {
+                go func(backend *Backend, circle *Circle, db, measure string) {
                     _, err := backend.DropMeasurement(db, measure)
                     if err == nil {
                         util.Mlog.Printf("clear backend:%s db:%s measurement:%s done", backend.Url, db, measure)
@@ -580,7 +580,7 @@ func (proxy *Proxy) ClearBackend(backend *Backend, circle *Circle) {
                         util.Mlog.Printf("clear backend:%s db:%s measurement:%s error: %s", backend.Url, db, measure, err)
                     }
                     defer circle.BackendWgMap[backend.Url].Done()
-                }()
+                }(backend, circle, db, measure)
                 if migrateCount % proxy.MigrateCpus == 0 {
                     circle.BackendWgMap[backend.Url].Wait()
                 }
