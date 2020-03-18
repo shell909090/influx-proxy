@@ -356,7 +356,7 @@ func (proxy *Proxy) RebalanceBackend(backend *Backend, circle *Circle, databases
     }
 
     for i, db := range databases {
-        for _, measure := range measuresOfDbs[i] {
+        for j, measure := range measuresOfDbs[i] {
             key := GetKey(db, measure)
             dstBackendUrl, err := circle.Router.Get(key)
             if err != nil {
@@ -369,7 +369,7 @@ func (proxy *Proxy) RebalanceBackend(backend *Backend, circle *Circle, databases
                 migrateCount++
                 circle.BackendWgMap[backend.Url].Add(1)
                 go proxy.Migrate(backend, []*Backend{dstBackend}, circle, db, measure, 0)
-                if migrateCount % proxy.MigrateCpus == 0 {
+                if migrateCount % proxy.MigrateCpus == 0 || (i + 1 == len(databases) && j + 1 == len(measuresOfDbs[i])) {
                     circle.BackendWgMap[backend.Url].Wait()
                 }
                 atomic.AddInt32(&stats.MigrateCount, 1)
@@ -430,7 +430,7 @@ func (proxy *Proxy) RecoveryBackend(backend *Backend, fromCircle, toCircle *Circ
     }
 
     for i, db := range databases {
-        for _, measure := range measuresOfDbs[i] {
+        for j, measure := range measuresOfDbs[i] {
             key := GetKey(db, measure)
             dstBackendUrl, err := toCircle.Router.Get(key)
             if err != nil {
@@ -443,7 +443,7 @@ func (proxy *Proxy) RecoveryBackend(backend *Backend, fromCircle, toCircle *Circ
                 migrateCount++
                 fromCircle.BackendWgMap[backend.Url].Add(1)
                 go proxy.Migrate(backend, []*Backend{dstBackend}, fromCircle, db, measure, 0)
-                if migrateCount % proxy.MigrateCpus == 0 {
+                if migrateCount % proxy.MigrateCpus == 0 || (i + 1 == len(databases) && j + 1 == len(measuresOfDbs[i])) {
                     fromCircle.BackendWgMap[backend.Url].Wait()
                 }
                 atomic.AddInt32(&stats.MigrateCount, 1)
@@ -494,7 +494,7 @@ func (proxy *Proxy) ResyncBackend(backend *Backend, circle *Circle, databases []
     }
 
     for i, db := range databases {
-        for _, measure := range measuresOfDbs[i] {
+        for j, measure := range measuresOfDbs[i] {
             key := GetKey(db, measure)
             dstBackends := make([]*Backend, 0)
             for _, toCircle := range proxy.Circles {
@@ -513,7 +513,7 @@ func (proxy *Proxy) ResyncBackend(backend *Backend, circle *Circle, databases []
                 migrateCount++
                 circle.BackendWgMap[backend.Url].Add(1)
                 go proxy.Migrate(backend, dstBackends, circle, db, measure, seconds)
-                if migrateCount % proxy.MigrateCpus == 0 {
+                if migrateCount % proxy.MigrateCpus == 0 || (i + 1 == len(databases) && j + 1 == len(measuresOfDbs[i])) {
                     circle.BackendWgMap[backend.Url].Wait()
                 }
                 atomic.AddInt32(&stats.MigrateCount, 1)
@@ -560,7 +560,7 @@ func (proxy *Proxy) ClearBackend(backend *Backend, circle *Circle) {
     }
 
     for i, db := range databases {
-        for _, measure := range measuresOfDbs[i] {
+        for j, measure := range measuresOfDbs[i] {
             util.Mlog.Printf("check backend:%s db:%s measurement:%s", backend.Url, db, measure)
             key := GetKey(db, measure)
             dstBackendUrl, err := circle.Router.Get(key)
@@ -581,7 +581,7 @@ func (proxy *Proxy) ClearBackend(backend *Backend, circle *Circle) {
                     }
                     defer circle.BackendWgMap[backend.Url].Done()
                 }(backend, circle, db, measure)
-                if migrateCount % proxy.MigrateCpus == 0 {
+                if migrateCount % proxy.MigrateCpus == 0 || (i + 1 == len(databases) && j + 1 == len(measuresOfDbs[i])) {
                     circle.BackendWgMap[backend.Url].Wait()
                 }
                 atomic.AddInt32(&stats.MigrateCount, 1)
