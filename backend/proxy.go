@@ -6,11 +6,13 @@ import (
     "errors"
     "fmt"
     "github.com/chengshiwen/influx-proxy/util"
+    "io/ioutil"
     "log"
     "net/http"
     "os"
     "regexp"
     "stathat.com/c/consistent"
+    "strings"
     "sync"
     "sync/atomic"
     "time"
@@ -169,40 +171,6 @@ func (proxy *Proxy) GetMachines(key string) []*Backend {
     return machines
 }
 
-func (proxy *Proxy) WriteData(data *LineData) {
-    data.Line = LineToNano(data.Line, data.Precision)
-
-    measure, err := ScanKey(data.Line)
-    if err != nil {
-        log.Printf("scan key error: %s", err)
-        return
-    }
-    key := data.Db + "," + measure
-    backends := proxy.GetMachines(key)
-    // fmt.Printf("%s key: %s; backends:", time.Now().Format("2006-01-02 15:04:05"), key)
-    // for _, b := range backends {
-    //     fmt.Printf(" %s", b.Name)
-    // }
-    // fmt.Printf("\n")
-    if len(backends) < 1 {
-        log.Printf("write data: %v, error: GetMachines length is 0", data)
-        return
-    }
-
-    if !bytes.HasSuffix(data.Line, []byte("\n")) {
-        data.Line = append(data.Line, []byte("\n")...)
-    }
-
-    for _, backend := range backends {
-        err := backend.WriteBuffer(data, proxy.FlushSize)
-        if err != nil {
-            log.Print("write data to buffer: ", backend.Url, data, err)
-            return
-        }
-    }
-    return
-}
-
 func (proxy *Proxy) ForbidQuery(cmds []string) {
     for _, cmd := range cmds {
         r, err := regexp.Compile(cmd)
@@ -267,13 +235,20 @@ func (proxy *Proxy) CheckClusterQuery(q string) bool {
 }
 
 func (proxy *Proxy) CheckCreateDatabaseQuery(q string) (string, bool) {
-    if len(proxy.ClusteredQuery) != 0 {
-        matches := proxy.ClusteredQuery[len(proxy.ClusteredQuery)-1].FindStringSubmatch(q)
+    if len(proxy.ClusteredQuery) > 1 {
+        matches := proxy.ClusteredQuery[len(proxy.ClusteredQuery)-2].FindStringSubmatch(q)
         if len(matches) == 2 {
             return matches[1], true
         }
     }
     return "", false
+}
+
+func (proxy *Proxy) CheckDeleteOrDropQuery(q string) bool {
+    if len(proxy.ClusteredQuery) > 0 {
+        return proxy.ClusteredQuery[len(proxy.ClusteredQuery)-1].MatchString(q)
+    }
+    return false
 }
 
 func (proxy *Proxy) CreateDatabase(w http.ResponseWriter, req *http.Request) ([]byte, error) {
@@ -291,6 +266,65 @@ func (proxy *Proxy) CreateDatabase(w http.ResponseWriter, req *http.Request) ([]
         }
     }
     return body, nil
+}
+
+func (proxy *Proxy) DeleteOrDropMeasurement(w http.ResponseWriter, req *http.Request) ([]byte, error) {
+    var body []byte
+    var err error
+    db := req.FormValue("db")
+    q := strings.TrimSpace(req.FormValue("q"))
+    measure, err := GetMeasurementFromInfluxQL(q)
+    if err != nil {
+        return nil, err
+    }
+    var reqBodyBytes []byte
+    if req.Body != nil {
+        reqBodyBytes, _ = ioutil.ReadAll(req.Body)
+    }
+    key := GetKey(db, measure)
+    backends := proxy.GetMachines(key)
+    for _, backend := range backends {
+        req.Body = ioutil.NopCloser(bytes.NewBuffer(reqBodyBytes))
+        body, err = backend.Query(req, w, false)
+        if err != nil {
+            return nil, err
+        }
+    }
+    return body, nil
+}
+
+func (proxy *Proxy) WriteData(data *LineData) {
+    data.Line = LineToNano(data.Line, data.Precision)
+
+    measure, err := ScanKey(data.Line)
+    if err != nil {
+        log.Printf("scan key error: %s", err)
+        return
+    }
+    key := GetKey(data.Db, measure)
+    backends := proxy.GetMachines(key)
+    // fmt.Printf("%s key: %s; backends:", time.Now().Format("2006-01-02 15:04:05"), key)
+    // for _, b := range backends {
+    //     fmt.Printf(" %s", b.Name)
+    // }
+    // fmt.Printf("\n")
+    if len(backends) < 1 {
+        log.Printf("write data: %v, error: GetMachines length is 0", data)
+        return
+    }
+
+    if !bytes.HasSuffix(data.Line, []byte("\n")) {
+        data.Line = append(data.Line, []byte("\n")...)
+    }
+
+    for _, backend := range backends {
+        err := backend.WriteBuffer(data, proxy.FlushSize)
+        if err != nil {
+            log.Print("write data to buffer: ", backend.Url, data, err)
+            return
+        }
+    }
+    return
 }
 
 func (proxy *Proxy) GetDatabases() []string {

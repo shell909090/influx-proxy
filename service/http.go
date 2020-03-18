@@ -141,6 +141,8 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
                     return
                 }
                 body, err = hs.CreateDatabase(w, req)
+            } else if hs.CheckDeleteOrDropQuery(q) {
+                body, err = hs.DeleteOrDropMeasurement(w, req)
             } else {
                 body, err = circle.QueryCluster(w, req)
             }

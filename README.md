@@ -109,9 +109,9 @@ Query Commands
 
 The following commands are forbid.
 
-* `grant`
-* `revoke`
-* `select into from`
+* `GRANT`
+* `REVOKE`
+* `SELECT INTO`
 
 #### Supported commands
 

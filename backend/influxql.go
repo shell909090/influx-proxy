@@ -17,14 +17,15 @@ import (
 )
 
 var (
-    ForbidCmds  = []string{"(?i:^grant|^revoke|select.+into.+from)"}
-    SupportCmds = []string{"(?i:from|^drop\\s+measurement)"}
+    ForbidCmds  = []string{"(?i:^delete|^drop|^grant|^revoke|select.+into.+from)"}
+    SupportCmds = []string{"(?i:^select.+from|^show.+from)"}
     ClusterCmds = []string{
         "(?i:^show\\s+measurements|^show\\s+series|^show\\s+databases$)",
         "(?i:^show\\s+field\\s+keys|^show\\s+tag\\s+keys|^show\\s+tag\\s+values)",
         "(?i:^show\\s+stats)",
         "(?i:^show\\s+retention\\s+policies)",
         "(?i:^create\\s+database\\s+\"*([^\\s\";]+))",
+        "(?i:^delete\\s+from|^drop\\s+measurement)",
     }
 )
 
