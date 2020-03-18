@@ -157,8 +157,8 @@ func GetKey(db, meas string) string {
     return fmt.Sprintf("%s,%s", db, meas)
 }
 
-func (proxy *Proxy) GetMachines(key string) []*Backend {
-    machines := make([]*Backend, 0)
+func (proxy *Proxy) GetBackends(key string) []*Backend {
+    backends := make([]*Backend, 0)
     for circleId, circle := range proxy.Circles {
         backendUrl, err := circle.Router.Get(key)
         if err != nil {
@@ -166,9 +166,9 @@ func (proxy *Proxy) GetMachines(key string) []*Backend {
             continue
         }
         backend := circle.UrlToBackend[backendUrl]
-        machines = append(machines, backend)
+        backends = append(backends, backend)
     }
-    return machines
+    return backends
 }
 
 func (proxy *Proxy) ForbidQuery(cmds []string) {
@@ -282,7 +282,7 @@ func (proxy *Proxy) DeleteOrDropMeasurement(w http.ResponseWriter, req *http.Req
         reqBodyBytes, _ = ioutil.ReadAll(req.Body)
     }
     key := GetKey(db, meas)
-    backends := proxy.GetMachines(key)
+    backends := proxy.GetBackends(key)
     for _, backend := range backends {
         req.Body = ioutil.NopCloser(bytes.NewBuffer(reqBodyBytes))
         body, err = backend.Query(req, w, false)
@@ -302,14 +302,14 @@ func (proxy *Proxy) WriteData(data *LineData) {
         return
     }
     key := GetKey(data.Db, meas)
-    backends := proxy.GetMachines(key)
+    backends := proxy.GetBackends(key)
     // fmt.Printf("%s key: %s; backends:", time.Now().Format("2006-01-02 15:04:05"), key)
     // for _, b := range backends {
     //     fmt.Printf(" %s", b.Name)
     // }
     // fmt.Printf("\n")
-    if len(backends) < 1 {
-        log.Printf("write data: %v, error: GetMachines length is 0", data)
+    if len(backends) == 0 {
+        log.Printf("write data: %v, error: get backends length is 0", data)
         return
     }
 

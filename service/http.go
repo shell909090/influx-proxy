@@ -31,6 +31,7 @@ func (hs *HttpService) Register(mux *http.ServeMux) {
     mux.HandleFunc("/ping", hs.HandlerPing)
     mux.HandleFunc("/query", hs.HandlerQuery)
     mux.HandleFunc("/write", hs.HandlerWrite)
+    mux.HandleFunc("/backends", hs.HandlerBackends)
     mux.HandleFunc("/migrating", hs.HandlerMigrating)
     mux.HandleFunc("/rebalance", hs.HandlerRebalance)
     mux.HandleFunc("/recovery", hs.HandlerRecovery)
@@ -160,14 +161,14 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
         return
     }
 
-    res, err := circle.Query(w, req)
+    body, err := circle.Query(w, req)
     if err != nil {
         log.Printf("query is: %s, error: %s", q, err)
         w.WriteHeader(400)
         w.Write([]byte("query error: "+err.Error()+"\n"))
         return
     }
-    w.Write(res)
+    w.Write(body)
     return
 }
 
@@ -216,7 +217,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
     p, err := ioutil.ReadAll(body)
     if err != nil {
         w.WriteHeader(400)
-        w.Write([]byte(err.Error()))
+        w.Write([]byte(err.Error()+"\n"))
         return
     }
 
@@ -236,21 +237,52 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
     return
 }
 
+func (hs *HttpService) HandlerBackends(w http.ResponseWriter, req *http.Request) {
+    defer req.Body.Close()
+    hs.AddHeader(w)
+
+    if req.Method != http.MethodGet {
+        w.WriteHeader(405)
+        w.Write([]byte("method not allow\n"))
+        return
+    }
+
+    db := req.FormValue("db")
+    meas := req.FormValue("meas")
+    if db != "" && meas != "" {
+        hs.AddJsonHeader(w)
+        key := backend.GetKey(db, meas)
+        backends := hs.GetBackends(key)
+        data := make([]map[string]string, len(backends))
+        for i, b := range backends {
+            data[i] = map[string]string{"name": b.Name, "url": b.Url}
+        }
+        res, _ := json.Marshal(data)
+        res = append(res, '\n')
+        w.Write(res)
+    } else {
+        w.WriteHeader(400)
+        w.Write([]byte("invalid db or meas\n"))
+    }
+    return
+}
+
 func (hs *HttpService) HandlerMigrating(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
     hs.AddHeader(w)
 
     if req.Method == http.MethodGet {
         hs.AddJsonHeader(w)
-        res := make([]map[string]interface{}, len(hs.Circles))
+        data := make([]map[string]interface{}, len(hs.Circles))
         for k, circle := range hs.Circles {
-            res[k] = map[string]interface{}{
+            data[k] = map[string]interface{}{
                 "circle_id": circle.CircleId,
                 "is_migrating": circle.IsMigrating,
             }
         }
-        resData, _ := json.Marshal(res)
-        w.Write(resData)
+        res, _ := json.Marshal(data)
+        res = append(res, '\n')
+        w.Write(res)
         return
     } else if req.Method == http.MethodPost {
         circleId, err := hs.formCircleId(req, "circle_id")
@@ -269,12 +301,13 @@ func (hs *HttpService) HandlerMigrating(w http.ResponseWriter, req *http.Request
         hs.AddJsonHeader(w)
         circle := hs.Circles[circleId]
         circle.SetMigrating(migrating)
-        res := map[string]interface{}{
+        data := map[string]interface{}{
             "circle_id": circle.CircleId,
             "is_migrating": circle.IsMigrating,
         }
-        resData, _ := json.Marshal(res)
-        w.Write(resData)
+        res, _ := json.Marshal(data)
+        res = append(res, '\n')
+        w.Write(res)
         return
     } else {
         w.WriteHeader(405)
@@ -521,6 +554,7 @@ func (hs *HttpService) HandlerStats(w http.ResponseWriter, req *http.Request) {
     if statsType == "rebalance" || statsType == "recovery" || statsType == "resync" || statsType == "clear" {
         hs.AddJsonHeader(w)
         res, _ := json.Marshal(hs.MigrateStats[circleId])
+        res = append(res, '\n')
         w.Write(res)
     } else {
         w.WriteHeader(400)
