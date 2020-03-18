@@ -554,12 +554,12 @@ func (backend *Backend) GetMeasurements(db string) []string {
     return backend.GetSeriesValues(db, "show measurements")
 }
 
-func (backend *Backend) GetTagKeys(db, measure string) []string {
-    return backend.GetSeriesValues(db, fmt.Sprintf("show tag keys from \"%s\"", measure))
+func (backend *Backend) GetTagKeys(db, meas string) []string {
+    return backend.GetSeriesValues(db, fmt.Sprintf("show tag keys from \"%s\"", meas))
 }
 
-func (backend *Backend) GetFieldKeys(db, measure string) map[string]string {
-    query := fmt.Sprintf("show field keys from \"%s\"", measure)
+func (backend *Backend) GetFieldKeys(db, meas string) map[string]string {
+    query := fmt.Sprintf("show field keys from \"%s\"", meas)
     p, _ := backend.Query(NewRequest(db, query), nil, true)
     series, _ := SeriesFromResponseBytes(p)
     fieldKeys := make(map[string]string)
@@ -571,7 +571,7 @@ func (backend *Backend) GetFieldKeys(db, measure string) map[string]string {
     return fieldKeys
 }
 
-func (backend *Backend) DropMeasurement(db, measure string) ([]byte, error) {
-    query := fmt.Sprintf("drop measurement \"%s\"", measure)
+func (backend *Backend) DropMeasurement(db, meas string) ([]byte, error) {
+    query := fmt.Sprintf("drop measurement \"%s\"", meas)
     return backend.Query(NewRequest(db, query), nil, true)
 }

@@ -38,15 +38,15 @@ func (circle *Circle) CheckStatus() bool {
 
 func (circle *Circle) Query(w http.ResponseWriter, req *http.Request) ([]byte, error) {
     q := req.FormValue("q")
-    measurement, e := GetMeasurementFromInfluxQL(q)
-    if e != nil {
-        return nil, e
+    measurement, err := GetMeasurementFromInfluxQL(q)
+    if err != nil {
+        return nil, err
     }
     db := req.FormValue("db")
     key := GetKey(db, measurement)
-    backendUrl, e := circle.Router.Get(key)
-    if e != nil {
-        return nil, e
+    backendUrl, err := circle.Router.Get(key)
+    if err != nil {
+        return nil, err
     }
     backend := circle.UrlToBackend[backendUrl]
     // fmt.Printf("%s key: %s; backend: %s %s; query: %s\n", time.Now().Format("2006-01-02 15:04:05"), key, backend.Name, backend.Url, q)
@@ -195,13 +195,13 @@ func (circle *Circle) concatByValues(bodies [][]byte) (body []byte, err error) {
     return
 }
 
-func (circle *Circle) Migrate(srcBackend *Backend, dstBackends []*Backend, db, measure string, seconds int) error {
+func (circle *Circle) Migrate(srcBackend *Backend, dstBackends []*Backend, db, meas string, seconds int) error {
     timeClause := ""
     if seconds > 0 {
         timeClause = fmt.Sprintf(" where time >= %ds", time.Now().Unix()-int64(seconds))
     }
 
-    rsp, err := srcBackend.QueryIQL(db, fmt.Sprintf("select * from \"%s\"%s", measure, timeClause))
+    rsp, err := srcBackend.QueryIQL(db, fmt.Sprintf("select * from \"%s\"%s", meas, timeClause))
     if err != nil {
         return err
     }
@@ -214,17 +214,17 @@ func (circle *Circle) Migrate(srcBackend *Backend, dstBackends []*Backend, db, m
     }
     columns := series[0].Columns
 
-    tagKeys := srcBackend.GetTagKeys(db, measure)
+    tagKeys := srcBackend.GetTagKeys(db, meas)
     tagMap := make(map[string]bool, 0)
     for _, t := range tagKeys {
         tagMap[t] = true
     }
-    fieldKeys := srcBackend.GetFieldKeys(db, measure)
+    fieldKeys := srcBackend.GetFieldKeys(db, meas)
 
     vlen := len(series[0].Values)
     var lines []string
     for idx, value := range series[0].Values {
-        mtagSet := []string{util.EscapeMeasurement(measure)}
+        mtagSet := []string{util.EscapeMeasurement(meas)}
         fieldSet := make([]string, 0)
         for i := 1; i < len(value); i++ {
             k := columns[i]
