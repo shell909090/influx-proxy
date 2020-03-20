@@ -514,17 +514,18 @@ func (backend *Backend) Query(req *http.Request, w http.ResponseWriter, decompre
         CopyHeader(w.Header(), resp.Header)
     }
 
-    respBody := resp.Body
+    body := resp.Body
     if decompressed && resp.Header.Get("Content-Encoding") == "gzip" {
-        respBody, err = gzip.NewReader(resp.Body)
-        defer respBody.Close()
+        b, err := gzip.NewReader(resp.Body)
+        defer b.Close()
         if err != nil {
             log.Printf("unable to decode gzip body")
             return nil, err
         }
+        body = b
     }
 
-    return ioutil.ReadAll(respBody)
+    return ioutil.ReadAll(body)
 }
 
 func (backend *Backend) QueryIQL(db, query string) ([]byte, error) {
