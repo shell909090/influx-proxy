@@ -140,9 +140,9 @@ func (proxy *Proxy) initBackend(circle *Circle, backend *Backend) {
     backend.LockFile = &sync.RWMutex{}
     backend.OpenFile(proxy.DataDir)
 
-    go backend.CheckActive()
-    go backend.FlushBufferLoop(proxy.FlushTime)
-    go backend.RewriteLoop()
+    go backend.CheckActiveBackground()
+    go backend.FlushBufferBackground(proxy.FlushTime)
+    go backend.RewriteBackground()
 }
 
 func (proxy *Proxy) initMigrateStats(circle *Circle) {

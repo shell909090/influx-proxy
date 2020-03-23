@@ -48,6 +48,7 @@ type Backend struct {
     Client          *http.Client                `json:"client"`
     Transport       *http.Transport             `json:"transport"`
     Active          bool                        `json:"active"`
+    RewriteRunning  bool                        `json:"rewrite_running"`
     LockDbMap       map[string]*sync.RWMutex    `json:"lock_db_map"`
     LockBuffer      *sync.RWMutex               `json:"lock_buffer"`
     LockFile        *sync.RWMutex               `json:"lock_file"`
@@ -311,9 +312,9 @@ func (backend *Backend) FlushBuffer(db string) (err error) {
     return
 }
 
-// handle loop
+// handle background
 
-func (backend *Backend) FlushBufferLoop(flushTimeout time.Duration) {
+func (backend *Backend) FlushBufferBackground(flushTimeout time.Duration) {
     for {
         select {
         case <- time.After(flushTimeout * time.Second):
@@ -331,59 +332,71 @@ func (backend *Backend) FlushBufferLoop(flushTimeout time.Duration) {
     }
 }
 
-func (backend *Backend) RewriteLoop() {
+func (backend *Backend) RewriteBackground() {
     for {
         select {
         case <- time.After(config.RewriteInterval * time.Second):
-            backend.Rewrite()
+            if !backend.RewriteRunning && backend.IsData() {
+                backend.RewriteRunning = true
+                go backend.RewriteLoop()
+            }
         }
     }
 }
 
-func (backend *Backend) Rewrite() {
+func (backend *Backend) RewriteLoop() {
     for backend.IsData() {
         if !backend.Active {
             time.Sleep(time.Second * config.WaitActiveInterval)
             continue
         }
-
-        b, err := backend.ReadFile()
+        err := backend.Rewrite()
         if err != nil {
-            log.Print("rewrite read data error: ", err)
-        }
-        if b == nil {
-            return
-        }
-
-        p := bytes.SplitN(b, []byte(" "), 2)
-        err = backend.WriteCompressed(string(p[0]), p[1])
-
-        switch err {
-        case nil:
-        case ErrBadRequest:
-            log.Printf("bad request, drop all data")
-            err = nil
-        case ErrNotFound:
-            log.Printf("bad backend, drop all data")
-            err = nil
-        default:
-            log.Printf("rewrite http error: %s\n", err)
-
-            err = backend.RollbackMeta()
-            if err != nil {
-                log.Printf("rollback meta error: %s\n", err)
-            }
-            return
-        }
-
-        err = backend.UpdateMeta()
-        if err != nil {
-            log.Printf("update meta error: %s\n", err)
+            time.Sleep(time.Second * config.RewriteInterval)
+            continue
         }
     }
+    backend.RewriteRunning = false
 }
 
-func (backend *Backend) CheckActive() {
+func (backend *Backend) Rewrite() (err error) {
+    b, err := backend.ReadFile()
+    if err != nil {
+        log.Print("rewrite read data error: ", err)
+    }
+    if b == nil {
+        return
+    }
+
+    p := bytes.SplitN(b, []byte(" "), 2)
+    err = backend.WriteCompressed(string(p[0]), p[1])
+
+    switch err {
+    case nil:
+    case ErrBadRequest:
+        log.Printf("bad request, drop all data")
+        err = nil
+    case ErrNotFound:
+        log.Printf("bad backend, drop all data")
+        err = nil
+    default:
+        log.Printf("rewrite http error: %s\n", err)
+
+        err = backend.RollbackMeta()
+        if err != nil {
+            log.Printf("rollback meta error: %s\n", err)
+        }
+        return
+    }
+
+    err = backend.UpdateMeta()
+    if err != nil {
+        log.Printf("update meta error: %s\n", err)
+    }
+    return
+}
+
+func (backend *Backend) CheckActiveBackground() {
     for {
         backend.Active = backend.Ping()
         time.Sleep(config.CheckPingInterval * time.Second)
