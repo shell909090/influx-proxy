@@ -22,9 +22,11 @@ import (
 )
 
 var (
-    ErrBadRequest = errors.New("bad request")
-    ErrNotFound   = errors.New("not found")
-    ErrUnknown    = errors.New("unknown error")
+    ErrBadRequest   = errors.New("bad request")
+    ErrUnauthorized = errors.New("unauthorized")
+    ErrNotFound     = errors.New("not found")
+    ErrInternal     = errors.New("internal error")
+    ErrUnknown      = errors.New("unknown error")
 )
 
 type CBuffer struct {
@@ -296,7 +298,7 @@ func (backend *Backend) FlushBuffer(db string) (err error) {
             log.Printf("bad backend, drop all data")
             return
         default:
-            log.Printf("unknown error %s", err)
+            log.Printf("write http error: %s", err)
         }
     }
 
@@ -349,13 +351,35 @@ func (backend *Backend) Rewrite() {
         if err != nil {
             log.Print("rewrite read data error: ", err)
         }
-        p := bytes.SplitN(b, []byte(" "), 2)
-
-        err = backend.WriteCompressed(string(p[0]), p[1])
-        if err != nil {
-            log.Print("rewrite write compressed error: ", err)
+        if b == nil {
+            return
         }
-        backend.UpdateMeta()
+
+        p := bytes.SplitN(b, []byte(" "), 2)
+        err = backend.WriteCompressed(string(p[0]), p[1])
+
+        switch err {
+        case nil:
+        case ErrBadRequest:
+            log.Printf("bad request, drop all data")
+            err = nil
+        case ErrNotFound:
+            log.Printf("bad backend, drop all data")
+            err = nil
+        default:
+            log.Printf("rewrite http error: %s\n", err)
+
+            err = backend.RollbackMeta()
+            if err != nil {
+                log.Printf("rollback meta error: %s\n", err)
+            }
+            return
+        }
+
+        err = backend.UpdateMeta()
+        if err != nil {
+            log.Printf("update meta error: %s\n", err)
+        }
     }
 }
 
@@ -477,9 +501,13 @@ func (backend *Backend) WriteStream(db string, stream io.Reader, compressed bool
     switch resp.StatusCode {
     case 400:
         return ErrBadRequest
+    case 401:
+        return ErrUnauthorized
     case 404:
         return ErrNotFound
-    default: // mostly tcp connection timeout
+    case 500:
+        return ErrInternal
+    default: // mostly tcp connection timeout, or request entity too large
         return ErrUnknown
     }
     return nil

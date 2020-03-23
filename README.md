@@ -117,8 +117,8 @@ The following commands are forbid.
 
 Only support match the following commands.
 
-* `.* from .*`
-* `drop measurement`
+* `select from`
+* `show from`
 * `show measurements`
 * `show series`
 * `show field keys`
@@ -128,6 +128,8 @@ Only support match the following commands.
 * `show retention policies`
 * `show databases`
 * `create database`
+* `delete from`
+* `drop measurement`
 
 License
 -------
