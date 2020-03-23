@@ -260,16 +260,12 @@ func (backend *Backend) WriteBuffer(data *LineData, bufferMaxSize int) (err erro
     backend.BufferMap[db].Buffer.Write(data.Line)
     backend.BufferMap[db].Counter++
     if backend.BufferMap[db].Counter > bufferMaxSize {
-        err = backend.FlushBuffer(db)
-        if err != nil {
-            log.Printf("flush buffer error: %s %s", db, err)
-            return
-        }
+        backend.FlushBuffer(db)
     }
     return
 }
 
-func (backend *Backend) FlushBuffer(db string) (err error) {
+func (backend *Backend) FlushBuffer(db string) {
     bc := backend.BufferMap[db]
     p := bc.Buffer.Bytes()
     bc.Buffer.Truncate(0)
@@ -279,7 +275,7 @@ func (backend *Backend) FlushBuffer(db string) (err error) {
     }
 
     var buf bytes.Buffer
-    err = Compress(&buf, p)
+    err := Compress(&buf, p)
     if err != nil {
         log.Print("compress buffer error: ", err)
         return
@@ -321,10 +317,7 @@ func (backend *Backend) FlushBufferBackground(flushTimeout time.Duration) {
             for db := range backend.BufferMap {
                 if backend.BufferMap[db].Counter > 0 {
                     backend.LockDbMap[db].Lock()
-                    err := backend.FlushBuffer(db)
-                    if err != nil {
-                        log.Printf("flush buffer error: %s %s", db, err)
-                    }
+                    backend.FlushBuffer(db)
                     backend.LockDbMap[db].Unlock()
                 }
             }
@@ -502,7 +495,7 @@ func (backend *Backend) WriteStream(db string, stream io.Reader, compressed bool
     if resp.StatusCode == 204 {
         return nil
     }
-    log.Print("write status code: ", resp.StatusCode)
+    log.Printf("write status code: %d, from: %s", resp.StatusCode, backend.Url)
 
     respbuf, err := ioutil.ReadAll(resp.Body)
     if err != nil {
