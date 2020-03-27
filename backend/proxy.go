@@ -97,6 +97,9 @@ func LoadProxyConfig(file string) (proxy *Proxy, err error) {
     if err != nil {
         return
     }
+    if proxy.ListenAddr == "" {
+        proxy.ListenAddr = ":7076"
+    }
     if proxy.DataDir == "" {
         proxy.DataDir = "data"
     }
@@ -108,6 +111,15 @@ func LoadProxyConfig(file string) (proxy *Proxy, err error) {
     } else if proxy.HashKey != "name" && proxy.HashKey != "url" {
         return nil, errors.New("invalid hash_key, only name or url")
     }
+    if proxy.VNodeSize <= 0 {
+        proxy.VNodeSize = 256
+    }
+    if proxy.FlushSize <= 0 {
+        proxy.FlushSize = 5000
+    }
+    if proxy.FlushTime <= 0 {
+        proxy.FlushTime = 1
+    }
     if proxy.MigrateCpus <= 0 {
         proxy.MigrateCpus = 1
     }
@@ -116,6 +128,9 @@ func LoadProxyConfig(file string) (proxy *Proxy, err error) {
         log.Printf("circle %d: %d backends loaded", id, len(circle.Backends))
     }
     log.Printf("hash key: %s", proxy.HashKey)
+    if len(proxy.DbList) > 0 {
+        log.Printf("db list: %v", proxy.DbList)
+    }
     return
 }
 
