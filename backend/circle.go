@@ -20,7 +20,7 @@ type Circle struct {
     CircleId        int                         `json:"circle_id"`
     Router          *consistent.Consistent      `json:"router"`
     Backends        []*Backend                  `json:"backends"`
-    UrlToBackend    map[string]*Backend         `json:"url_to_backend"`
+    MapToBackend    map[string]*Backend         `json:"map_to_backend"`
     BackendWgMap    map[string]*sync.WaitGroup  `json:"backend_wg_map"`
     IsMigrating     bool                        `json:"is_migrating"`
     MigrateWg       *sync.WaitGroup             `json:"migrate_wg"`
@@ -28,8 +28,8 @@ type Circle struct {
 }
 
 func (circle *Circle) GetBackend(key string) *Backend {
-    backendUrl, _ := circle.Router.Get(key)
-    return circle.UrlToBackend[backendUrl]
+    value, _ := circle.Router.Get(key)
+    return circle.MapToBackend[value]
 }
 
 func (circle *Circle) CheckStatus() bool {

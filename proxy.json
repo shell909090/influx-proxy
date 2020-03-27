@@ -39,6 +39,7 @@
     "db_list": ["db1", "db2"],
     "data_dir": "data",
     "mlog_dir": "log",
+    "hash_key": "url",
     "vnode_size": 256,
     "flush_size": 5000,
     "flush_time": 1,

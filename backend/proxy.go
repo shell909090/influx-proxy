@@ -25,6 +25,7 @@ type Proxy struct {
     DbMap                   map[string]bool                 `json:"db_map"`
     DataDir                 string                          `json:"data_dir"`
     MlogDir                 string                          `json:"mlog_dir"`
+    HashKey                 string                          `json:"hash_key"`
     VNodeSize               int                             `json:"vnode_size"`
     FlushSize               int                             `json:"flush_size"`
     FlushTime               time.Duration                   `json:"flush_time"`
@@ -102,6 +103,11 @@ func LoadProxyConfig(file string) (proxy *Proxy, err error) {
     if proxy.MlogDir == "" {
         proxy.MlogDir = "log"
     }
+    if proxy.HashKey == "" {
+        proxy.HashKey = "url"
+    } else if proxy.HashKey != "name" && proxy.HashKey != "url" {
+        return nil, errors.New("invalid hash_key, only name or url")
+    }
     if proxy.MigrateCpus <= 0 {
         proxy.MigrateCpus = 1
     }
@@ -109,13 +115,14 @@ func LoadProxyConfig(file string) (proxy *Proxy, err error) {
     for id, circle := range proxy.Circles {
         log.Printf("circle %d: %d backends loaded", id, len(circle.Backends))
     }
+    log.Printf("hash key: %s", proxy.HashKey)
     return
 }
 
 func (proxy *Proxy) initCircle(circle *Circle) {
     circle.Router = consistent.New()
     circle.Router.NumberOfReplicas = proxy.VNodeSize
-    circle.UrlToBackend = make(map[string]*Backend)
+    circle.MapToBackend = make(map[string]*Backend)
     circle.BackendWgMap = make(map[string]*sync.WaitGroup)
     circle.IsMigrating = false
     circle.MigrateWg = &sync.WaitGroup{}
@@ -127,8 +134,13 @@ func (proxy *Proxy) initCircle(circle *Circle) {
 }
 
 func (proxy *Proxy) initBackend(circle *Circle, backend *Backend) {
-    circle.Router.Add(backend.Url)
-    circle.UrlToBackend[backend.Url] = backend
+    if proxy.HashKey == "name" {
+        circle.Router.Add(backend.Name)
+        circle.MapToBackend[backend.Name] = backend
+    } else {
+        circle.Router.Add(backend.Url)
+        circle.MapToBackend[backend.Url] = backend
+    }
 
     backend.AuthSecure = proxy.AuthSecure
     backend.BufferMap = make(map[string]*CBuffer)
@@ -426,8 +438,8 @@ func (proxy *Proxy) Recovery(fromCircleId, toCircleId int, recoveryUrls []string
             recoveryUrlMap[u] = true
         }
     } else {
-        for u := range toCircle.UrlToBackend {
-            recoveryUrlMap[u] = true
+        for _, b := range toCircle.Backends {
+            recoveryUrlMap[b.Url] = true
         }
     }
     proxy.ClearMigrateStats()
