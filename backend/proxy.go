@@ -295,12 +295,16 @@ func (proxy *Proxy) DeleteOrDropMeasurement(w http.ResponseWriter, req *http.Req
 
 func (proxy *Proxy) WriteData(data *LineData) {
     data.Line = LineToNano(data.Line, data.Precision)
-
     meas, err := ScanKey(data.Line)
     if err != nil {
         log.Printf("scan key error: %s", err)
         return
     }
+    if ScanSpace(data.Line[len(meas):]) != 2 {
+        log.Printf("invalid format, drop data: %s", string(data.Line))
+        return
+    }
+
     key := GetKey(data.Db, meas)
     backends := proxy.GetBackends(key)
     // fmt.Printf("%s key: %s; backends:", time.Now().Format("2006-01-02 15:04:05"), key)

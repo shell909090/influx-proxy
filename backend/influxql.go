@@ -219,6 +219,31 @@ func BytesToInt64(buf []byte) int64 {
     return res
 }
 
+func ScanSpace(buf []byte) (cnt int) {
+    buflen := len(buf)
+    for i := 0; i < buflen; {
+        switch buf[i] {
+        case '\\':
+            i += 2
+        case '"':
+            end, _, err := FindEndWithQuote(buf, i, '"')
+            if err != nil {
+                log.Printf("scan quote error: %s\n", err)
+                return
+            }
+            i = end
+        case ' ', '\t':
+            if i == 0 || (buf[i-1] != ' ' && buf[i-1] != '\t') {
+                cnt++
+            }
+            i++
+        default:
+            i++
+        }
+    }
+    return
+}
+
 func ScanTime(buf []byte) (int, bool) {
     i := len(buf) - 1
     for ; i >= 0; i-- {
