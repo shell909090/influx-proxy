@@ -123,6 +123,10 @@ func LoadProxyConfig(file string) (proxy *Proxy, err error) {
     if proxy.MigrateCpus <= 0 {
         proxy.MigrateCpus = 1
     }
+    err = proxy.CheckBackends()
+    if err != nil {
+        return
+    }
     log.Printf("%d circles loaded from file", len(proxy.Circles))
     for id, circle := range proxy.Circles {
         log.Printf("circle %d: %d backends loaded", id, len(circle.Backends))
@@ -132,6 +136,25 @@ func LoadProxyConfig(file string) (proxy *Proxy, err error) {
         log.Printf("db list: %v", proxy.DbList)
     }
     return
+}
+
+func (proxy *Proxy) CheckBackends() error {
+    rec := make(map[string]bool)
+    for _, circle := range proxy.Circles {
+        if len(circle.Backends) == 0 {
+            return errors.New("backends cannot be empty")
+        }
+        for _, backend := range circle.Backends {
+            if backend.Name == "" {
+                return errors.New("backend name cannot be empty")
+            }
+            if _, ok := rec[backend.Name]; ok {
+                return errors.New("backend name exists: " + backend.Name)
+            }
+            rec[backend.Name] = true
+        }
+    }
+    return nil
 }
 
 func (proxy *Proxy) initCircle(circle *Circle) {

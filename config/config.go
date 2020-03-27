@@ -1,7 +1,7 @@
 package config
 
 const (
-    Version            = "2.4.1"
+    Version            = "2.4.2"
     IdleTimeout        = 10
     CheckPingInterval  = 1
     WaitActiveInterval = 10
