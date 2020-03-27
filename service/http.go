@@ -103,7 +103,7 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     db := req.FormValue("db")
     if len(hs.DbList) > 0 && !hs.checkDatabase(q) && !util.MapHasKey(hs.DbMap, db) {
         w.WriteHeader(400)
-        w.Write([]byte(fmt.Sprintf("database not exist: %s\n", db)))
+        w.Write([]byte(fmt.Sprintf("database forbidden: %s\n", db)))
         return
     }
 
@@ -200,7 +200,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
     }
     if len(hs.DbList) > 0 && !util.MapHasKey(hs.DbMap, db) {
         w.WriteHeader(400)
-        w.Write([]byte(fmt.Sprintf("database not exist: %s\n", db)))
+        w.Write([]byte(fmt.Sprintf("database forbidden: %s\n", db)))
         return
     }
 
