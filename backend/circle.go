@@ -27,6 +27,11 @@ type Circle struct {
     Lock            *sync.RWMutex               `json:"lock"`
 }
 
+func (circle *Circle) GetBackend(key string) *Backend {
+    backendUrl, _ := circle.Router.Get(key)
+    return circle.UrlToBackend[backendUrl]
+}
+
 func (circle *Circle) CheckStatus() bool {
     for _, backend := range circle.Backends {
         if !backend.Active {
@@ -44,11 +49,7 @@ func (circle *Circle) Query(w http.ResponseWriter, req *http.Request) ([]byte, e
     }
     db := req.FormValue("db")
     key := GetKey(db, measurement)
-    backendUrl, err := circle.Router.Get(key)
-    if err != nil {
-        return nil, err
-    }
-    backend := circle.UrlToBackend[backendUrl]
+    backend := circle.GetBackend(key)
     // fmt.Printf("%s key: %s; backend: %s %s; query: %s\n", time.Now().Format("2006-01-02 15:04:05"), key, backend.Name, backend.Url, q)
     return backend.Query(req, w, false)
 }
