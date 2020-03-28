@@ -31,6 +31,7 @@ func (hs *HttpService) Register(mux *http.ServeMux) {
     mux.HandleFunc("/ping", hs.HandlerPing)
     mux.HandleFunc("/query", hs.HandlerQuery)
     mux.HandleFunc("/write", hs.HandlerWrite)
+    mux.HandleFunc("/health", hs.HandlerHealth)
     mux.HandleFunc("/backends", hs.HandlerBackends)
     mux.HandleFunc("/migrating", hs.HandlerMigrating)
     mux.HandleFunc("/rebalance", hs.HandlerRebalance)
@@ -234,6 +235,27 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
         hs.WriteData(data)
     }
     w.WriteHeader(204)
+    return
+}
+
+func (hs *HttpService) HandlerHealth(w http.ResponseWriter, req *http.Request) {
+    defer req.Body.Close()
+    hs.AddHeader(w)
+
+    if req.Method != http.MethodGet {
+        w.WriteHeader(405)
+        w.Write([]byte("method not allow\n"))
+        return
+    }
+
+    hs.AddJsonHeader(w)
+    data := make([]map[string]interface{}, len(hs.Circles))
+    for i, c := range hs.Circles {
+        data[i] = map[string]interface{}{"circle": c.Name, "backends": c.GetHealth()}
+    }
+    res, _ := json.Marshal(data)
+    res = append(res, '\n')
+    w.Write(res)
     return
 }
 
