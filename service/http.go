@@ -26,13 +26,13 @@ type HttpService struct {
 }
 
 func (hs *HttpService) Register(mux *http.ServeMux) {
-    mux.HandleFunc("/encrypt", hs.HandlerEncrypt)
-    mux.HandleFunc("/decrypt", hs.HandlerDencrypt)
     mux.HandleFunc("/ping", hs.HandlerPing)
     mux.HandleFunc("/query", hs.HandlerQuery)
     mux.HandleFunc("/write", hs.HandlerWrite)
     mux.HandleFunc("/health", hs.HandlerHealth)
     mux.HandleFunc("/replica", hs.HandlerReplica)
+    mux.HandleFunc("/encrypt", hs.HandlerEncrypt)
+    mux.HandleFunc("/decrypt", hs.HandlerDencrypt)
     mux.HandleFunc("/migrating", hs.HandlerMigrating)
     mux.HandleFunc("/rebalance", hs.HandlerRebalance)
     mux.HandleFunc("/recovery", hs.HandlerRecovery)
@@ -42,33 +42,6 @@ func (hs *HttpService) Register(mux *http.ServeMux) {
     mux.HandleFunc("/debug/pprof/", pprof.Index)
     mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
     return
-}
-
-func (hs *HttpService)HandlerEncrypt(w http.ResponseWriter, req *http.Request)  {
-    defer req.Body.Close()
-    if req.Method != http.MethodGet {
-        w.WriteHeader(405)
-        w.Write([]byte("method not allow\n"))
-        return
-    }
-    ctx := req.URL.Query().Get("ctx")
-    encrypt := util.AesEncrypt(ctx, config.CipherKey)
-    w.WriteHeader(200)
-    w.Write([]byte(encrypt+"\n"))
-}
-
-func (hs *HttpService)HandlerDencrypt(w http.ResponseWriter, req *http.Request)  {
-    defer req.Body.Close()
-    if req.Method != http.MethodGet {
-        w.WriteHeader(405)
-        w.Write([]byte("method not allow\n"))
-        return
-    }
-    key := req.URL.Query().Get("key")
-    ctx := req.URL.Query().Get("ctx")
-    decrypt := util.AesDecrypt(ctx, key)
-    w.WriteHeader(200)
-    w.Write([]byte(decrypt+"\n"))
 }
 
 func (hs *HttpService) HandlerPing(w http.ResponseWriter, req *http.Request) {
@@ -287,6 +260,33 @@ func (hs *HttpService) HandlerReplica(w http.ResponseWriter, req *http.Request) 
         w.Write([]byte("invalid db or meas\n"))
     }
     return
+}
+
+func (hs *HttpService)HandlerEncrypt(w http.ResponseWriter, req *http.Request)  {
+    defer req.Body.Close()
+    if req.Method != http.MethodGet {
+        w.WriteHeader(405)
+        w.Write([]byte("method not allow\n"))
+        return
+    }
+    ctx := req.URL.Query().Get("ctx")
+    encrypt := util.AesEncrypt(ctx, config.CipherKey)
+    w.WriteHeader(200)
+    w.Write([]byte(encrypt+"\n"))
+}
+
+func (hs *HttpService)HandlerDencrypt(w http.ResponseWriter, req *http.Request)  {
+    defer req.Body.Close()
+    if req.Method != http.MethodGet {
+        w.WriteHeader(405)
+        w.Write([]byte("method not allow\n"))
+        return
+    }
+    key := req.URL.Query().Get("key")
+    ctx := req.URL.Query().Get("ctx")
+    decrypt := util.AesDecrypt(ctx, key)
+    w.WriteHeader(200)
+    w.Write([]byte(decrypt+"\n"))
 }
 
 func (hs *HttpService) HandlerMigrating(w http.ResponseWriter, req *http.Request) {
