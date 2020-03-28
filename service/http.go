@@ -32,7 +32,7 @@ func (hs *HttpService) Register(mux *http.ServeMux) {
     mux.HandleFunc("/query", hs.HandlerQuery)
     mux.HandleFunc("/write", hs.HandlerWrite)
     mux.HandleFunc("/health", hs.HandlerHealth)
-    mux.HandleFunc("/backends", hs.HandlerBackends)
+    mux.HandleFunc("/replica", hs.HandlerReplica)
     mux.HandleFunc("/migrating", hs.HandlerMigrating)
     mux.HandleFunc("/rebalance", hs.HandlerRebalance)
     mux.HandleFunc("/recovery", hs.HandlerRecovery)
@@ -259,7 +259,7 @@ func (hs *HttpService) HandlerHealth(w http.ResponseWriter, req *http.Request) {
     return
 }
 
-func (hs *HttpService) HandlerBackends(w http.ResponseWriter, req *http.Request) {
+func (hs *HttpService) HandlerReplica(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
     hs.AddHeader(w)
 
@@ -277,7 +277,7 @@ func (hs *HttpService) HandlerBackends(w http.ResponseWriter, req *http.Request)
         backends := hs.GetBackends(key)
         data := make([]map[string]string, len(backends))
         for i, b := range backends {
-            data[i] = map[string]string{"name": b.Name, "url": b.Url}
+            data[i] = map[string]string{"circle": hs.Circles[i].Name, "name": b.Name, "url": b.Url}
         }
         res, _ := json.Marshal(data)
         res = append(res, '\n')
