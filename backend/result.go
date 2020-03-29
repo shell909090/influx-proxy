@@ -38,21 +38,6 @@ func SeriesFromResponseBytes(b []byte) (series models.Rows, e error) {
     return
 }
 
-func ResponseBytesFromSeries(series models.Rows) (b []byte, e error) {
-    r := &Result{
-        Series: series,
-    }
-    rsp := Response{
-        Results: []*Result{r},
-    }
-    b, e = jsoniter.Marshal(rsp)
-    if e != nil {
-        return
-    }
-    b = append(b, '\n')
-    return
-}
-
 func ResultsFromResponseBytes(b []byte) (results []*Result, e error) {
     var rsp Response
     e = jsoniter.Unmarshal(b, &rsp)
@@ -62,14 +47,19 @@ func ResultsFromResponseBytes(b []byte) (results []*Result, e error) {
     return
 }
 
-func ResponseBytesFromResults(results []*Result) (b []byte, e error) {
-    rsp := Response{
+func ResponseFromSeries(series models.Rows) (rsp *Response) {
+    r := &Result{
+        Series: series,
+    }
+    rsp = &Response{
+        Results: []*Result{r},
+    }
+    return
+}
+
+func ResponseFromResults(results []*Result) (rsp *Response) {
+    rsp = &Response{
         Results: results,
     }
-    b, e = jsoniter.Marshal(rsp)
-    if e != nil {
-        return
-    }
-    b = append(b, '\n')
     return
 }

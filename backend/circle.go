@@ -110,27 +110,29 @@ func (circle *Circle) QueryCluster(w http.ResponseWriter, req *http.Request) ([]
         }
     }
 
-    var body []byte
+    var rsp *Response
     var err error
     q := strings.ToLower(strings.TrimSpace(req.FormValue("q")))
     // fmt.Printf("%s circle: %s; query: %s\n", time.Now().Format("2006-01-02 15:04:05"), circle.Name, q)
     if strings.HasPrefix(q, "show") {
         if strings.Contains(q, "measurements") || strings.Contains(q, "series") || strings.Contains(q, "databases") {
-            body, err = circle.reduceByValues(bodies)
+            rsp, err = circle.reduceByValues(bodies)
         } else if (strings.Contains(q, "field") || strings.Contains(q, "tag")) && (strings.Contains(q, "keys") || strings.Contains(q, "values")) {
-            body, err = circle.reduceBySeries(bodies)
+            rsp, err = circle.reduceBySeries(bodies)
         } else if strings.Contains(q, "stats") {
-            body, err = circle.concatByResults(bodies)
+            rsp, err = circle.concatByResults(bodies)
         } else if strings.Contains(q, "retention") && strings.Contains(q, "policies") {
-            body, err = circle.concatByValues(bodies)
+            rsp, err = circle.concatByValues(bodies)
         }
     }
     if err != nil {
         return nil, err
     }
-    if body == nil {
-        body, _ = ResponseBytesFromSeries(nil)
+    if rsp == nil {
+        rsp = ResponseFromSeries(nil)
     }
+    pretty := req.FormValue("pretty") == "true"
+    body := util.MarshalJson(rsp, pretty, true)
     if w.Header().Get("Content-Encoding") == "gzip" {
         return util.GzipCompress(body)
     } else {
@@ -138,7 +140,7 @@ func (circle *Circle) QueryCluster(w http.ResponseWriter, req *http.Request) ([]
     }
 }
 
-func (circle *Circle) reduceByValues(bodies [][]byte) (body []byte, err error) {
+func (circle *Circle) reduceByValues(bodies [][]byte) (rsp *Response, err error) {
     valuesMap := make(map[string]*models.Row)
     for _, b := range bodies {
         _series, _err := SeriesFromResponseBytes(b)
@@ -164,14 +166,14 @@ func (circle *Circle) reduceByValues(bodies [][]byte) (body []byte, err error) {
     }
     if len(values) > 0 {
         serie.Values = values
-        body, err = ResponseBytesFromSeries(models.Rows{serie})
+        rsp = ResponseFromSeries(models.Rows{serie})
     } else {
-        body, _ = ResponseBytesFromSeries(nil)
+        rsp = ResponseFromSeries(nil)
     }
     return
 }
 
-func (circle *Circle) reduceBySeries(bodies [][]byte) (body []byte, err error) {
+func (circle *Circle) reduceBySeries(bodies [][]byte) (rsp *Response, err error) {
     seriesMap := make(map[string]*models.Row)
     for _, b := range bodies {
         _series, _err := SeriesFromResponseBytes(b)
@@ -188,11 +190,10 @@ func (circle *Circle) reduceBySeries(bodies [][]byte) (body []byte, err error) {
     for _, item := range seriesMap {
         series = append(series, item)
     }
-    body, err = ResponseBytesFromSeries(series)
-    return
+    return ResponseFromSeries(series), nil
 }
 
-func (circle *Circle) concatByResults(bodies [][]byte) (body []byte, err error) {
+func (circle *Circle) concatByResults(bodies [][]byte) (rsp *Response, err error) {
     var results []*Result
     for _, b := range bodies {
         _results, _err := ResultsFromResponseBytes(b)
@@ -204,11 +205,10 @@ func (circle *Circle) concatByResults(bodies [][]byte) (body []byte, err error) 
             results = append(results, _results[0])
         }
     }
-    body, err = ResponseBytesFromResults(results)
-    return
+    return ResponseFromResults(results), nil
 }
 
-func (circle *Circle) concatByValues(bodies [][]byte) (body []byte, err error) {
+func (circle *Circle) concatByValues(bodies [][]byte) (rsp *Response, err error) {
     var series []*models.Row
     var values [][]interface{}
     for _, b := range bodies {
@@ -227,8 +227,7 @@ func (circle *Circle) concatByValues(bodies [][]byte) (body []byte, err error) {
     if len(series) == 1 {
         series[0].Values = values
     }
-    body, err = ResponseBytesFromSeries(series)
-    return
+    return ResponseFromSeries(series), nil
 }
 
 func (circle *Circle) Migrate(srcBackend *Backend, dstBackends []*Backend, db, meas string, seconds int) error {
