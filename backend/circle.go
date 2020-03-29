@@ -24,7 +24,6 @@ type Circle struct {
     BackendWgMap    map[string]*sync.WaitGroup  `json:"backend_wg_map"`
     IsMigrating     bool                        `json:"is_migrating"`
     MigrateWg       *sync.WaitGroup             `json:"migrate_wg"`
-    Lock            *sync.RWMutex               `json:"lock"`
 }
 
 func (circle *Circle) GetBackend(key string) *Backend {
@@ -299,10 +298,4 @@ func (circle *Circle) Migrate(srcBackend *Backend, dstBackends []*Backend, db, m
         }
     }
     return nil
-}
-
-func (circle *Circle) SetMigrating(migrating bool) {
-    circle.Lock.Lock()
-    defer circle.Lock.Unlock()
-    circle.IsMigrating = migrating
 }

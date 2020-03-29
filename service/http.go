@@ -14,6 +14,7 @@ import (
     "math/rand"
     "net/http"
     "net/http/pprof"
+    "regexp"
     "runtime"
     "strconv"
     "strings"
@@ -334,7 +335,7 @@ func (hs *HttpService) HandlerMigrateState(w http.ResponseWriter, req *http.Requ
                 return
             }
             circle := hs.Circles[circleId]
-            circle.SetMigrating(migrating)
+            hs.SetMigrating(circle, migrating)
             state["circle"] = map[string]interface{}{
                 "circle_id": circle.CircleId,
                 "circle_name": circle.Name,
@@ -440,13 +441,6 @@ func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request
         backends = append(backends, backend)
     }
 
-    err = hs.setCpus(req)
-    if err != nil {
-        w.WriteHeader(400)
-        w.Write([]byte(err.Error()+"\n"))
-        return
-    }
-
     if hs.Circles[circleId].IsMigrating {
         w.WriteHeader(202)
         w.Write([]byte(fmt.Sprintf("circle %d is migrating\n", circleId)))
@@ -455,6 +449,20 @@ func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request
     if hs.IsResyncing {
         w.WriteHeader(202)
         w.Write([]byte("proxy is resyncing\n"))
+        return
+    }
+
+    err = hs.setCpus(req)
+    if err != nil {
+        w.WriteHeader(400)
+        w.Write([]byte(err.Error()+"\n"))
+        return
+    }
+
+    err = hs.setHaAddrs(req)
+    if err != nil {
+        w.WriteHeader(400)
+        w.Write([]byte(err.Error()+"\n"))
         return
     }
 
@@ -493,13 +501,6 @@ func (hs *HttpService) HandlerRecovery(w http.ResponseWriter, req *http.Request)
         return
     }
 
-    err = hs.setCpus(req)
-    if err != nil {
-        w.WriteHeader(400)
-        w.Write([]byte(err.Error()+"\n"))
-        return
-    }
-
     if hs.Circles[fromCircleId].IsMigrating || hs.Circles[toCircleId].IsMigrating {
         w.WriteHeader(202)
         w.Write([]byte(fmt.Sprintf("circle %d or %d is migrating\n", fromCircleId, toCircleId)))
@@ -508,6 +509,20 @@ func (hs *HttpService) HandlerRecovery(w http.ResponseWriter, req *http.Request)
     if hs.IsResyncing {
         w.WriteHeader(202)
         w.Write([]byte("proxy is resyncing\n"))
+        return
+    }
+
+    err = hs.setCpus(req)
+    if err != nil {
+        w.WriteHeader(400)
+        w.Write([]byte(err.Error()+"\n"))
+        return
+    }
+
+    err = hs.setHaAddrs(req)
+    if err != nil {
+        w.WriteHeader(400)
+        w.Write([]byte(err.Error()+"\n"))
         return
     }
 
@@ -536,13 +551,6 @@ func (hs *HttpService) HandlerResync(w http.ResponseWriter, req *http.Request) {
         return
     }
 
-    err = hs.setCpus(req)
-    if err != nil {
-        w.WriteHeader(400)
-        w.Write([]byte(err.Error()+"\n"))
-        return
-    }
-
     for _, circle := range hs.Circles {
         if circle.IsMigrating {
             w.WriteHeader(202)
@@ -553,6 +561,20 @@ func (hs *HttpService) HandlerResync(w http.ResponseWriter, req *http.Request) {
     if hs.IsResyncing {
         w.WriteHeader(202)
         w.Write([]byte("proxy is resyncing\n"))
+        return
+    }
+
+    err = hs.setCpus(req)
+    if err != nil {
+        w.WriteHeader(400)
+        w.Write([]byte(err.Error()+"\n"))
+        return
+    }
+
+    err = hs.setHaAddrs(req)
+    if err != nil {
+        w.WriteHeader(400)
+        w.Write([]byte(err.Error()+"\n"))
         return
     }
 
@@ -580,13 +602,6 @@ func (hs *HttpService) HandlerClear(w http.ResponseWriter, req *http.Request) {
         return
     }
 
-    err = hs.setCpus(req)
-    if err != nil {
-        w.WriteHeader(400)
-        w.Write([]byte(err.Error()+"\n"))
-        return
-    }
-
     if hs.Circles[circleId].IsMigrating {
         w.WriteHeader(202)
         w.Write([]byte(fmt.Sprintf("circle %d is migrating\n", circleId)))
@@ -595,6 +610,20 @@ func (hs *HttpService) HandlerClear(w http.ResponseWriter, req *http.Request) {
     if hs.IsResyncing {
         w.WriteHeader(202)
         w.Write([]byte("proxy is resyncing\n"))
+        return
+    }
+
+    err = hs.setCpus(req)
+    if err != nil {
+        w.WriteHeader(400)
+        w.Write([]byte(err.Error()+"\n"))
+        return
+    }
+
+    err = hs.setHaAddrs(req)
+    if err != nil {
+        w.WriteHeader(400)
+        w.Write([]byte(err.Error()+"\n"))
         return
     }
 
@@ -691,6 +720,21 @@ func (hs *HttpService) setCpus(req *http.Request) error {
         hs.MigrateCpus = cpus
     } else {
         hs.MigrateCpus = 1
+    }
+    return nil
+}
+
+func (hs *HttpService) setHaAddrs(req *http.Request) error {
+    haAddrs := hs.formValues(req, "ha_addrs")
+    if len(haAddrs) > 1 {
+        for _, addr := range haAddrs {
+            if match, _ := regexp.MatchString("^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}:\\d{1,5}$", addr); !match {
+                return errors.New("invalid ha_addrs")
+            }
+        }
+        hs.HaAddrs = haAddrs
+    } else if len(haAddrs) == 1 {
+        return errors.New("ha_addrs should contain two addrs at least")
     }
     return nil
 }

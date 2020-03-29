@@ -35,6 +35,7 @@ type Proxy struct {
     HTTPSEnabled            bool                            `json:"https_enabled"`
     HTTPSCert               string                          `json:"https_cert"`
     HTTPSKey                string                          `json:"https_key"`
+    HaAddrs                 []string                        `json:"ha_addrs"`
     ForbiddenQuery          []*regexp.Regexp                `json:"forbidden_query"`
     ObligatedQuery          []*regexp.Regexp                `json:"obligated_query"`
     ClusteredQuery          []*regexp.Regexp                `json:"clustered_query"`
@@ -164,7 +165,6 @@ func (proxy *Proxy) initCircle(circle *Circle) {
     circle.BackendWgMap = make(map[string]*sync.WaitGroup)
     circle.IsMigrating = false
     circle.MigrateWg = &sync.WaitGroup{}
-    circle.Lock = &sync.RWMutex{}
     for _, backend := range circle.Backends {
         circle.BackendWgMap[backend.Url] = &sync.WaitGroup{}
         proxy.initBackend(circle, backend)
@@ -407,7 +407,7 @@ func (proxy *Proxy) Rebalance(circleId int, backends []*Backend, databases []str
     util.SetMLog(proxy.MlogDir, "rebalance.log")
     util.Mlog.Printf("rebalance start")
     circle := proxy.Circles[circleId]
-    circle.SetMigrating(true)
+    proxy.SetMigratingAndBroadcast(circle, true)
     if len(databases) == 0 {
         databases = proxy.GetDatabases()
     }
@@ -417,7 +417,7 @@ func (proxy *Proxy) Rebalance(circleId int, backends []*Backend, databases []str
         go proxy.RebalanceBackend(backend, circle, databases)
     }
     circle.MigrateWg.Wait()
-    defer circle.SetMigrating(false)
+    defer proxy.SetMigratingAndBroadcast(circle, false)
     util.Mlog.Printf("rebalance done")
 }
 
@@ -466,7 +466,7 @@ func (proxy *Proxy) Recovery(fromCircleId, toCircleId int, recoveryUrls []string
     fromCircle := proxy.Circles[fromCircleId]
     toCircle := proxy.Circles[toCircleId]
 
-    toCircle.SetMigrating(true)
+    proxy.SetMigratingAndBroadcast(toCircle, true)
     if len(databases) == 0 {
         databases = proxy.GetDatabases()
     }
@@ -486,7 +486,7 @@ func (proxy *Proxy) Recovery(fromCircleId, toCircleId int, recoveryUrls []string
         go proxy.RecoveryBackend(backend, fromCircle, toCircle, recoveryUrlMap, databases)
     }
     fromCircle.MigrateWg.Wait()
-    defer toCircle.SetMigrating(false)
+    defer proxy.SetMigratingAndBroadcast(toCircle, false)
     util.Mlog.Printf("recovery done")
 }
 
@@ -535,7 +535,7 @@ func (proxy *Proxy) Resync(databases []string, seconds int) {
     if len(databases) == 0 {
         databases = proxy.GetDatabases()
     }
-    proxy.SetResyncing(true)
+    proxy.SetResyncingAndBroadcast(true)
     proxy.ClearMigrateStats()
     for _, circle := range proxy.Circles {
         for _, backend := range circle.Backends {
@@ -545,7 +545,7 @@ func (proxy *Proxy) Resync(databases []string, seconds int) {
         circle.MigrateWg.Wait()
         util.Mlog.Printf("circle %d resync done", circle.CircleId)
     }
-    defer proxy.SetResyncing(false)
+    defer proxy.SetResyncingAndBroadcast(false)
     util.Mlog.Printf("resync done")
 }
 
@@ -598,14 +598,14 @@ func (proxy *Proxy) Clear(circleId int) {
     util.SetMLog(proxy.MlogDir, "clear.log")
     util.Mlog.Printf("clear start")
     circle := proxy.Circles[circleId]
-    circle.SetMigrating(true)
+    proxy.SetMigratingAndBroadcast(circle, true)
     proxy.ClearMigrateStats()
     for _, backend := range circle.Backends {
         circle.MigrateWg.Add(1)
         go proxy.ClearBackend(backend, circle)
     }
     circle.MigrateWg.Wait()
-    defer circle.SetMigrating(false)
+    defer proxy.SetMigratingAndBroadcast(circle, false)
     util.Mlog.Printf("clear done")
 }
 
@@ -675,4 +675,39 @@ func (proxy *Proxy) SetResyncing(resyncing bool) {
     proxy.Lock.Lock()
     defer proxy.Lock.Unlock()
     proxy.IsResyncing = resyncing
+}
+
+func (proxy *Proxy) SetMigrating(circle *Circle, migrating bool) {
+    proxy.Lock.Lock()
+    defer proxy.Lock.Unlock()
+    circle.IsMigrating = migrating
+}
+
+func (proxy *Proxy) SetResyncingAndBroadcast(resyncing bool) {
+    proxy.SetResyncing(resyncing)
+    client := NewClient(proxy.HTTPSEnabled)
+    for _, addr := range proxy.HaAddrs {
+        url := fmt.Sprintf("http://%s/migrate/state?resyncing=%t", addr, resyncing)
+        proxy.PostBroadcast(client, url)
+    }
+}
+
+func (proxy *Proxy) SetMigratingAndBroadcast(circle *Circle, migrating bool) {
+    proxy.SetMigrating(circle, migrating)
+    client := NewClient(proxy.HTTPSEnabled)
+    for _, addr := range proxy.HaAddrs {
+        url := fmt.Sprintf("http://%s/migrate/state?circle_id=%d&migrating=%t", addr, circle.CircleId, migrating)
+        proxy.PostBroadcast(client, url)
+    }
+}
+
+func (proxy *Proxy) PostBroadcast(client *http.Client, url string) {
+    if proxy.HTTPSEnabled {
+        url = strings.Replace(url, "http", "https", 1)
+    }
+    req, _ := http.NewRequest(http.MethodPost, url, nil)
+    if proxy.Username != "" || proxy.Password != "" {
+        SetBasicAuth(req, proxy.Username, proxy.Password, proxy.AuthSecure)
+    }
+    client.Do(req)
 }

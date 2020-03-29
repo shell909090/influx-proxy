@@ -436,12 +436,16 @@ func CopyHeader(dst, src http.Header) {
     }
 }
 
-func (backend *Backend) SetBasicAuth(req *http.Request) {
-    if backend.AuthSecure {
-        req.SetBasicAuth(util.AesDecrypt(backend.Username, config.CipherKey), util.AesDecrypt(backend.Password, config.CipherKey))
+func SetBasicAuth(req *http.Request, username string, password string, authSecure bool) {
+    if authSecure {
+        req.SetBasicAuth(util.AesDecrypt(username, config.CipherKey), util.AesDecrypt(password, config.CipherKey))
     } else {
-        req.SetBasicAuth(backend.Username, backend.Password)
+        req.SetBasicAuth(username, password)
     }
+}
+
+func (backend *Backend) SetBasicAuth(req *http.Request) {
+    SetBasicAuth(req, backend.Username, backend.Password, backend.AuthSecure)
 }
 
 func (backend *Backend) Ping() bool {
