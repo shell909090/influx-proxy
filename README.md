@@ -94,7 +94,7 @@ The configurations in `proxy.json` are the following:
 * `mlog_dir`: log dir to save rebalance, recovery, resync or clear operation
 * `hash_key`: backend key for consistent hash, including "name" or "url", default is "url"
 * `vnode_size`: the size of virtual nodes for consistent hash
-* `flush_size`: default config is 5000, wait 5000 points write
+* `flush_size`: default config is 10000, wait 10000 points write
 * `flush_time`: default config is 1s, wait 1 second write whether point count has bigger than flush_size config
 * `username`: proxy username, with encryption if auth_secure is enabled
 * `password`: proxy password, with encryption if auth_secure is enabled
