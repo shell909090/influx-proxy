@@ -46,14 +46,14 @@ func (hs *HttpService) Register(mux *http.ServeMux) {
 
 func (hs *HttpService) HandlerPing(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
-    hs.AddHeader(w)
+    hs.addHeader(w)
     w.WriteHeader(204)
     return
 }
 
 func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
-    hs.AddHeader(w)
+    hs.addHeader(w)
 
     if req.Method != http.MethodGet && req.Method != http.MethodPost {
         w.WriteHeader(405)
@@ -148,7 +148,7 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
 
 func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
-    hs.AddHeader(w)
+    hs.addHeader(w)
 
     if req.Method != http.MethodPost {
         w.WriteHeader(405)
@@ -213,7 +213,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
 
 func (hs *HttpService) HandlerHealth(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
-    hs.AddHeader(w)
+    hs.addHeader(w)
 
     if req.Method != http.MethodGet {
         w.WriteHeader(405)
@@ -221,7 +221,7 @@ func (hs *HttpService) HandlerHealth(w http.ResponseWriter, req *http.Request) {
         return
     }
 
-    hs.AddJsonHeader(w)
+    hs.addJsonHeader(w)
     data := make([]map[string]interface{}, len(hs.Circles))
     for i, c := range hs.Circles {
         data[i] = map[string]interface{}{"circle": c.Name, "backends": c.GetHealth()}
@@ -234,7 +234,7 @@ func (hs *HttpService) HandlerHealth(w http.ResponseWriter, req *http.Request) {
 
 func (hs *HttpService) HandlerReplica(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
-    hs.AddHeader(w)
+    hs.addHeader(w)
 
     if req.Method != http.MethodGet {
         w.WriteHeader(405)
@@ -245,7 +245,7 @@ func (hs *HttpService) HandlerReplica(w http.ResponseWriter, req *http.Request) 
     db := req.FormValue("db")
     meas := req.FormValue("meas")
     if db != "" && meas != "" {
-        hs.AddJsonHeader(w)
+        hs.addJsonHeader(w)
         key := backend.GetKey(db, meas)
         backends := hs.GetBackends(key)
         data := make([]map[string]string, len(backends))
@@ -291,11 +291,11 @@ func (hs *HttpService)HandlerDencrypt(w http.ResponseWriter, req *http.Request) 
 
 func (hs *HttpService) HandlerMigrateState(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
-    hs.AddHeader(w)
+    hs.addHeader(w)
 
     pretty := req.URL.Query().Get("pretty") == "true"
     if req.Method == http.MethodGet {
-        hs.AddJsonHeader(w)
+        hs.addJsonHeader(w)
         data := make([]map[string]interface{}, len(hs.Circles))
         for k, circle := range hs.Circles {
             data[k] = map[string]interface{}{
@@ -346,7 +346,7 @@ func (hs *HttpService) HandlerMigrateState(w http.ResponseWriter, req *http.Requ
             w.Write([]byte("missing query parameter\n"))
             return
         }
-        hs.AddJsonHeader(w)
+        hs.addJsonHeader(w)
         res := util.MarshalJson(state, pretty, true)
         w.Write(res)
         return
@@ -359,7 +359,7 @@ func (hs *HttpService) HandlerMigrateState(w http.ResponseWriter, req *http.Requ
 
 func (hs *HttpService) HandlerMigrateStats(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
-    hs.AddHeader(w)
+    hs.addHeader(w)
 
     if req.Method != http.MethodGet {
         w.WriteHeader(405)
@@ -376,7 +376,7 @@ func (hs *HttpService) HandlerMigrateStats(w http.ResponseWriter, req *http.Requ
 
     statsType := req.FormValue("type")
     if statsType == "rebalance" || statsType == "recovery" || statsType == "resync" || statsType == "clear" {
-        hs.AddJsonHeader(w)
+        hs.addJsonHeader(w)
         pretty := req.URL.Query().Get("pretty") == "true"
         res := util.MarshalJson(hs.MigrateStats[circleId], pretty, true)
         w.Write(res)
@@ -389,7 +389,7 @@ func (hs *HttpService) HandlerMigrateStats(w http.ResponseWriter, req *http.Requ
 
 func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
-    hs.AddHeader(w)
+    hs.addHeader(w)
 
     if req.Method != http.MethodPost {
         w.WriteHeader(405)
@@ -467,7 +467,7 @@ func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request
 
 func (hs *HttpService) HandlerRecovery(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
-    hs.AddHeader(w)
+    hs.addHeader(w)
 
     if req.Method != http.MethodPost {
         w.WriteHeader(405)
@@ -521,7 +521,7 @@ func (hs *HttpService) HandlerRecovery(w http.ResponseWriter, req *http.Request)
 
 func (hs *HttpService) HandlerResync(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
-    hs.AddHeader(w)
+    hs.addHeader(w)
 
     if req.Method != http.MethodPost {
         w.WriteHeader(405)
@@ -565,7 +565,7 @@ func (hs *HttpService) HandlerResync(w http.ResponseWriter, req *http.Request) {
 
 func (hs *HttpService) HandlerClear(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
-    hs.AddHeader(w)
+    hs.addHeader(w)
 
     if req.Method != http.MethodPost {
         w.WriteHeader(405)
@@ -604,11 +604,11 @@ func (hs *HttpService) HandlerClear(w http.ResponseWriter, req *http.Request) {
     return
 }
 
-func (hs *HttpService) AddHeader(w http.ResponseWriter) {
+func (hs *HttpService) addHeader(w http.ResponseWriter) {
     w.Header().Add("X-Influxdb-Version", config.Version)
 }
 
-func (hs *HttpService) AddJsonHeader(w http.ResponseWriter) {
+func (hs *HttpService) addJsonHeader(w http.ResponseWriter) {
     w.Header().Add("Content-Type", "application/json")
 }
 
