@@ -182,8 +182,8 @@ func (proxy *Proxy) initBackend(circle *Circle, backend *Backend) {
 
     backend.AuthSecure = proxy.AuthSecure
     backend.BufferMap = make(map[string]*CBuffer)
-    backend.Client = NewClient(backend.Url)
-    backend.Transport = NewTransport(backend.Url)
+    backend.Client = NewClient(strings.HasPrefix(backend.Url, "https"))
+    backend.Transport = NewTransport(strings.HasPrefix(backend.Url, "https"))
     backend.Active = true
     backend.LockDbMap = make(map[string]*sync.RWMutex)
     backend.LockBuffer = &sync.RWMutex{}

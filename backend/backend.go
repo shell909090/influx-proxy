@@ -398,12 +398,12 @@ func (backend *Backend) CheckActiveBackground() {
 
 // handle http
 
-func NewClient(url string) *http.Client {
-    return &http.Client{Transport: NewTransport(url)}
+func NewClient(tlsSkip bool) *http.Client {
+    return &http.Client{Transport: NewTransport(tlsSkip)}
 }
 
-func NewTransport(url string) *http.Transport {
-    return &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: strings.HasPrefix(url, "https")}}
+func NewTransport(tlsSkip bool) *http.Transport {
+    return &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: tlsSkip}}
 }
 
 func Compress(buf *bytes.Buffer, p []byte) (err error) {

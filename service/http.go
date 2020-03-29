@@ -429,7 +429,7 @@ func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request
                 Username: b.Username,
                 Password: b.Password,
                 AuthSecure: hs.AuthSecure,
-                Transport: backend.NewTransport(b.Url),
+                Transport: backend.NewTransport(strings.HasPrefix(b.Url, "https")),
                 Active: true,
             })
             hs.MigrateStats[circleId][b.Url] = &backend.MigrateInfo{}
