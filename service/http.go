@@ -33,12 +33,12 @@ func (hs *HttpService) Register(mux *http.ServeMux) {
     mux.HandleFunc("/replica", hs.HandlerReplica)
     mux.HandleFunc("/encrypt", hs.HandlerEncrypt)
     mux.HandleFunc("/decrypt", hs.HandlerDencrypt)
-    mux.HandleFunc("/migrating", hs.HandlerMigrating)
+    mux.HandleFunc("/migrate/state", hs.HandlerMigrateState)
+    mux.HandleFunc("/migrate/stats", hs.HandlerMigrateStats)
     mux.HandleFunc("/rebalance", hs.HandlerRebalance)
     mux.HandleFunc("/recovery", hs.HandlerRecovery)
     mux.HandleFunc("/resync", hs.HandlerResync)
     mux.HandleFunc("/clear", hs.HandlerClear)
-    mux.HandleFunc("/stats", hs.HandlerStats)
     mux.HandleFunc("/debug/pprof/", pprof.Index)
     mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
     return
@@ -289,7 +289,7 @@ func (hs *HttpService)HandlerDencrypt(w http.ResponseWriter, req *http.Request) 
     w.Write([]byte(decrypt+"\n"))
 }
 
-func (hs *HttpService) HandlerMigrating(w http.ResponseWriter, req *http.Request) {
+func (hs *HttpService) HandlerMigrateState(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
     hs.AddHeader(w)
 
@@ -300,34 +300,54 @@ func (hs *HttpService) HandlerMigrating(w http.ResponseWriter, req *http.Request
         for k, circle := range hs.Circles {
             data[k] = map[string]interface{}{
                 "circle_id": circle.CircleId,
+                "circle_name": circle.Name,
                 "is_migrating": circle.IsMigrating,
             }
         }
-        res := util.MarshalJson(data, pretty, true)
+        state := map[string]interface{}{"is_resyncing": hs.IsResyncing, "circles": data}
+        res := util.MarshalJson(state, pretty, true)
         w.Write(res)
         return
     } else if req.Method == http.MethodPost {
-        circleId, err := hs.formCircleId(req, "circle_id")
-        if err != nil {
+        state := make(map[string]interface{})
+        if req.FormValue("resyncing") != "" {
+            resyncing, err := hs.formBool(req, "resyncing")
+            if err != nil {
+                w.WriteHeader(400)
+                w.Write([]byte("illegal resyncing\n"))
+                return
+            }
+            hs.SetResyncing(resyncing)
+            state["resyncing"] = hs.IsResyncing
+        }
+        if req.FormValue("circle_id") != "" || req.FormValue("migrating") != "" {
+            circleId, err := hs.formCircleId(req, "circle_id")
+            if err != nil {
+                w.WriteHeader(400)
+                w.Write([]byte(err.Error()+"\n"))
+                return
+            }
+            migrating, err := hs.formBool(req, "migrating")
+            if err != nil {
+                w.WriteHeader(400)
+                w.Write([]byte("illegal migrating\n"))
+                return
+            }
+            circle := hs.Circles[circleId]
+            circle.SetMigrating(migrating)
+            state["circle"] = map[string]interface{}{
+                "circle_id": circle.CircleId,
+                "circle_name": circle.Name,
+                "is_migrating": circle.IsMigrating,
+            }
+        }
+        if len(state) == 0 {
             w.WriteHeader(400)
-            w.Write([]byte(err.Error()+"\n"))
+            w.Write([]byte("missing query parameter\n"))
             return
         }
-        migrating, err := hs.formBool(req, "migrating")
-        if err != nil {
-            w.WriteHeader(400)
-            w.Write([]byte("illegal migrating\n"))
-            return
-        }
-
         hs.AddJsonHeader(w)
-        circle := hs.Circles[circleId]
-        circle.SetMigrating(migrating)
-        data := map[string]interface{}{
-            "circle_id": circle.CircleId,
-            "is_migrating": circle.IsMigrating,
-        }
-        res := util.MarshalJson(data, pretty, true)
+        res := util.MarshalJson(state, pretty, true)
         w.Write(res)
         return
     } else {
@@ -335,6 +355,36 @@ func (hs *HttpService) HandlerMigrating(w http.ResponseWriter, req *http.Request
         w.Write([]byte("method not allow\n"))
         return
     }
+}
+
+func (hs *HttpService) HandlerMigrateStats(w http.ResponseWriter, req *http.Request) {
+    defer req.Body.Close()
+    hs.AddHeader(w)
+
+    if req.Method != http.MethodGet {
+        w.WriteHeader(405)
+        w.Write([]byte("method not allow\n"))
+        return
+    }
+
+    circleId, err := hs.formCircleId(req, "circle_id")
+    if err != nil {
+        w.WriteHeader(400)
+        w.Write([]byte(err.Error()+"\n"))
+        return
+    }
+
+    statsType := req.FormValue("type")
+    if statsType == "rebalance" || statsType == "recovery" || statsType == "resync" || statsType == "clear" {
+        hs.AddJsonHeader(w)
+        pretty := req.URL.Query().Get("pretty") == "true"
+        res := util.MarshalJson(hs.MigrateStats[circleId], pretty, true)
+        w.Write(res)
+    } else {
+        w.WriteHeader(400)
+        w.Write([]byte("invalid stats type\n"))
+    }
+    return
 }
 
 func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request) {
@@ -551,36 +601,6 @@ func (hs *HttpService) HandlerClear(w http.ResponseWriter, req *http.Request) {
     go hs.Clear(circleId)
     w.WriteHeader(202)
     w.Write([]byte("accepted\n"))
-    return
-}
-
-func (hs *HttpService) HandlerStats(w http.ResponseWriter, req *http.Request) {
-    defer req.Body.Close()
-    hs.AddHeader(w)
-
-    if req.Method != http.MethodGet {
-        w.WriteHeader(405)
-        w.Write([]byte("method not allow\n"))
-        return
-    }
-
-    circleId, err := hs.formCircleId(req, "circle_id")
-    if err != nil {
-        w.WriteHeader(400)
-        w.Write([]byte(err.Error()+"\n"))
-        return
-    }
-
-    statsType := req.FormValue("type")
-    if statsType == "rebalance" || statsType == "recovery" || statsType == "resync" || statsType == "clear" {
-        hs.AddJsonHeader(w)
-        pretty := req.URL.Query().Get("pretty") == "true"
-        res := util.MarshalJson(hs.MigrateStats[circleId], pretty, true)
-        w.Write(res)
-    } else {
-        w.WriteHeader(400)
-        w.Write([]byte("invalid stats type\n"))
-    }
     return
 }
 
