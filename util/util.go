@@ -3,6 +3,7 @@ package util
 import (
     "bytes"
     "compress/gzip"
+    "encoding/json"
     "io"
     "os"
 )
@@ -53,4 +54,17 @@ func GzipCompress(b []byte) (cb []byte, err error) {
     err = zip.Close()
     cb = buf.Bytes()
     return
+}
+
+func MarshalJson(v interface{}, pretty bool, newline bool) []byte {
+    var res []byte
+    if pretty {
+        res, _ = json.MarshalIndent(v, "", "    ")
+    } else {
+        res, _ = json.Marshal(v)
+    }
+    if newline {
+        res = append(res, '\n')
+    }
+    return res
 }

@@ -226,8 +226,8 @@ func (hs *HttpService) HandlerHealth(w http.ResponseWriter, req *http.Request) {
     for i, c := range hs.Circles {
         data[i] = map[string]interface{}{"circle": c.Name, "backends": c.GetHealth()}
     }
-    res, _ := json.Marshal(data)
-    res = append(res, '\n')
+    pretty := req.URL.Query().Get("pretty") == "true"
+    res := util.MarshalJson(data, pretty, true)
     w.Write(res)
     return
 }
@@ -252,8 +252,8 @@ func (hs *HttpService) HandlerReplica(w http.ResponseWriter, req *http.Request) 
         for i, b := range backends {
             data[i] = map[string]string{"circle": hs.Circles[i].Name, "name": b.Name, "url": b.Url}
         }
-        res, _ := json.Marshal(data)
-        res = append(res, '\n')
+        pretty := req.URL.Query().Get("pretty") == "true"
+        res := util.MarshalJson(data, pretty, true)
         w.Write(res)
     } else {
         w.WriteHeader(400)
@@ -293,6 +293,7 @@ func (hs *HttpService) HandlerMigrating(w http.ResponseWriter, req *http.Request
     defer req.Body.Close()
     hs.AddHeader(w)
 
+    pretty := req.URL.Query().Get("pretty") == "true"
     if req.Method == http.MethodGet {
         hs.AddJsonHeader(w)
         data := make([]map[string]interface{}, len(hs.Circles))
@@ -302,8 +303,7 @@ func (hs *HttpService) HandlerMigrating(w http.ResponseWriter, req *http.Request
                 "is_migrating": circle.IsMigrating,
             }
         }
-        res, _ := json.Marshal(data)
-        res = append(res, '\n')
+        res := util.MarshalJson(data, pretty, true)
         w.Write(res)
         return
     } else if req.Method == http.MethodPost {
@@ -327,8 +327,7 @@ func (hs *HttpService) HandlerMigrating(w http.ResponseWriter, req *http.Request
             "circle_id": circle.CircleId,
             "is_migrating": circle.IsMigrating,
         }
-        res, _ := json.Marshal(data)
-        res = append(res, '\n')
+        res := util.MarshalJson(data, pretty, true)
         w.Write(res)
         return
     } else {
@@ -575,8 +574,8 @@ func (hs *HttpService) HandlerStats(w http.ResponseWriter, req *http.Request) {
     statsType := req.FormValue("type")
     if statsType == "rebalance" || statsType == "recovery" || statsType == "resync" || statsType == "clear" {
         hs.AddJsonHeader(w)
-        res, _ := json.Marshal(hs.MigrateStats[circleId])
-        res = append(res, '\n')
+        pretty := req.URL.Query().Get("pretty") == "true"
+        res := util.MarshalJson(hs.MigrateStats[circleId], pretty, true)
         w.Write(res)
     } else {
         w.WriteHeader(400)
