@@ -222,6 +222,12 @@ func (hs *HttpService) HandlerHealth(w http.ResponseWriter, req *http.Request) {
         return
     }
 
+    if !hs.checkAuth(req) {
+        w.WriteHeader(401)
+        w.Write([]byte("authentication failed\n"))
+        return
+    }
+
     hs.addJsonHeader(w)
     data := make([]map[string]interface{}, len(hs.Circles))
     for i, c := range hs.Circles {
@@ -240,6 +246,12 @@ func (hs *HttpService) HandlerReplica(w http.ResponseWriter, req *http.Request) 
     if req.Method != http.MethodGet {
         w.WriteHeader(405)
         w.Write([]byte("method not allow\n"))
+        return
+    }
+
+    if !hs.checkAuth(req) {
+        w.WriteHeader(401)
+        w.Write([]byte("authentication failed\n"))
         return
     }
 
@@ -293,6 +305,12 @@ func (hs *HttpService)HandlerDencrypt(w http.ResponseWriter, req *http.Request) 
 func (hs *HttpService) HandlerMigrateState(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
     hs.addHeader(w)
+
+    if !hs.checkAuth(req) {
+        w.WriteHeader(401)
+        w.Write([]byte("authentication failed\n"))
+        return
+    }
 
     pretty := req.URL.Query().Get("pretty") == "true"
     if req.Method == http.MethodGet {
@@ -368,6 +386,12 @@ func (hs *HttpService) HandlerMigrateStats(w http.ResponseWriter, req *http.Requ
         return
     }
 
+    if !hs.checkAuth(req) {
+        w.WriteHeader(401)
+        w.Write([]byte("authentication failed\n"))
+        return
+    }
+
     circleId, err := hs.formCircleId(req, "circle_id")
     if err != nil {
         w.WriteHeader(400)
@@ -395,6 +419,12 @@ func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request
     if req.Method != http.MethodPost {
         w.WriteHeader(405)
         w.Write([]byte("method not allow\n"))
+        return
+    }
+
+    if !hs.checkAuth(req) {
+        w.WriteHeader(401)
+        w.Write([]byte("authentication failed\n"))
         return
     }
 
@@ -483,6 +513,12 @@ func (hs *HttpService) HandlerRecovery(w http.ResponseWriter, req *http.Request)
         return
     }
 
+    if !hs.checkAuth(req) {
+        w.WriteHeader(401)
+        w.Write([]byte("authentication failed\n"))
+        return
+    }
+
     fromCircleId, err := hs.formCircleId(req, "from_circle_id")
     if err != nil {
         w.WriteHeader(400)
@@ -544,6 +580,12 @@ func (hs *HttpService) HandlerResync(w http.ResponseWriter, req *http.Request) {
         return
     }
 
+    if !hs.checkAuth(req) {
+        w.WriteHeader(401)
+        w.Write([]byte("authentication failed\n"))
+        return
+    }
+
     seconds, err := hs.formSeconds(req)
     if err != nil {
         w.WriteHeader(400)
@@ -592,6 +634,12 @@ func (hs *HttpService) HandlerClear(w http.ResponseWriter, req *http.Request) {
     if req.Method != http.MethodPost {
         w.WriteHeader(405)
         w.Write([]byte("method not allow\n"))
+        return
+    }
+
+    if !hs.checkAuth(req) {
+        w.WriteHeader(401)
+        w.Write([]byte("authentication failed\n"))
         return
     }
 
