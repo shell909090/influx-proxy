@@ -260,12 +260,15 @@ func (backend *Backend) WriteBuffer(data *LineData, bufferMaxSize int) (err erro
     backend.BufferMap[db].Buffer.Write(data.Line)
     backend.BufferMap[db].Counter++
     if backend.BufferMap[db].Counter > bufferMaxSize {
-        backend.FlushBuffer(db)
+        err = backend.FlushBuffer(db)
+        if err != nil {
+            return
+        }
     }
     return
 }
 
-func (backend *Backend) FlushBuffer(db string) {
+func (backend *Backend) FlushBuffer(db string) (err error) {
     bc := backend.BufferMap[db]
     p := bc.Buffer.Bytes()
     bc.Buffer.Truncate(0)
@@ -275,7 +278,7 @@ func (backend *Backend) FlushBuffer(db string) {
     }
 
     var buf bytes.Buffer
-    err := Compress(&buf, p)
+    err = Compress(&buf, p)
     if err != nil {
         log.Print("compress buffer error: ", err)
         return
@@ -290,10 +293,10 @@ func (backend *Backend) FlushBuffer(db string) {
             return
         case ErrBadRequest:
             log.Printf("bad request, drop all data")
-            return
+            return nil
         case ErrNotFound:
             log.Printf("bad backend, drop all data")
-            return
+            return nil
         default:
             log.Printf("write http error: %s", err)
         }
@@ -317,7 +320,10 @@ func (backend *Backend) FlushBufferBackground(flushTimeout time.Duration) {
             for db := range backend.BufferMap {
                 if backend.BufferMap[db].Counter > 0 {
                     backend.LockDbMap[db].Lock()
-                    backend.FlushBuffer(db)
+                    err := backend.FlushBuffer(db)
+                    if err != nil {
+                        log.Printf("flush buffer background error: %s %s", backend.Url, err)
+                    }
                     backend.LockDbMap[db].Unlock()
                 }
             }
@@ -373,18 +379,18 @@ func (backend *Backend) Rewrite() (err error) {
         log.Printf("bad backend, drop all data")
         err = nil
     default:
-        log.Printf("rewrite http error: %s\n", err)
+        log.Printf("rewrite http error: %s", err)
 
         err = backend.RollbackMeta()
         if err != nil {
-            log.Printf("rollback meta error: %s\n", err)
+            log.Printf("rollback meta error: %s", err)
         }
         return
     }
 
     err = backend.UpdateMeta()
     if err != nil {
-        log.Printf("update meta error: %s\n", err)
+        log.Printf("update meta error: %s", err)
     }
     return
 }

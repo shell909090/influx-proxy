@@ -369,11 +369,9 @@ func (proxy *Proxy) WriteData(data *LineData) {
     for _, backend := range backends {
         err := backend.WriteBuffer(data, proxy.FlushSize)
         if err != nil {
-            log.Print("write data to buffer: ", backend.Url, data, err)
-            return
+            log.Printf("write data to buffer error: %s, %s, %s, %s, %s", err, backend.Url, data.Db, data.Precision, string(data.Line))
         }
     }
-    return
 }
 
 func (proxy *Proxy) GetDatabases() []string {
