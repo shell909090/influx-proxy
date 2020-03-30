@@ -705,7 +705,7 @@ func (proxy *Proxy) PostBroadcast(client *http.Client, url string) {
     if proxy.HTTPSEnabled {
         url = strings.Replace(url, "http", "https", 1)
     }
-    req, _ := http.NewRequest(http.MethodPost, url, nil)
+    req, _ := http.NewRequest("POST", url, nil)
     if proxy.Username != "" || proxy.Password != "" {
         SetBasicAuth(req, proxy.Username, proxy.Password, proxy.AuthSecure)
     }

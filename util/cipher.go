@@ -7,44 +7,52 @@ import (
     "encoding/base64"
 )
 
-func AesEncrypt(origin string, key string) string {
+var cipherKey = []byte("consistentcipher")
+var aesCipher, _ = aes.NewCipher(cipherKey)
+var blockSize = aesCipher.BlockSize()
+var iv = cipherKey[:blockSize]
+
+var encodeURL = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_!"
+var base64RawURLEncoding = base64.NewEncoding(encodeURL).WithPadding(base64.NoPadding)
+
+func CheckCipherKey(key string) bool {
+    return key == string(cipherKey)
+}
+
+func AesEncrypt(origin string) string {
     if len(origin) == 0 {
         return ""
     }
-    originBytes := []byte(origin)
-    k := []byte(key)
-    block, _ := aes.NewCipher(k)
-    blockSize := block.BlockSize()
-    originBytes = PKCS7Padding(originBytes, blockSize)
-    blockMode := cipher.NewCBCEncrypter(block, k[:blockSize])
+    originBytes := padding([]byte(origin), blockSize)
+    blockMode := cipher.NewCBCEncrypter(aesCipher, iv)
     encryptBytes := make([]byte, len(originBytes))
     blockMode.CryptBlocks(encryptBytes, originBytes)
-    return base64.StdEncoding.EncodeToString(encryptBytes)
+    return base64RawURLEncoding.EncodeToString(encryptBytes)
 }
 
-func AesDecrypt(encrypt string, key string) string {
-    if len(encrypt) != 24 || len(key) != 24 {
+func AesDecrypt(encrypt string) string {
+    if len(encrypt) == 0 {
         return ""
     }
-    encryptBytes, _ := base64.StdEncoding.DecodeString(encrypt)
-    k := []byte(key)
-    block, _ := aes.NewCipher(k)
-    blockSize := block.BlockSize()
-    blockMode := cipher.NewCBCDecrypter(block, k[:blockSize])
-    plainBytes := make([]byte, len(encryptBytes))
-    blockMode.CryptBlocks(plainBytes, encryptBytes)
-    plainBytes = PKCS7UnPadding(plainBytes)
-    return string(plainBytes)
+    encryptBytes, err := base64RawURLEncoding.DecodeString(encrypt)
+    if err != nil {
+        return err.Error()
+    }
+    if len(encryptBytes) % blockSize != 0 {
+        return "crypto/cipher: input not full blocks"
+    }
+    blockMode := cipher.NewCBCDecrypter(aesCipher, iv)
+    originBytes := make([]byte, len(encryptBytes))
+    blockMode.CryptBlocks(originBytes, encryptBytes)
+    return string(unpadding(originBytes))
 }
 
-func PKCS7Padding(originBytes []byte, blockSize int) []byte {
-    padding := blockSize - len(originBytes) % blockSize
-    padBytes := bytes.Repeat([]byte{byte(padding)}, padding)
-    return append(originBytes, padBytes...)
+func padding(data []byte, blockSize int) []byte {
+    num := ((len(data)-1)/blockSize + 1) * blockSize - len(data)
+    pad := bytes.Repeat([]byte("\x00"), num)
+    return append(data, pad...)
 }
 
-func PKCS7UnPadding(plainBytes []byte) []byte {
-    length := len(plainBytes)
-    unpadding := int(plainBytes[length-1])
-    return plainBytes[:(length - unpadding)]
+func unpadding(data []byte) []byte {
+    return bytes.Trim(data, "\x00")
 }

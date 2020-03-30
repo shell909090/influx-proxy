@@ -244,9 +244,8 @@ func (hs *HttpService) HandlerEncrypt(w http.ResponseWriter, req *http.Request) 
     if !hs.checkMethod(w, req, []string{"GET"}) {
         return
     }
-    ctx := req.URL.Query().Get("ctx")
-    encrypt := util.AesEncrypt(ctx, config.CipherKey)
-    w.WriteHeader(200)
+    msg := req.URL.Query().Get("msg")
+    encrypt := util.AesEncrypt(msg)
     w.Write([]byte(encrypt+"\n"))
 }
 
@@ -256,9 +255,13 @@ func (hs *HttpService) HandlerDencrypt(w http.ResponseWriter, req *http.Request)
         return
     }
     key := req.URL.Query().Get("key")
-    ctx := req.URL.Query().Get("ctx")
-    decrypt := util.AesDecrypt(ctx, key)
-    w.WriteHeader(200)
+    msg := req.URL.Query().Get("msg")
+    if !util.CheckCipherKey(key) {
+        w.WriteHeader(400)
+        w.Write([]byte("invalid key\n"))
+        return
+    }
+    decrypt := util.AesDecrypt(msg)
     w.Write([]byte(decrypt+"\n"))
 }
 
@@ -629,11 +632,11 @@ func (hs *HttpService) checkAuth(w http.ResponseWriter, r *http.Request) bool {
     return false
 }
 
-func (hs *HttpService) transAuth(ctx string) string {
+func (hs *HttpService) transAuth(msg string) string {
     if hs.AuthSecure {
-        return util.AesEncrypt(ctx, config.CipherKey)
+        return util.AesEncrypt(msg)
     } else {
-        return ctx
+        return msg
     }
 }
 

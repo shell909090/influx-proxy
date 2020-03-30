@@ -438,7 +438,7 @@ func CopyHeader(dst, src http.Header) {
 
 func SetBasicAuth(req *http.Request, username string, password string, authSecure bool) {
     if authSecure {
-        req.SetBasicAuth(util.AesDecrypt(username, config.CipherKey), util.AesDecrypt(password, config.CipherKey))
+        req.SetBasicAuth(util.AesDecrypt(username), util.AesDecrypt(password))
     } else {
         req.SetBasicAuth(username, password)
     }
@@ -480,7 +480,7 @@ func (backend *Backend) WriteCompressed(db string, p []byte) error {
 func (backend *Backend) WriteStream(db string, stream io.Reader, compressed bool) error {
     q := url.Values{}
     q.Set("db", db)
-    req, err := http.NewRequest(http.MethodPost, backend.Url+"/write?"+q.Encode(), stream)
+    req, err := http.NewRequest("POST", backend.Url+"/write?"+q.Encode(), stream)
     if backend.Username != "" || backend.Password != "" {
         backend.SetBasicAuth(req)
     }
