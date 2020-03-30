@@ -215,7 +215,7 @@ func (hs *HttpService) HandlerHealth(w http.ResponseWriter, req *http.Request) {
 func (hs *HttpService) HandlerReplica(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
     hs.addHeader(w)
-    if hs.checkMethodAndAuth(w, req, []string{"GET"}) {
+    if !hs.checkMethodAndAuth(w, req, []string{"GET"}) {
         return
     }
 
