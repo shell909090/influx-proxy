@@ -728,7 +728,7 @@ func (hs *HttpService) setHaAddrs(req *http.Request) error {
     haAddrs := hs.formValues(req, "ha_addrs")
     if len(haAddrs) > 1 {
         for _, addr := range haAddrs {
-            if match, _ := regexp.MatchString("^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}:\\d{1,5}$", addr); !match {
+            if match, _ := regexp.MatchString("^[\\w-.]+:\\d{1,5}$", addr); !match {
                 return errors.New("invalid ha_addrs")
             }
         }
