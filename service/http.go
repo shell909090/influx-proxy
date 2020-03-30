@@ -55,16 +55,7 @@ func (hs *HttpService) HandlerPing(w http.ResponseWriter, req *http.Request) {
 func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
     hs.addHeader(w)
-
-    if req.Method != http.MethodGet && req.Method != http.MethodPost {
-        w.WriteHeader(405)
-        w.Write([]byte("method not allow\n"))
-        return
-    }
-
-    if !hs.checkAuth(req) {
-        w.WriteHeader(401)
-        w.Write([]byte("authentication failed\n"))
+    if !hs.checkMethodAndAuth(w, req, []string{"GET", "POST"}) {
         return
     }
 
@@ -150,16 +141,7 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
 func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
     hs.addHeader(w)
-
-    if req.Method != http.MethodPost {
-        w.WriteHeader(405)
-        w.Write([]byte("method not allow\n"))
-        return
-    }
-
-    if !hs.checkAuth(req) {
-        w.WriteHeader(401)
-        w.Write([]byte("authentication failed\n"))
+    if !hs.checkMethodAndAuth(w, req, []string{"POST"}) {
         return
     }
 
@@ -215,16 +197,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
 func (hs *HttpService) HandlerHealth(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
     hs.addHeader(w)
-
-    if req.Method != http.MethodGet {
-        w.WriteHeader(405)
-        w.Write([]byte("method not allow\n"))
-        return
-    }
-
-    if !hs.checkAuth(req) {
-        w.WriteHeader(401)
-        w.Write([]byte("authentication failed\n"))
+    if !hs.checkMethodAndAuth(w, req, []string{"GET"}) {
         return
     }
 
@@ -242,16 +215,7 @@ func (hs *HttpService) HandlerHealth(w http.ResponseWriter, req *http.Request) {
 func (hs *HttpService) HandlerReplica(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
     hs.addHeader(w)
-
-    if req.Method != http.MethodGet {
-        w.WriteHeader(405)
-        w.Write([]byte("method not allow\n"))
-        return
-    }
-
-    if !hs.checkAuth(req) {
-        w.WriteHeader(401)
-        w.Write([]byte("authentication failed\n"))
+    if hs.checkMethodAndAuth(w, req, []string{"GET"}) {
         return
     }
 
@@ -275,11 +239,9 @@ func (hs *HttpService) HandlerReplica(w http.ResponseWriter, req *http.Request) 
     return
 }
 
-func (hs *HttpService)HandlerEncrypt(w http.ResponseWriter, req *http.Request)  {
+func (hs *HttpService) HandlerEncrypt(w http.ResponseWriter, req *http.Request)  {
     defer req.Body.Close()
-    if req.Method != http.MethodGet {
-        w.WriteHeader(405)
-        w.Write([]byte("method not allow\n"))
+    if !hs.checkMethod(w, req, []string{"GET"}) {
         return
     }
     ctx := req.URL.Query().Get("ctx")
@@ -288,11 +250,9 @@ func (hs *HttpService)HandlerEncrypt(w http.ResponseWriter, req *http.Request)  
     w.Write([]byte(encrypt+"\n"))
 }
 
-func (hs *HttpService)HandlerDencrypt(w http.ResponseWriter, req *http.Request)  {
+func (hs *HttpService) HandlerDencrypt(w http.ResponseWriter, req *http.Request)  {
     defer req.Body.Close()
-    if req.Method != http.MethodGet {
-        w.WriteHeader(405)
-        w.Write([]byte("method not allow\n"))
+    if !hs.checkMethod(w, req, []string{"GET"}) {
         return
     }
     key := req.URL.Query().Get("key")
@@ -305,15 +265,12 @@ func (hs *HttpService)HandlerDencrypt(w http.ResponseWriter, req *http.Request) 
 func (hs *HttpService) HandlerMigrateState(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
     hs.addHeader(w)
-
-    if !hs.checkAuth(req) {
-        w.WriteHeader(401)
-        w.Write([]byte("authentication failed\n"))
+    if !hs.checkMethodAndAuth(w, req, []string{"GET", "POST"}) {
         return
     }
 
     pretty := req.URL.Query().Get("pretty") == "true"
-    if req.Method == http.MethodGet {
+    if req.Method == "GET" {
         hs.addJsonHeader(w)
         data := make([]map[string]interface{}, len(hs.Circles))
         for k, circle := range hs.Circles {
@@ -327,7 +284,7 @@ func (hs *HttpService) HandlerMigrateState(w http.ResponseWriter, req *http.Requ
         res := util.MarshalJson(state, pretty, true)
         w.Write(res)
         return
-    } else if req.Method == http.MethodPost {
+    } else if req.Method == "POST" {
         state := make(map[string]interface{})
         if req.FormValue("resyncing") != "" {
             resyncing, err := hs.formBool(req, "resyncing")
@@ -369,26 +326,13 @@ func (hs *HttpService) HandlerMigrateState(w http.ResponseWriter, req *http.Requ
         res := util.MarshalJson(state, pretty, true)
         w.Write(res)
         return
-    } else {
-        w.WriteHeader(405)
-        w.Write([]byte("method not allow\n"))
-        return
     }
 }
 
 func (hs *HttpService) HandlerMigrateStats(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
     hs.addHeader(w)
-
-    if req.Method != http.MethodGet {
-        w.WriteHeader(405)
-        w.Write([]byte("method not allow\n"))
-        return
-    }
-
-    if !hs.checkAuth(req) {
-        w.WriteHeader(401)
-        w.Write([]byte("authentication failed\n"))
+    if !hs.checkMethodAndAuth(w, req, []string{"GET"}) {
         return
     }
 
@@ -415,16 +359,7 @@ func (hs *HttpService) HandlerMigrateStats(w http.ResponseWriter, req *http.Requ
 func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
     hs.addHeader(w)
-
-    if req.Method != http.MethodPost {
-        w.WriteHeader(405)
-        w.Write([]byte("method not allow\n"))
-        return
-    }
-
-    if !hs.checkAuth(req) {
-        w.WriteHeader(401)
-        w.Write([]byte("authentication failed\n"))
+    if !hs.checkMethodAndAuth(w, req, []string{"POST"}) {
         return
     }
 
@@ -506,16 +441,7 @@ func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request
 func (hs *HttpService) HandlerRecovery(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
     hs.addHeader(w)
-
-    if req.Method != http.MethodPost {
-        w.WriteHeader(405)
-        w.Write([]byte("method not allow\n"))
-        return
-    }
-
-    if !hs.checkAuth(req) {
-        w.WriteHeader(401)
-        w.Write([]byte("authentication failed\n"))
+    if !hs.checkMethodAndAuth(w, req, []string{"POST"}) {
         return
     }
 
@@ -573,16 +499,7 @@ func (hs *HttpService) HandlerRecovery(w http.ResponseWriter, req *http.Request)
 func (hs *HttpService) HandlerResync(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
     hs.addHeader(w)
-
-    if req.Method != http.MethodPost {
-        w.WriteHeader(405)
-        w.Write([]byte("method not allow\n"))
-        return
-    }
-
-    if !hs.checkAuth(req) {
-        w.WriteHeader(401)
-        w.Write([]byte("authentication failed\n"))
+    if !hs.checkMethodAndAuth(w, req, []string{"POST"}) {
         return
     }
 
@@ -630,16 +547,7 @@ func (hs *HttpService) HandlerResync(w http.ResponseWriter, req *http.Request) {
 func (hs *HttpService) HandlerClear(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
     hs.addHeader(w)
-
-    if req.Method != http.MethodPost {
-        w.WriteHeader(405)
-        w.Write([]byte("method not allow\n"))
-        return
-    }
-
-    if !hs.checkAuth(req) {
-        w.WriteHeader(401)
-        w.Write([]byte("authentication failed\n"))
+    if !hs.checkMethodAndAuth(w, req, []string{"POST"}) {
         return
     }
 
@@ -689,15 +597,22 @@ func (hs *HttpService) addJsonHeader(w http.ResponseWriter) {
     w.Header().Add("Content-Type", "application/json")
 }
 
-func (hs *HttpService) transAuth(ctx string) string {
-    if hs.AuthSecure {
-        return util.AesEncrypt(ctx, config.CipherKey)
-    } else {
-        return ctx
-    }
+func (hs *HttpService) checkMethodAndAuth(w http.ResponseWriter, req *http.Request, methods []string) bool {
+    return hs.checkMethod(w, req, methods) && hs.checkAuth(w, req)
 }
 
-func (hs *HttpService) checkAuth(r *http.Request) bool {
+func (hs *HttpService) checkMethod(w http.ResponseWriter, req *http.Request, methods []string) bool {
+    for _, method := range methods {
+        if req.Method == method {
+            return true
+        }
+    }
+    w.WriteHeader(405)
+    w.Write([]byte("method not allow\n"))
+    return false
+}
+
+func (hs *HttpService) checkAuth(w http.ResponseWriter, r *http.Request) bool {
     if hs.Username == "" && hs.Password == "" {
         return true
     }
@@ -709,7 +624,17 @@ func (hs *HttpService) checkAuth(r *http.Request) bool {
     if ok && hs.transAuth(u) == hs.Username && hs.transAuth(p) == hs.Password {
         return true
     }
+    w.WriteHeader(401)
+    w.Write([]byte("authentication failed\n"))
     return false
+}
+
+func (hs *HttpService) transAuth(ctx string) string {
+    if hs.AuthSecure {
+        return util.AesEncrypt(ctx, config.CipherKey)
+    } else {
+        return ctx
+    }
 }
 
 func (hs *HttpService) checkDatabase(q string) bool {
