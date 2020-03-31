@@ -12,6 +12,7 @@ import (
     "os"
     "regexp"
     "stathat.com/c/consistent"
+    "strconv"
     "strings"
     "sync"
     "sync/atomic"
@@ -108,9 +109,9 @@ func LoadProxyConfig(file string) (proxy *Proxy, err error) {
         proxy.MlogDir = "log"
     }
     if proxy.HashKey == "" {
-        proxy.HashKey = "url"
-    } else if proxy.HashKey != "name" && proxy.HashKey != "url" {
-        return nil, errors.New("invalid hash_key, only name or url")
+        proxy.HashKey = "idx"
+    } else if proxy.HashKey != "idx" && proxy.HashKey != "name" && proxy.HashKey != "url" {
+        return nil, errors.New("invalid hash_key, should be idx, name or url")
     }
     if proxy.VNodeSize <= 0 {
         proxy.VNodeSize = 256
@@ -165,19 +166,22 @@ func (proxy *Proxy) initCircle(circle *Circle) {
     circle.BackendWgMap = make(map[string]*sync.WaitGroup)
     circle.IsMigrating = false
     circle.MigrateWg = &sync.WaitGroup{}
-    for _, backend := range circle.Backends {
+    for idx, backend := range circle.Backends {
         circle.BackendWgMap[backend.Url] = &sync.WaitGroup{}
-        proxy.initBackend(circle, backend)
+        proxy.initBackend(circle, backend, idx)
     }
 }
 
-func (proxy *Proxy) initBackend(circle *Circle, backend *Backend) {
+func (proxy *Proxy) initBackend(circle *Circle, backend *Backend, idx int) {
     if proxy.HashKey == "name" {
         circle.Router.Add(backend.Name)
         circle.MapToBackend[backend.Name] = backend
-    } else {
+    } else if proxy.HashKey == "url" {
         circle.Router.Add(backend.Url)
         circle.MapToBackend[backend.Url] = backend
+    } else {
+        circle.Router.Add(strconv.Itoa(idx))
+        circle.MapToBackend[strconv.Itoa(idx)] = backend
     }
 
     backend.AuthSecure = proxy.AuthSecure
