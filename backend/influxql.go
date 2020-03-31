@@ -256,25 +256,23 @@ func ScanTime(buf []byte) (int, bool) {
 
 func LineToNano(line []byte, precision string) []byte {
     line = bytes.TrimRight(line, " \t\r\n")
-    if precision != "ns" {
-        if pos, found := ScanTime(line); found {
-            if precision == "u" {
-                return append(line, []byte("000")...)
-            } else if precision == "ms" {
-                return append(line, []byte("000000")...)
-            } else if precision == "s" {
-                return append(line, []byte("000000000")...)
-            } else {
-                mul := models.GetPrecisionMultiplier(precision)
-                nano := BytesToInt64(line[pos+1:]) * mul
-                bytenano := Int64ToBytes(nano)
-                return bytes.Join([][]byte{line[:pos], bytenano}, []byte(" "))
-            }
+    pos, found := ScanTime(line)
+    if found {
+        if precision == "ns" {
+            return line
+        } else if precision == "u" {
+            return append(line, []byte("000")...)
+        } else if precision == "ms" {
+            return append(line, []byte("000000")...)
+        } else if precision == "s" {
+            return append(line, []byte("000000000")...)
+        } else {
+            mul := models.GetPrecisionMultiplier(precision)
+            nano := BytesToInt64(line[pos+1:]) * mul
+            bytenano := Int64ToBytes(nano)
+            return bytes.Join([][]byte{line[:pos], bytenano}, []byte(" "))
         }
     } else {
-        if _, found := ScanTime(line); !found {
-            return append(line, []byte(" " + strconv.FormatInt(time.Now().UnixNano(), 10))...)
-        }
+        return append(line, []byte(" " + strconv.FormatInt(time.Now().UnixNano(), 10))...)
     }
-    return line
 }

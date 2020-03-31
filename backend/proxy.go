@@ -346,7 +346,7 @@ func (proxy *Proxy) WriteData(data *LineData) {
         return
     }
     if ScanSpace(data.Line[len(meas):]) != 2 {
-        log.Printf("invalid format, drop data: %s", string(data.Line))
+        log.Printf("invalid format, drop data: %s %s %s", data.Db, data.Precision, string(data.Line))
         return
     }
 
