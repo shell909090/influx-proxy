@@ -117,7 +117,7 @@ func LoadProxyConfig(file string) (proxy *Proxy, err error) {
         proxy.VNodeSize = 256
     }
     if proxy.FlushSize <= 0 {
-        proxy.FlushSize = 5000
+        proxy.FlushSize = 10000
     }
     if proxy.FlushTime <= 0 {
         proxy.FlushTime = 1

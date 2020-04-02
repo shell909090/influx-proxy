@@ -33,6 +33,8 @@ Features
 * Support precision query parameter when writing data.
 * Support influxdb-java, influxdb shell and grafana.
 * Support authentication and https.
+* Support health status query.
+* Support database whitelist.
 * Support version display.
 
 Requirements
@@ -117,7 +119,7 @@ The configurations in `proxy.json` are the following:
 * `data_dir`: data dir to save .dat .rec, default is "data"
 * `mlog_dir`: log dir to save rebalance, recovery, resync or clear operation
 * `hash_key`: backend key for consistent hash, including "idx", "name" or "url", default is "idx", once changed rebalance operation is necessary
-* `vnode_size`: the size of virtual nodes for consistent hash
+* `vnode_size`: the size of virtual nodes for consistent hash, default is 256
 * `flush_size`: default config is 10000, wait 10000 points write
 * `flush_time`: default config is 1s, wait 1 second write whether point count has bigger than flush_size config
 * `username`: proxy username, with encryption if auth_secure is enabled
@@ -205,7 +207,7 @@ GET http://127.0.0.1:7076/health
 
 #### Query string parameters
 
-| Query String Parameter | Optional/Required | Definition |
+| Query String Parameter | Optional/Required | Description |
 | :--------------------- | :---------------- |:---------- |
 | pretty=true | Optional | Enables pretty-printed JSON output. |
 | u=\<username> | Optional if you haven't enabled authentication | Set the username for authentication if you've enabled authentication. |
@@ -244,6 +246,23 @@ $ curl 'http://127.0.0.1:7076/health?pretty=true'
 ]
 ```
 
+Field description:
+
+- name: influxdb name
+- url: influxdb url
+- active: whether the influxdb is running
+- backlog: is there failed data in the cache file to influxdb
+- rewrite: whether the cache data is being rewritten to influxdb
+- load: influxdb load status
+  - db: influxdb database
+    - incorrect: number of measurements which should not be stored on this influxdb
+      - it's healthy when incorrect equals 0
+    - inplace: number of measurements which should be stored on this influxdb
+      - it's healthy when inplace equals the number of measurements in this database
+    - measurements: number of measurements in this database
+      - `measurements = incorrect + inplace`
+      - the number of measurements in each influxdb instance is roughly the same, indicating that the data store is load balanced
+
 ### `/replica` HTTP endpoint
 
 #### Definition
@@ -254,7 +273,7 @@ GET http://127.0.0.1:7076/replica
 
 #### Query string parameters
 
-| Query String Parameter | Optional/Required | Definition |
+| Query String Parameter | Optional/Required | Description |
 | :--------------------- | :---------------- |:---------- |
 | db=\<database> | Required | Database name for replica backends query. |
 | meas=\<measurement> | Required | Measurement name for replica backends query. |
@@ -291,7 +310,7 @@ GET http://127.0.0.1:7076/encrypt
 
 #### Query string parameters
 
-| Query String Parameter | Optional/Required | Definition |
+| Query String Parameter | Optional/Required | Description |
 | :--------------------- | :---------------- |:---------- |
 | msg=\<message> | Required | The plain message to encrypt. |
 
@@ -313,7 +332,7 @@ GET http://127.0.0.1:7076/decrypt
 
 #### Query string parameters
 
-| Query String Parameter | Optional/Required | Definition |
+| Query String Parameter | Optional/Required | Description |
 | :--------------------- | :---------------- |:---------- |
 | key=\<key> | Required | The key to encrypt and decrypt, default is consistentcipher. |
 | msg=\<message> | Required | The ciphered message to decrypt. |
@@ -340,7 +359,7 @@ POST http://127.0.0.1:7076/migrate/state
 
 #### Query string parameters
 
-| Query String Parameter | Optional/Required | Definition |
+| Query String Parameter | Optional/Required | Description |
 | :--------------------- | :---------------- |:---------- |
 | resyncing=true | Optional | Set resyncing state of proxy. |
 | circle_id=0 | Optional | Circle index to set migrating state, started from 0. |
@@ -407,7 +426,7 @@ GET http://127.0.0.1:7076/migrate/stats
 
 #### Query string parameters
 
-| Query String Parameter | Optional/Required | Definition |
+| Query String Parameter | Optional/Required | Description |
 | :--------------------- | :---------------- |:---------- |
 | circle_id=0 | Required | Circle index started from 0. |
 | type=\<type> | Required | Stats type, valid options are rebalance, recovery, resync or clear. |
@@ -450,7 +469,7 @@ POST http://127.0.0.1:7076/rebalance
 
 #### Query string parameters
 
-| Query String Parameter | Optional/Required | Definition |
+| Query String Parameter | Optional/Required | Description |
 | :--------------------- | :---------------- |:---------- |
 | circle_id=0 | Required | Circle index started from 0. |
 | operation=\<operation> | Required | Operation type, valid options are add or rm. |
@@ -515,7 +534,7 @@ POST http://127.0.0.1:7076/recovery
 
 #### Query string parameters
 
-| Query String Parameter | Optional/Required | Definition |
+| Query String Parameter | Optional/Required | Description |
 | :--------------------- | :---------------- |:---------- |
 | from_circle_id=0 | Required | From circle index started from 0. |
 | to_circle_id=1 | Required | To circle index started from 0. |
@@ -554,7 +573,7 @@ POST http://127.0.0.1:7076/resync
 
 #### Query string parameters
 
-| Query String Parameter | Optional/Required | Definition |
+| Query String Parameter | Optional/Required | Description |
 | :--------------------- | :---------------- |:---------- |
 | seconds=\<seconds> | Optional | Resync data for last seconds, default is 0 for all data. |
 | db=\<db_list> | Optional | database list split by ',' while using all databases if empty. |
@@ -581,7 +600,7 @@ POST http://127.0.0.1:7076/clear
 
 #### Query string parameters
 
-| Query String Parameter | Optional/Required | Definition |
+| Query String Parameter | Optional/Required | Description |
 | :--------------------- | :---------------- |:---------- |
 | circle_id=0 | Required | Circle index started from 0. |
 | cpus=1 | Optional | Migration max cpus, default is 1. |
