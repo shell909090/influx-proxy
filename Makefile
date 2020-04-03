@@ -16,11 +16,17 @@ build:
 linux:
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o bin/influx-proxy -ldflags "-s -X main.GitCommit=$(shell git rev-parse HEAD | cut -c 1-7) -X 'main.BuildTime=$(shell date '+%Y-%m-%d %H:%M:%S')'" github.com/chengshiwen/influx-proxy
 
+test:
+	go test -v github.com/chengshiwen/influx-proxy/backend
+
+bench:
+	go test -bench=. github.com/chengshiwen/influx-proxy/backend
+
 run:
 	go run main.go
 
 clean:
-	rm -rf bin log
+	rm -rf bin data log
 
 
 ### Makefile ends here
