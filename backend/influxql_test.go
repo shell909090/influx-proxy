@@ -88,6 +88,9 @@ func TestGetDatabaseFromInfluxQL(t *testing.T) {
     assertDatabase(t, "CREATE DATABASE \"mydb\" WITH NAME \"myrp\"", "mydb")
     assertDatabase(t, "CREATE RETENTION POLICY \"10m.events\" ON \"somedb\" DURATION 60m REPLICATION 2 SHARD DURATION 30m", "somedb")
     assertDatabase(t, "CREATE SUBSCRIPTION \"sub0\" ON \"mydb\".\"autogen\" DESTINATIONS ALL 'udp://example.com:9090'", "mydb")
+    assertDatabase(t, "CREATE SUBSCRIPTION \"sub0\" ON \"my.db\".autogen DESTINATIONS ALL 'udp://example.com:9090'", "my.db")
+    assertDatabase(t, "CREATE SUBSCRIPTION \"sub0\" ON mydb.autogen DESTINATIONS ALL 'udp://example.com:9090'", "mydb")
+    assertDatabase(t, "CREATE SUBSCRIPTION \"sub0\" ON mydb.\"autogen\" DESTINATIONS ALL 'udp://example.com:9090'", "mydb")
 
     assertDatabase(t, "DROP CONTINUOUS QUERY \"myquery\" ON \"mydb\"", "mydb")
     assertDatabase(t, "DROP DATABASE \"mydb\"", "mydb")
@@ -101,7 +104,7 @@ func TestGetDatabaseFromInfluxQL(t *testing.T) {
     assertDatabase(t, "SHOW SERIES CARDINALITY ON mydb", "mydb")
     assertDatabase(t, "SHOW SERIES EXACT CARDINALITY ON mydb", "mydb")
 
-    assertDatabase(t, "CREATE DATABASE foo", "foo")
+    assertDatabase(t, "CREATE DATABASE foo;", "foo")
     assertDatabase(t, "CREATE DATABASE \"f.oo\"", "f.oo")
     assertDatabase(t, "CREATE DATABASE \"f,oo\"", "f,oo")
     assertDatabase(t, "CREATE DATABASE \"f oo\"", "f oo")
@@ -124,6 +127,7 @@ func TestGetMeasurementFromInfluxQL(t *testing.T) {
     assertMeasurement(t, "DELETE FROM \"cpu\"", "cpu")
     assertMeasurement(t, "DELETE FROM \"cpu\" WHERE time < '2000-01-01T00:00:00Z'", "cpu")
 
+    assertMeasurement(t, "DROP MEASUREMENT cpu;", "cpu")
     assertMeasurement(t, "DROP MEASUREMENT \"cpu\"", "cpu")
     assertMeasurement(t, "DROP SERIES FROM \"cpu\" WHERE cpu = 'cpu8'", "cpu")
     assertMeasurement(t, "DROP SERIES FROM \"telegraf\"..\"cp u\" WHERE cpu = 'cpu8'", "cp u")
@@ -139,6 +143,11 @@ func TestGetMeasurementFromInfluxQL(t *testing.T) {
     assertMeasurement(t, "select * from \"cpu\"", "cpu")
     assertMeasurement(t, "select * from \"c\\\"pu\"", "c\"pu")
     assertMeasurement(t, "select * from 'cpu'", "cpu")
+    // assertMeasurement(t, "select * from db.autogen.cpu", "cpu")
+    // assertMeasurement(t, "select * from db.autogen.\"cpu.load\"", "cpu.load")
+    // assertMeasurement(t, "select * from db.\"autogen\".\"cpu.load\"", "cpu.load")
+    assertMeasurement(t, "select * from \"db\".\"autogen\".\"cpu.load\"", "cpu.load")
+    assertMeasurement(t, "select * from \"d.b\".\"autogen\".\"cpu.load\"", "cpu.load")
 
     assertMeasurement(t, "SELECT mean(\"value\") INTO \"cpu\\\"_1h\".:MEASUREMENT FROM /cpu.*/", "/cpu.*/")
     assertMeasurement(t, "SELECT mean(\"value\") FROM \"cpu\" WHERE \"region\" = 'uswest' GROUP BY time(10m) fill(0)", "cpu")

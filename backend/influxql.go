@@ -156,6 +156,7 @@ func ScanToken(data []byte, atEOF bool) (advance int, token []byte, err error) {
 }
 
 func ScanTokens(q string, n int) (tokens []string) {
+    q = strings.TrimRight(q, ";")
     buf := bytes.NewBuffer([]byte(q))
     scanner := bufio.NewScanner(buf)
     scanner.Buffer([]byte(q), len(q))
@@ -205,6 +206,13 @@ func getDatabase(tokens []string) (m string) {
         m = m[1: len(m)-1]
         return
     }
+
+    index := strings.IndexByte(m, '.')
+    if index == -1 {
+        return
+    }
+
+    m = m[:index]
     return
 }
 
