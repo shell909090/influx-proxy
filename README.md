@@ -136,9 +136,12 @@ Query Commands
 
 The following commands are forbid.
 
+* `ALTER`
 * `GRANT`
 * `REVOKE`
+* `KILL`
 * `SELECT INTO`
+* `Multiple queries` delimited by semicolon `;`
 
 ### Supported commands
 
@@ -151,11 +154,13 @@ Only support match the following commands.
 * `show field keys`
 * `show tag keys`
 * `show tag values`
-* `show stats`
 * `show retention policies`
+* `show stats`
 * `show databases`
 * `create database`
+* `drop database`
 * `delete from`
+* `drop series from`
 * `drop measurement`
 
 HTTP Endpoints

@@ -8,9 +8,9 @@ import (
     "github.com/chengshiwen/influx-proxy/util"
     "io/ioutil"
     "log"
+    "math/rand"
     "net/http"
     "os"
-    "regexp"
     "stathat.com/c/consistent"
     "strconv"
     "strings"
@@ -37,9 +37,6 @@ type Proxy struct {
     HTTPSCert               string                          `json:"https_cert"`
     HTTPSKey                string                          `json:"https_key"`
     HaAddrs                 []string                        `json:"ha_addrs"`
-    ForbiddenQuery          []*regexp.Regexp                `json:"forbidden_query"`
-    ObligatedQuery          []*regexp.Regexp                `json:"obligated_query"`
-    ClusteredQuery          []*regexp.Regexp                `json:"clustered_query"`
     IsResyncing             bool                            `json:"is_resyncing"`
     MigrateCpus             int                             `json:"migrate_cpus"`
     MigrateStats            []map[string]*MigrateInfo       `json:"migrate_stats"`
@@ -81,9 +78,6 @@ func NewProxy(file string) (proxy *Proxy, err error) {
     for _, db := range proxy.DbList {
         proxy.DbMap[db] = true
     }
-    proxy.ForbidQuery(ForbidCmds)
-    proxy.EnsureQuery(SupportCmds)
-    proxy.ClusterQuery(ClusterCmds)
     return
 }
 
@@ -220,126 +214,73 @@ func (proxy *Proxy) GetBackends(key string) []*Backend {
     return backends
 }
 
-func (proxy *Proxy) ForbidQuery(cmds []string) {
-    for _, cmd := range cmds {
-        r, err := regexp.Compile(cmd)
-        if err != nil {
-            panic(err)
-            return
-        }
-        proxy.ForbiddenQuery = append(proxy.ForbiddenQuery, r)
-    }
-}
-
-func (proxy *Proxy) EnsureQuery(cmds []string) {
-    for _, cmd := range cmds {
-        r, err := regexp.Compile(cmd)
-        if err != nil {
-            panic(err)
-            return
-        }
-        proxy.ObligatedQuery = append(proxy.ObligatedQuery, r)
-    }
-}
-func (proxy *Proxy) ClusterQuery(cmds []string) {
-    for _, cmd := range cmds {
-        r, err := regexp.Compile(cmd)
-        if err != nil {
-            panic(err)
-            return
-        }
-        proxy.ClusteredQuery = append(proxy.ClusteredQuery, r)
-    }
-}
-
-func (proxy *Proxy) CheckMeasurementQuery(q string) bool {
-    if len(proxy.ForbiddenQuery) != 0 {
-        for _, fq := range proxy.ForbiddenQuery {
-            if fq.MatchString(q) {
-                return false
+func (proxy *Proxy) Query(w http.ResponseWriter, req *http.Request, tokens []string, db string, alterDb bool) (body []byte, err error) {
+    if CheckSelectOrShowFromTokens(tokens) {
+        var circle *Circle
+        badIds := make(map[int]bool)
+        for {
+            id := rand.Intn(len(proxy.Circles))
+            if _, ok := badIds[id]; ok {
+                continue
             }
-        }
-    }
-    if len(proxy.ObligatedQuery) != 0 {
-        for _, pq := range proxy.ObligatedQuery {
-            if pq.MatchString(q) {
-                return true
+            circle = proxy.Circles[id]
+            if circle.IsMigrating {
+                badIds[id] = true
+                continue
             }
-        }
-        return false
-    }
-    return true
-}
-
-func (proxy *Proxy) CheckClusterQuery(q string) bool {
-    if len(proxy.ClusteredQuery) != 0 {
-        for _, pq := range proxy.ClusteredQuery {
-            if pq.MatchString(q) {
-                return true
+            if circle.CheckStatus() {
+                break
             }
+            badIds[id] = true
+            if len(badIds) == len(proxy.Circles) {
+                return nil, errors.New("circles unavailable")
+            }
+            time.Sleep(time.Microsecond)
         }
-        return false
-    }
-    return true
-}
-
-func (proxy *Proxy) CheckCreateDatabaseQuery(q string) (string, bool) {
-    if len(proxy.ClusteredQuery) > 1 {
-        matches := proxy.ClusteredQuery[len(proxy.ClusteredQuery)-2].FindStringSubmatch(q)
-        if len(matches) == 2 {
-            return matches[1], true
+        meas, err := GetMeasurementFromTokens(tokens)
+        if err == nil {
+            // available circle -> key(db,meas) -> backend -> select or show
+            key := GetKey(db, meas)
+            backend := circle.GetBackend(key)
+            return backend.Query(req, w, false)
+        } else {
+            // available circle -> all backends -> show
+            return circle.QueryCluster(w, req)
         }
-    }
-    return "", false
-}
-
-func (proxy *Proxy) CheckDeleteOrDropQuery(q string) bool {
-    if len(proxy.ClusteredQuery) > 0 {
-        return proxy.ClusteredQuery[len(proxy.ClusteredQuery)-1].MatchString(q)
-    }
-    return false
-}
-
-func (proxy *Proxy) CreateDatabase(w http.ResponseWriter, req *http.Request) ([]byte, error) {
-    var body []byte
-    var err error
-    for _, circle := range proxy.Circles {
-        if !circle.CheckStatus() {
-            return nil, errors.New(fmt.Sprintf("circle %d not health", circle.CircleId))
-        }
-    }
-    for _, circle := range proxy.Circles {
-        body, err = circle.QueryCluster(w, req)
+    } else if CheckDeleteOrDropMeasurementFromTokens(tokens) {
+        // all circles -> key(db,meas) -> backend -> delete or drop
+        meas, err := GetMeasurementFromTokens(tokens)
         if err != nil {
             return nil, err
         }
-    }
-    return body, nil
-}
-
-func (proxy *Proxy) DeleteOrDropMeasurement(w http.ResponseWriter, req *http.Request) ([]byte, error) {
-    var body []byte
-    var err error
-    db := req.FormValue("db")
-    q := strings.TrimSpace(req.FormValue("q"))
-    meas, err := GetMeasurementFromInfluxQL(q)
-    if err != nil {
-        return nil, err
-    }
-    var reqBodyBytes []byte
-    if req.Body != nil {
-        reqBodyBytes, _ = ioutil.ReadAll(req.Body)
-    }
-    key := GetKey(db, meas)
-    backends := proxy.GetBackends(key)
-    for _, backend := range backends {
-        req.Body = ioutil.NopCloser(bytes.NewBuffer(reqBodyBytes))
-        body, err = backend.Query(req, w, false)
-        if err != nil {
-            return nil, err
+        var reqBodyBytes []byte
+        if req.Body != nil {
+            reqBodyBytes, _ = ioutil.ReadAll(req.Body)
+        }
+        key := GetKey(db, meas)
+        backends := proxy.GetBackends(key)
+        for _, backend := range backends {
+            req.Body = ioutil.NopCloser(bytes.NewBuffer(reqBodyBytes))
+            body, err = backend.Query(req, w, false)
+            if err != nil {
+                return nil, err
+            }
+        }
+    } else if alterDb {
+        // all circles -> all backends -> create or drop database
+        for _, circle := range proxy.Circles {
+            if !circle.CheckStatus() {
+                return nil, errors.New(fmt.Sprintf("circle %d not health", circle.CircleId))
+            }
+        }
+        for _, circle := range proxy.Circles {
+            body, err = circle.QueryCluster(w, req)
+            if err != nil {
+                return
+            }
         }
     }
-    return body, nil
+    return
 }
 
 func (proxy *Proxy) WriteData(data *LineData) {

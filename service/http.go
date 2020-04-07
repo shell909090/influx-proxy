@@ -11,7 +11,6 @@ import (
     "github.com/chengshiwen/influx-proxy/util"
     "io/ioutil"
     "log"
-    "math/rand"
     "net/http"
     "net/http/pprof"
     "regexp"
@@ -19,7 +18,6 @@ import (
     "strconv"
     "strings"
     "sync"
-    "time"
 )
 
 type HttpService struct {
@@ -62,74 +60,38 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     q := strings.TrimSpace(req.FormValue("q"))
     if q == "" {
         w.WriteHeader(400)
-        w.Write([]byte("empty query\n"))
+        w.Write([]byte("query not found\n"))
         return
     }
 
-    db := req.FormValue("db")
-    if len(hs.DbList) > 0 && !hs.checkDatabase(q) && !util.MapHasKey(hs.DbMap, db) {
-        w.WriteHeader(400)
-        w.Write([]byte(fmt.Sprintf("database forbidden: %s\n", db)))
-        return
-    }
-
-    var circle *backend.Circle
-    badIds := make(map[int]bool)
-    for {
-        id := rand.Intn(len(hs.Circles))
-        if _, ok := badIds[id]; ok {
-            continue
-        }
-        circle = hs.Circles[id]
-        if circle.IsMigrating {
-            badIds[id] = true
-            continue
-        }
-        if circle.CheckStatus() {
-            break
-        }
-        badIds[id] = true
-        if len(badIds) == len(hs.Circles) {
-            w.WriteHeader(400)
-            w.Write([]byte("query unavailable\n"))
-            return
-        }
-        time.Sleep(time.Microsecond)
-    }
-
-    if !hs.CheckMeasurementQuery(q) {
-        if hs.CheckClusterQuery(q) {
-            var body []byte
-            var err error
-            if db, ok := hs.CheckCreateDatabaseQuery(q); ok {
-                if len(hs.DbList) > 0 && !util.MapHasKey(hs.DbMap, db) {
-                    w.WriteHeader(400)
-                    w.Write([]byte(fmt.Sprintf("database forbidden: %s\n", db)))
-                    return
-                }
-                body, err = hs.CreateDatabase(w, req)
-            } else if hs.CheckDeleteOrDropQuery(q) {
-                body, err = hs.DeleteOrDropMeasurement(w, req)
-            } else {
-                body, err = circle.QueryCluster(w, req)
-            }
-            if err != nil {
-                log.Printf("query cluster is: %s, error: %s", q, err)
-                w.WriteHeader(400)
-                w.Write([]byte("query error: "+err.Error()+"\n"))
-                return
-            }
-            w.Write(body)
-            return
-        }
+    tokens, check := backend.CheckQuery(q)
+    if !check {
         w.WriteHeader(400)
         w.Write([]byte("query forbidden\n"))
         return
     }
 
-    body, err := circle.Query(w, req)
+    checkDb, showDb, alterDb, db := backend.CheckDatabaseFromTokens(tokens)
+    if !checkDb {
+        db = req.FormValue("db")
+    }
+    if db == "" {
+        db, _ = backend.GetDatabaseFromTokens(tokens)
+    }
+    if !showDb && db == "" {
+        w.WriteHeader(400)
+        w.Write([]byte("database not found\n"))
+        return
+    }
+    if len(hs.DbList) > 0 && !showDb && !util.MapHasKey(hs.DbMap, db) {
+        w.WriteHeader(400)
+        w.Write([]byte(fmt.Sprintf("database forbidden: %s\n", db)))
+        return
+    }
+
+    body, err := hs.Query(w, req, tokens, db, alterDb)
     if err != nil {
-        log.Printf("query is: %s, error: %s", q, err)
+        log.Printf("query: %s, db: %s, error: %s", q, db, err)
         w.WriteHeader(400)
         w.Write([]byte("query error: "+err.Error()+"\n"))
         return
@@ -152,7 +114,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
     db := req.URL.Query().Get("db")
     if db == "" {
         w.WriteHeader(400)
-        w.Write([]byte("empty database\n"))
+        w.Write([]byte("database not found\n"))
         return
     }
     if len(hs.DbList) > 0 && !util.MapHasKey(hs.DbMap, db) {

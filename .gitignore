@@ -6,4 +6,5 @@ testbk*
 cert/
 test/
 log/
+script/
 .DS_Store

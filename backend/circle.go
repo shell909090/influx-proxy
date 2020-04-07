@@ -75,19 +75,6 @@ func (circle *Circle) CheckStatus() bool {
     return true
 }
 
-func (circle *Circle) Query(w http.ResponseWriter, req *http.Request) ([]byte, error) {
-    q := req.FormValue("q")
-    measurement, err := GetMeasurementFromInfluxQL(q)
-    if err != nil {
-        return nil, err
-    }
-    db := req.FormValue("db")
-    key := GetKey(db, measurement)
-    backend := circle.GetBackend(key)
-    // fmt.Printf("%s key: %s; backend: %s %s; query: %s\n", time.Now().Format("2006-01-02 15:04:05"), key, backend.Name, backend.Url, q)
-    return backend.Query(req, w, false)
-}
-
 func (circle *Circle) QueryCluster(w http.ResponseWriter, req *http.Request) ([]byte, error) {
     // remove support of query parameter `chunked`
     req.Form.Del("chunked")

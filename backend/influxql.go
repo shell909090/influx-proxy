@@ -13,15 +13,20 @@ import (
 )
 
 var (
-    ForbidCmds  = []string{"(?i:^delete|^drop|^grant|^revoke|select.+into.+from)"}
-    SupportCmds = []string{"(?i:^select.+from|^show.+from)"}
-    ClusterCmds = []string{
-        "(?i:^show\\s+measurements|^show\\s+series|^show\\s+databases$)",
-        "(?i:^show\\s+field\\s+keys|^show\\s+tag\\s+keys|^show\\s+tag\\s+values)",
-        "(?i:^show\\s+stats)",
-        "(?i:^show\\s+retention\\s+policies)",
-        "(?i:^create\\s+database\\s+\"*([^\\s\";]+))",
-        "(?i:^delete\\s+from|^drop\\s+measurement)",
+    SupportQueries = map[string]bool{
+        "show measurements": true,
+        "show series": true,
+        "show field keys": true,
+        "show tag keys": true,
+        "show tag values": true,
+        "show retention policies": true,
+        "show stats": true,
+        "show databases": true,
+        "create database": true,
+        "drop database": true,
+        "delete from": true,
+        "drop series from": true,
+        "drop measurement": true,
     }
 )
 
@@ -251,6 +256,65 @@ func getMeasurement(tokens []string) (m string) {
     m = m[index+1:]
     if m[0] == '"' || m[0] == '\'' {
         m = m[1: len(m)-1]
+    }
+    return
+}
+
+func CheckQuery(q string) (tokens []string, check bool) {
+    tokens = ScanTokens(q, 0)
+    stmt := strings.ToLower(tokens[0])
+    if stmt == "select" {
+        for i := 1; i < len(tokens); i++ {
+            stmt := strings.ToLower(tokens[i])
+            if stmt == "into" {
+                return tokens, false
+            }
+            if stmt == "from" {
+                return tokens, true
+            }
+        }
+        return tokens, false
+    }
+    if stmt == "show" {
+        for i := 1; i < len(tokens); i++ {
+            stmt := strings.ToLower(tokens[i])
+            if stmt == "from" {
+                return tokens, true
+            }
+        }
+    }
+    stmt2 := strings.ToLower(strings.Join(tokens[:2], " "))
+    if _, ok := SupportQueries[stmt2]; ok {
+        return tokens, true
+    }
+    stmt3 := strings.ToLower(strings.Join(tokens[:3], " "))
+    if _, ok := SupportQueries[stmt3]; ok {
+        return tokens, true
+    }
+    return tokens, false
+}
+
+func CheckDatabaseFromTokens(tokens []string) (check bool, show bool, alter bool, db string) {
+    stmt := strings.ToLower(strings.Join(tokens[:2], " "))
+    show = stmt == "show databases"
+    alter = stmt == "create database" || stmt == "drop database"
+    check = show || alter
+    if alter && len(tokens) >= 3 {
+        db = getDatabase(tokens[2:])
+    }
+    return
+}
+
+func CheckSelectOrShowFromTokens(tokens []string) (check bool) {
+    stmt := strings.ToLower(tokens[0])
+    check = stmt == "select" || stmt == "show"
+    return
+}
+
+func CheckDeleteOrDropMeasurementFromTokens(tokens []string) (check bool) {
+    if len(tokens) >= 3 {
+        stmt := strings.ToLower(strings.Join(tokens[:2], " "))
+        return stmt == "delete from" || stmt == "drop measurement" || stmt == "drop series"
     }
     return
 }
