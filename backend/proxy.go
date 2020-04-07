@@ -30,6 +30,7 @@ type Proxy struct {
     VNodeSize               int                             `json:"vnode_size"`
     FlushSize               int                             `json:"flush_size"`
     FlushTime               time.Duration                   `json:"flush_time"`
+    LogEnabled              bool                            `json:"log_enabled"`
     Username                string                          `json:"username"`
     Password                string                          `json:"password"`
     AuthSecure              bool                            `json:"auth_secure"`
@@ -242,9 +243,11 @@ func (proxy *Proxy) Query(w http.ResponseWriter, req *http.Request, tokens []str
             // available circle -> key(db,meas) -> backend -> select or show
             key := GetKey(db, meas)
             backend := circle.GetBackend(key)
+            proxy.Logf("query circle: %d backend: %s", circle.CircleId, backend.Url)
             return backend.Query(req, w, false)
         } else {
             // available circle -> all backends -> show
+            proxy.Logf("query circle: %d", circle.CircleId)
             return circle.Query(w, req)
         }
     } else if CheckDeleteOrDropMeasurementFromTokens(tokens) {
@@ -260,6 +263,7 @@ func (proxy *Proxy) Query(w http.ResponseWriter, req *http.Request, tokens []str
         key := GetKey(db, meas)
         backends := proxy.GetBackends(key)
         for _, backend := range backends {
+            proxy.Logf("query backend: %s", backend.Url)
             req.Body = ioutil.NopCloser(bytes.NewBuffer(reqBodyBytes))
             body, err = backend.Query(req, w, false)
             if err != nil {
@@ -274,6 +278,7 @@ func (proxy *Proxy) Query(w http.ResponseWriter, req *http.Request, tokens []str
             }
         }
         for _, circle := range proxy.Circles {
+            proxy.Logf("query circle: %d", circle.CircleId)
             body, err = circle.Query(w, req)
             if err != nil {
                 return
@@ -316,6 +321,12 @@ func (proxy *Proxy) WriteData(data *LineData) {
         if err != nil {
             log.Printf("write data to buffer error: %s, %s, %s, %s, %s", err, backend.Url, data.Db, data.Precision, string(data.Line))
         }
+    }
+}
+
+func (proxy *Proxy) Logf(format string, v ...interface{}) {
+    if proxy.LogEnabled {
+        log.Printf(format, v...)
     }
 }
 

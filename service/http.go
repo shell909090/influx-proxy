@@ -60,14 +60,15 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     q := strings.TrimSpace(req.FormValue("q"))
     if q == "" {
         w.WriteHeader(400)
-        w.Write([]byte("query not found\n"))
+        hs.LogWriter(w, "query not found\n")
         return
     }
+    hs.Logf("query: %s db=%s q=%s", req.Method, req.FormValue("db"), q)
 
     tokens, check := backend.CheckQuery(q)
     if !check {
         w.WriteHeader(400)
-        w.Write([]byte("query forbidden\n"))
+        hs.LogWriter(w, "query forbidden\n")
         return
     }
 
@@ -80,18 +81,18 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     }
     if !showDb && db == "" {
         w.WriteHeader(400)
-        w.Write([]byte("database not found\n"))
+        hs.LogWriter(w, "database not found\n")
         return
     }
     if len(hs.DbList) > 0 && !showDb && !util.MapHasKey(hs.DbMap, db) {
         w.WriteHeader(400)
-        w.Write([]byte(fmt.Sprintf("database forbidden: %s\n", db)))
+        hs.LogWriter(w, fmt.Sprintf("database forbidden: %s\n", db))
         return
     }
 
     body, err := hs.Query(w, req, tokens, db, alterDb)
     if err != nil {
-        log.Printf("query: %s, db: %s, error: %s", q, db, err)
+        log.Printf("query error: %s %s %s", q, db, err)
         w.WriteHeader(400)
         w.Write([]byte("query error: "+err.Error()+"\n"))
         return
@@ -114,12 +115,12 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
     db := req.URL.Query().Get("db")
     if db == "" {
         w.WriteHeader(400)
-        w.Write([]byte("database not found\n"))
+        hs.LogWriter(w, "database not found\n")
         return
     }
     if len(hs.DbList) > 0 && !util.MapHasKey(hs.DbMap, db) {
         w.WriteHeader(400)
-        w.Write([]byte(fmt.Sprintf("database forbidden: %s\n", db)))
+        hs.LogWriter(w, fmt.Sprintf("database forbidden: %s\n", db))
         return
     }
 
@@ -128,7 +129,8 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
         b, err := gzip.NewReader(body)
         defer b.Close()
         if err != nil {
-            w.Write([]byte("unable to decode gzip body\n"))
+            w.WriteHeader(400)
+            hs.LogWriter(w, "unable to decode gzip body\n")
             return
         }
         body = b
@@ -136,7 +138,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
     p, err := ioutil.ReadAll(body)
     if err != nil {
         w.WriteHeader(400)
-        w.Write([]byte(err.Error()+"\n"))
+        hs.LogWriter(w, err.Error()+"\n")
         return
     }
 
@@ -150,6 +152,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
             Line:      line,
             Precision: precision,
         }
+        hs.Logf("write: %s %s %s", db, precision, line)
         hs.WriteData(data)
     }
     w.WriteHeader(204)
@@ -675,4 +678,11 @@ func (hs *HttpService) setHaAddrs(req *http.Request) error {
         return errors.New("ha_addrs should contain two addrs at least")
     }
     return nil
+}
+
+func (hs *HttpService) LogWriter(w http.ResponseWriter, msg string) {
+    if hs.LogEnabled {
+        log.Printf(msg)
+    }
+    w.Write([]byte(msg))
 }

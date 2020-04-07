@@ -43,6 +43,7 @@
     "vnode_size": 256,
     "flush_size": 10000,
     "flush_time": 1,
+    "log_enabled": false,
     "username": "",
     "password": "",
     "auth_secure": false,
