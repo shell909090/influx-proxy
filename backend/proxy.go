@@ -245,7 +245,7 @@ func (proxy *Proxy) Query(w http.ResponseWriter, req *http.Request, tokens []str
             return backend.Query(req, w, false)
         } else {
             // available circle -> all backends -> show
-            return circle.QueryCluster(w, req)
+            return circle.Query(w, req)
         }
     } else if CheckDeleteOrDropMeasurementFromTokens(tokens) {
         // all circles -> key(db,meas) -> backend -> delete or drop
@@ -274,7 +274,7 @@ func (proxy *Proxy) Query(w http.ResponseWriter, req *http.Request, tokens []str
             }
         }
         for _, circle := range proxy.Circles {
-            body, err = circle.QueryCluster(w, req)
+            body, err = circle.Query(w, req)
             if err != nil {
                 return
             }

@@ -75,7 +75,7 @@ func (circle *Circle) CheckStatus() bool {
     return true
 }
 
-func (circle *Circle) QueryCluster(w http.ResponseWriter, req *http.Request) ([]byte, error) {
+func (circle *Circle) Query(w http.ResponseWriter, req *http.Request) ([]byte, error) {
     // remove support of query parameter `chunked`
     req.Form.Del("chunked")
     var reqBodyBytes []byte
