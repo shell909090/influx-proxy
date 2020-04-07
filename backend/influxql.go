@@ -66,25 +66,6 @@ func FindEndWithQuote(data []byte, start int, endchar byte) (end int, unquoted [
     return
 }
 
-func ScanKey(pointbuf []byte) (key string, err error) {
-    keyslice := make([]byte, 0)
-    buflen := len(pointbuf)
-    for i := 0; i < buflen; i++ {
-        c := pointbuf[i]
-        switch c {
-        case '\\':
-            i++
-            keyslice = append(keyslice, pointbuf[i])
-        case ' ', ',':
-            key = string(keyslice)
-            return
-        default:
-            keyslice = append(keyslice, c)
-        }
-    }
-    return "", io.EOF
-}
-
 func ScanToken(data []byte, atEOF bool) (advance int, token []byte, err error) {
     if atEOF && len(data) == 0 {
         return 0, nil, nil
@@ -92,9 +73,7 @@ func ScanToken(data []byte, atEOF bool) (advance int, token []byte, err error) {
 
     start := 0
     for ; start < len(data) && data[start] == ' '; start++ {
-        // fmt.Println("start->",start, data[start])
     }
-
     if start == len(data) {
         return 0, nil, nil
     }
@@ -157,6 +136,7 @@ func ScanToken(data []byte, atEOF bool) (advance int, token []byte, err error) {
     }
 
     token = data[start:advance]
+    // fmt.Printf("%s (%d, %d) = %s\n", data, start, advance, token)
     return
 }
 
@@ -319,17 +299,23 @@ func CheckDeleteOrDropMeasurementFromTokens(tokens []string) (check bool) {
     return
 }
 
-func Int64ToBytes(n int64) []byte {
-    return []byte(strconv.FormatInt(n, 10))
-}
-
-func BytesToInt64(buf []byte) int64 {
-    var res int64 = 0
-    var length = len(buf)
-    for i := 0; i < length; i++ {
-        res = res * 10 + int64(buf[i]-'0')
+func ScanKey(pointbuf []byte) (key string, err error) {
+    keyslice := make([]byte, 0)
+    buflen := len(pointbuf)
+    for i := 0; i < buflen; i++ {
+        c := pointbuf[i]
+        switch c {
+        case '\\':
+            i++
+            keyslice = append(keyslice, pointbuf[i])
+        case ' ', ',':
+            key = string(keyslice)
+            return
+        default:
+            keyslice = append(keyslice, c)
+        }
     }
-    return res
+    return "", io.EOF
 }
 
 func ScanSpace(buf []byte) (cnt int) {
@@ -371,7 +357,7 @@ func LineToNano(line []byte, precision string) []byte {
     line = bytes.TrimRight(line, " \t\r\n")
     pos, found := ScanTime(line)
     if found {
-        if precision == "ns" {
+        if precision == "ns" || precision == "n" {
             return line
         } else if precision == "u" {
             return append(line, []byte("000")...)
@@ -388,4 +374,17 @@ func LineToNano(line []byte, precision string) []byte {
     } else {
         return append(line, []byte(" " + strconv.FormatInt(time.Now().UnixNano(), 10))...)
     }
+}
+
+func Int64ToBytes(n int64) []byte {
+    return []byte(strconv.FormatInt(n, 10))
+}
+
+func BytesToInt64(buf []byte) int64 {
+    var res int64 = 0
+    var length = len(buf)
+    for i := 0; i < length; i++ {
+        res = res * 10 + int64(buf[i]-'0')
+    }
+    return res
 }
