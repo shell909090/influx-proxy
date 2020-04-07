@@ -75,7 +75,7 @@ func (circle *Circle) CheckStatus() bool {
     return true
 }
 
-func (circle *Circle) Query(w http.ResponseWriter, req *http.Request) ([]byte, error) {
+func (circle *Circle) Query(w http.ResponseWriter, req *http.Request, tokens []string) ([]byte, error) {
     // remove support of query parameter `chunked`
     req.Form.Del("chunked")
     var reqBodyBytes []byte
@@ -98,18 +98,16 @@ func (circle *Circle) Query(w http.ResponseWriter, req *http.Request) ([]byte, e
 
     var rsp *Response
     var err error
-    q := strings.ToLower(strings.TrimSpace(req.FormValue("q")))
-    // fmt.Printf("%s circle: %s; query: %s\n", time.Now().Format("2006-01-02 15:04:05"), circle.Name, q)
-    if strings.HasPrefix(q, "show") {
-        if strings.Contains(q, "measurements") || strings.Contains(q, "series") || strings.Contains(q, "databases") {
-            rsp, err = circle.reduceByValues(bodies)
-        } else if (strings.Contains(q, "field") || strings.Contains(q, "tag")) && (strings.Contains(q, "keys") || strings.Contains(q, "values")) {
-            rsp, err = circle.reduceBySeries(bodies)
-        } else if strings.Contains(q, "stats") {
-            rsp, err = circle.concatByResults(bodies)
-        } else if strings.Contains(q, "retention") && strings.Contains(q, "policies") {
-            rsp, err = circle.concatByValues(bodies)
-        }
+    stmt2 := GetHeadStmtFromTokens(tokens, 2)
+    stmt3 := GetHeadStmtFromTokens(tokens, 3)
+    if stmt2 == "show measurements" || stmt2 == "show series" || stmt2 == "show databases" {
+        rsp, err = circle.reduceByValues(bodies)
+    } else if stmt3 == "show field keys" || stmt3 == "show tag keys" || stmt3 == "show tag values" {
+        rsp, err = circle.reduceBySeries(bodies)
+    } else if stmt3 == "show retention policies" {
+        rsp, err = circle.concatByValues(bodies)
+    } else if stmt2 == "show stats" {
+        rsp, err = circle.concatByResults(bodies)
     }
     if err != nil {
         return nil, err
@@ -179,21 +177,6 @@ func (circle *Circle) reduceBySeries(bodies [][]byte) (rsp *Response, err error)
     return ResponseFromSeries(series), nil
 }
 
-func (circle *Circle) concatByResults(bodies [][]byte) (rsp *Response, err error) {
-    var results []*Result
-    for _, b := range bodies {
-        _results, _err := ResultsFromResponseBytes(b)
-        if _err != nil {
-            err = _err
-            return
-        }
-        if len(_results) == 1 {
-            results = append(results, _results[0])
-        }
-    }
-    return ResponseFromResults(results), nil
-}
-
 func (circle *Circle) concatByValues(bodies [][]byte) (rsp *Response, err error) {
     var series []*models.Row
     var values [][]interface{}
@@ -214,6 +197,21 @@ func (circle *Circle) concatByValues(bodies [][]byte) (rsp *Response, err error)
         series[0].Values = values
     }
     return ResponseFromSeries(series), nil
+}
+
+func (circle *Circle) concatByResults(bodies [][]byte) (rsp *Response, err error) {
+    var results []*Result
+    for _, b := range bodies {
+        _results, _err := ResultsFromResponseBytes(b)
+        if _err != nil {
+            err = _err
+            return
+        }
+        if len(_results) == 1 {
+            results = append(results, _results[0])
+        }
+    }
+    return ResponseFromResults(results), nil
 }
 
 func (circle *Circle) Migrate(srcBackend *Backend, dstBackends []*Backend, db, meas string, seconds int) error {

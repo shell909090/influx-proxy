@@ -605,11 +605,6 @@ func (hs *HttpService) transAuth(msg string) string {
     }
 }
 
-func (hs *HttpService) checkDatabase(q string) bool {
-    q = strings.ToLower(q)
-    return (strings.HasPrefix(q, "show") && strings.Contains(q, "databases")) || (strings.HasPrefix(q, "create") && strings.Contains(q, "database"))
-}
-
 func (hs *HttpService) formValues(req *http.Request, key string) []string {
     var values []string
     str := strings.Trim(req.FormValue(key), ", ")

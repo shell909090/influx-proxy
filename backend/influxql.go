@@ -13,7 +13,7 @@ import (
 )
 
 var (
-    SupportQueries = map[string]bool{
+    SupportCmds = map[string]bool{
         "show measurements": true,
         "show series": true,
         "show field keys": true,
@@ -155,6 +155,13 @@ func ScanTokens(q string, n int) (tokens []string) {
     return
 }
 
+func GetHeadStmtFromTokens(tokens []string, n int) (stmt string) {
+    if n <= 0 || n > len(tokens) {
+        n = len(tokens)
+    }
+    return strings.ToLower(strings.Join(tokens[:n], " "))
+}
+
 func GetDatabaseFromInfluxQL(q string) (m string, err error) {
     return GetDatabaseFromTokens(ScanTokens(q, 0))
 }
@@ -263,19 +270,19 @@ func CheckQuery(q string) (tokens []string, check bool) {
             }
         }
     }
-    stmt2 := strings.ToLower(strings.Join(tokens[:2], " "))
-    if _, ok := SupportQueries[stmt2]; ok {
+    stmt2 := GetHeadStmtFromTokens(tokens, 2)
+    if _, ok := SupportCmds[stmt2]; ok {
         return tokens, true
     }
-    stmt3 := strings.ToLower(strings.Join(tokens[:3], " "))
-    if _, ok := SupportQueries[stmt3]; ok {
+    stmt3 := GetHeadStmtFromTokens(tokens, 3)
+    if _, ok := SupportCmds[stmt3]; ok {
         return tokens, true
     }
     return tokens, false
 }
 
 func CheckDatabaseFromTokens(tokens []string) (check bool, show bool, alter bool, db string) {
-    stmt := strings.ToLower(strings.Join(tokens[:2], " "))
+    stmt := GetHeadStmtFromTokens(tokens, 2)
     show = stmt == "show databases"
     alter = stmt == "create database" || stmt == "drop database"
     check = show || alter
@@ -293,7 +300,7 @@ func CheckSelectOrShowFromTokens(tokens []string) (check bool) {
 
 func CheckDeleteOrDropMeasurementFromTokens(tokens []string) (check bool) {
     if len(tokens) >= 3 {
-        stmt := strings.ToLower(strings.Join(tokens[:2], " "))
+        stmt := GetHeadStmtFromTokens(tokens, 2)
         return stmt == "delete from" || stmt == "drop measurement" || stmt == "drop series"
     }
     return
