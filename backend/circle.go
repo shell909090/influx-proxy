@@ -127,10 +127,9 @@ func (circle *Circle) Query(w http.ResponseWriter, req *http.Request, tokens []s
 func (circle *Circle) reduceByValues(bodies [][]byte) (rsp *Response, err error) {
     valuesMap := make(map[string]*models.Row)
     for _, b := range bodies {
-        _series, _err := SeriesFromResponseBytes(b)
-        if _err != nil {
-            err = _err
-            return
+        _series, err := SeriesFromResponseBytes(b)
+        if err != nil {
+            return nil, err
         }
         for _, s := range _series {
             for _, value := range s.Values {
@@ -160,10 +159,9 @@ func (circle *Circle) reduceByValues(bodies [][]byte) (rsp *Response, err error)
 func (circle *Circle) reduceBySeries(bodies [][]byte) (rsp *Response, err error) {
     seriesMap := make(map[string]*models.Row)
     for _, b := range bodies {
-        _series, _err := SeriesFromResponseBytes(b)
-        if _err != nil {
-            err = _err
-            return
+        _series, err := SeriesFromResponseBytes(b)
+        if err != nil {
+            return nil, err
         }
         for _, s := range _series {
             seriesMap[s.Name] = s
@@ -181,10 +179,9 @@ func (circle *Circle) concatByValues(bodies [][]byte) (rsp *Response, err error)
     var series []*models.Row
     var values [][]interface{}
     for _, b := range bodies {
-        _series, _err := SeriesFromResponseBytes(b)
-        if _err != nil {
-            err = _err
-            return
+        _series, err := SeriesFromResponseBytes(b)
+        if err != nil {
+            return nil, err
         }
         if len(_series) == 1 {
             series = _series
@@ -202,10 +199,9 @@ func (circle *Circle) concatByValues(bodies [][]byte) (rsp *Response, err error)
 func (circle *Circle) concatByResults(bodies [][]byte) (rsp *Response, err error) {
     var results []*Result
     for _, b := range bodies {
-        _results, _err := ResultsFromResponseBytes(b)
-        if _err != nil {
-            err = _err
-            return
+        _results, err := ResultsFromResponseBytes(b)
+        if err != nil {
+            return nil, err
         }
         if len(_results) == 1 {
             results = append(results, _results[0])
