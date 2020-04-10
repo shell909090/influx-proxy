@@ -346,12 +346,12 @@ func (backend *Backend) RewriteBackground() {
 func (backend *Backend) RewriteLoop() {
     for backend.IsData() {
         if !backend.Active {
-            time.Sleep(time.Second * config.WaitActiveInterval)
+            time.Sleep(config.WaitActiveInterval * time.Second)
             continue
         }
         err := backend.Rewrite()
         if err != nil {
-            time.Sleep(time.Second * config.RewriteInterval)
+            time.Sleep(config.RewriteInterval * time.Second)
             continue
         }
     }
@@ -405,7 +405,7 @@ func (backend *Backend) CheckActiveBackground() {
 // handle http
 
 func NewClient(tlsSkip bool) *http.Client {
-    return &http.Client{Transport: NewTransport(tlsSkip)}
+    return &http.Client{Transport: NewTransport(tlsSkip), Timeout: config.HttpTimeout * time.Second}
 }
 
 func NewTransport(tlsSkip bool) *http.Transport {
