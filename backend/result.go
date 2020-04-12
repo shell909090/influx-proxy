@@ -63,3 +63,19 @@ func ResponseFromResults(results []*Result) (rsp *Response) {
     }
     return
 }
+
+func ResponseFromError(err string, root bool) (rsp *Response) {
+    if root {
+        rsp = &Response{
+            Err: err,
+        }
+    } else {
+        r := &Result{
+            Err: err,
+        }
+        rsp = &Response{
+            Results: []*Result{r},
+        }
+    }
+    return
+}

@@ -60,7 +60,7 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     q := strings.TrimSpace(req.FormValue("q"))
     if q == "" {
         w.WriteHeader(400)
-        hs.LogWriter(w, "query not found\n")
+        hs.writeJson(w, "query not found")
         return
     }
     hs.Logf("query: %s db=%s q=%s", req.Method, req.FormValue("db"), q)
@@ -68,7 +68,7 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     tokens, check := backend.CheckQuery(q)
     if !check {
         w.WriteHeader(400)
-        hs.LogWriter(w, "query forbidden\n")
+        hs.writeJson(w, "query forbidden")
         return
     }
 
@@ -81,12 +81,12 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     }
     if !showDb && db == "" {
         w.WriteHeader(400)
-        hs.LogWriter(w, "database not found\n")
+        hs.writeJson(w, "database not found")
         return
     }
     if len(hs.DbList) > 0 && !showDb && !util.MapHasKey(hs.DbMap, db) {
         w.WriteHeader(400)
-        hs.LogWriter(w, fmt.Sprintf("database forbidden: %s\n", db))
+        hs.writeJson(w, fmt.Sprintf("database forbidden: %s", db))
         return
     }
 
@@ -94,7 +94,7 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     if err != nil {
         log.Printf("query error: %s %s %s", q, db, err)
         w.WriteHeader(400)
-        w.Write([]byte("query error: "+err.Error()+"\n"))
+        hs.writeJson(w, "query error: "+err.Error())
         return
     }
     w.Write(body)
@@ -115,12 +115,12 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
     db := req.URL.Query().Get("db")
     if db == "" {
         w.WriteHeader(400)
-        hs.LogWriter(w, "database not found\n")
+        hs.writeJson(w, "database not found")
         return
     }
     if len(hs.DbList) > 0 && !util.MapHasKey(hs.DbMap, db) {
         w.WriteHeader(400)
-        hs.LogWriter(w, fmt.Sprintf("database forbidden: %s\n", db))
+        hs.writeJson(w, fmt.Sprintf("database forbidden: %s", db))
         return
     }
 
@@ -130,7 +130,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
         defer b.Close()
         if err != nil {
             w.WriteHeader(400)
-            hs.LogWriter(w, "unable to decode gzip body\n")
+            hs.writeJson(w, "unable to decode gzip body")
             return
         }
         body = b
@@ -138,7 +138,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
     p, err := ioutil.ReadAll(body)
     if err != nil {
         w.WriteHeader(400)
-        hs.LogWriter(w, err.Error()+"\n")
+        hs.writeJson(w, err.Error())
         return
     }
 
@@ -565,6 +565,15 @@ func (hs *HttpService) addJsonHeader(w http.ResponseWriter) {
     w.Header().Add("Content-Type", "application/json")
 }
 
+func (hs *HttpService) writeJson(w http.ResponseWriter, msg string) {
+    if hs.LogEnabled {
+        log.Printf(msg)
+    }
+    hs.addJsonHeader(w)
+    rsp := backend.ResponseFromError(msg, true)
+    w.Write(util.MarshalJson(rsp, false, true))
+}
+
 func (hs *HttpService) checkMethodAndAuth(w http.ResponseWriter, req *http.Request, methods []string) bool {
     return hs.checkMethod(w, req, methods) && hs.checkAuth(w, req)
 }
@@ -673,11 +682,4 @@ func (hs *HttpService) setHaAddrs(req *http.Request) error {
         return errors.New("ha_addrs should contain two addrs at least")
     }
     return nil
-}
-
-func (hs *HttpService) LogWriter(w http.ResponseWriter, msg string) {
-    if hs.LogEnabled {
-        log.Printf(msg)
-    }
-    w.Write([]byte(msg))
 }
