@@ -60,7 +60,7 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     q := strings.TrimSpace(req.FormValue("q"))
     if q == "" {
         w.WriteHeader(400)
-        hs.writeJson(w, "query not found")
+        hs.write(w, "query not found")
         return
     }
     hs.Logf("query: %s db=%s q=%s", req.Method, req.FormValue("db"), q)
@@ -68,7 +68,7 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     tokens, check := backend.CheckQuery(q)
     if !check {
         w.WriteHeader(400)
-        hs.writeJson(w, "query forbidden")
+        hs.write(w, "query forbidden")
         return
     }
 
@@ -81,12 +81,12 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     }
     if !showDb && db == "" {
         w.WriteHeader(400)
-        hs.writeJson(w, "database not found")
+        hs.write(w, "database not found")
         return
     }
     if len(hs.DbList) > 0 && !showDb && !util.MapHasKey(hs.DbMap, db) {
         w.WriteHeader(400)
-        hs.writeJson(w, fmt.Sprintf("database forbidden: %s", db))
+        hs.write(w, fmt.Sprintf("database forbidden: %s", db))
         return
     }
 
@@ -94,7 +94,7 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     if err != nil {
         log.Printf("query error: %s %s %s", q, db, err)
         w.WriteHeader(400)
-        hs.writeJson(w, "query error: "+err.Error())
+        hs.write(w, fmt.Sprintf("query error: %s", err))
         return
     }
     w.Write(body)
@@ -115,12 +115,12 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
     db := req.URL.Query().Get("db")
     if db == "" {
         w.WriteHeader(400)
-        hs.writeJson(w, "database not found")
+        hs.write(w, "database not found")
         return
     }
     if len(hs.DbList) > 0 && !util.MapHasKey(hs.DbMap, db) {
         w.WriteHeader(400)
-        hs.writeJson(w, fmt.Sprintf("database forbidden: %s", db))
+        hs.write(w, fmt.Sprintf("database forbidden: %s", db))
         return
     }
 
@@ -130,7 +130,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
         defer b.Close()
         if err != nil {
             w.WriteHeader(400)
-            hs.writeJson(w, "unable to decode gzip body")
+            hs.write(w, "unable to decode gzip body")
             return
         }
         body = b
@@ -138,7 +138,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
     p, err := ioutil.ReadAll(body)
     if err != nil {
         w.WriteHeader(400)
-        hs.writeJson(w, err.Error())
+        hs.write(w, err.Error())
         return
     }
 
@@ -161,7 +161,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
 
 func (hs *HttpService) HandlerHealth(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
-    hs.addHeader(w)
+    hs.addVerHeader(w)
     if !hs.checkMethodAndAuth(w, req, []string{"GET"}) {
         return
     }
@@ -179,7 +179,7 @@ func (hs *HttpService) HandlerHealth(w http.ResponseWriter, req *http.Request) {
 
 func (hs *HttpService) HandlerReplica(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
-    hs.addHeader(w)
+    hs.addVerHeader(w)
     if !hs.checkMethodAndAuth(w, req, []string{"GET"}) {
         return
     }
@@ -232,7 +232,7 @@ func (hs *HttpService) HandlerDencrypt(w http.ResponseWriter, req *http.Request)
 
 func (hs *HttpService) HandlerMigrateState(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
-    hs.addHeader(w)
+    hs.addVerHeader(w)
     if !hs.checkMethodAndAuth(w, req, []string{"GET", "POST"}) {
         return
     }
@@ -299,7 +299,7 @@ func (hs *HttpService) HandlerMigrateState(w http.ResponseWriter, req *http.Requ
 
 func (hs *HttpService) HandlerMigrateStats(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
-    hs.addHeader(w)
+    hs.addVerHeader(w)
     if !hs.checkMethodAndAuth(w, req, []string{"GET"}) {
         return
     }
@@ -326,7 +326,7 @@ func (hs *HttpService) HandlerMigrateStats(w http.ResponseWriter, req *http.Requ
 
 func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
-    hs.addHeader(w)
+    hs.addVerHeader(w)
     if !hs.checkMethodAndAuth(w, req, []string{"POST"}) {
         return
     }
@@ -408,7 +408,7 @@ func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request
 
 func (hs *HttpService) HandlerRecovery(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
-    hs.addHeader(w)
+    hs.addVerHeader(w)
     if !hs.checkMethodAndAuth(w, req, []string{"POST"}) {
         return
     }
@@ -466,7 +466,7 @@ func (hs *HttpService) HandlerRecovery(w http.ResponseWriter, req *http.Request)
 
 func (hs *HttpService) HandlerResync(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
-    hs.addHeader(w)
+    hs.addVerHeader(w)
     if !hs.checkMethodAndAuth(w, req, []string{"POST"}) {
         return
     }
@@ -514,7 +514,7 @@ func (hs *HttpService) HandlerResync(w http.ResponseWriter, req *http.Request) {
 
 func (hs *HttpService) HandlerClear(w http.ResponseWriter, req *http.Request) {
     defer req.Body.Close()
-    hs.addHeader(w)
+    hs.addVerHeader(w)
     if !hs.checkMethodAndAuth(w, req, []string{"POST"}) {
         return
     }
@@ -558,6 +558,11 @@ func (hs *HttpService) HandlerClear(w http.ResponseWriter, req *http.Request) {
 }
 
 func (hs *HttpService) addHeader(w http.ResponseWriter) {
+    hs.addVerHeader(w)
+    hs.addJsonHeader(w)
+}
+
+func (hs *HttpService) addVerHeader(w http.ResponseWriter) {
     w.Header().Add("X-Influxdb-Version", config.Version)
 }
 
@@ -565,13 +570,16 @@ func (hs *HttpService) addJsonHeader(w http.ResponseWriter) {
     w.Header().Add("Content-Type", "application/json")
 }
 
-func (hs *HttpService) writeJson(w http.ResponseWriter, msg string) {
+func (hs *HttpService) write(w http.ResponseWriter, msg string) {
     if hs.LogEnabled {
         log.Printf(msg)
     }
-    hs.addJsonHeader(w)
-    rsp := backend.ResponseFromError(msg, true)
-    w.Write(util.MarshalJson(rsp, false, true))
+    if w.Header().Get("Content-Type") == "application/json" {
+        rsp := backend.ResponseFromError(msg, true)
+        w.Write(util.MarshalJson(rsp, false, true))
+    } else {
+        w.Write([]byte(msg+"\n"))
+    }
 }
 
 func (hs *HttpService) checkMethodAndAuth(w http.ResponseWriter, req *http.Request, methods []string) bool {
@@ -585,7 +593,7 @@ func (hs *HttpService) checkMethod(w http.ResponseWriter, req *http.Request, met
         }
     }
     w.WriteHeader(405)
-    w.Write([]byte("method not allow\n"))
+    hs.write(w, "method not allow")
     return false
 }
 
@@ -602,7 +610,7 @@ func (hs *HttpService) checkAuth(w http.ResponseWriter, r *http.Request) bool {
         return true
     }
     w.WriteHeader(401)
-    w.Write([]byte("authentication failed\n"))
+    hs.write(w, "authentication failed")
     return false
 }
 
