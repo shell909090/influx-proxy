@@ -64,7 +64,7 @@ func (backend *Backend) OpenFile(dataDir string) {
         log.Printf("open producer error: %s %s", backend.Url, err)
         panic(err)
     }
-    _, err = backend.Producer.Seek(0, io.SeekEnd)
+    producerOffset, err := backend.Producer.Seek(0, io.SeekEnd)
     if err != nil {
         log.Printf("seek producer error: %s %s", backend.Url, err)
         panic(err)
@@ -83,6 +83,8 @@ func (backend *Backend) OpenFile(dataDir string) {
     }
 
     backend.RollbackMeta()
+    offset, _ := backend.Consumer.Seek(0, io.SeekCurrent)
+    backend.DataFlag = producerOffset > offset
 }
 
 func (backend *Backend) WriteFile(p []byte) (err error) {
