@@ -75,19 +75,21 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
     checkDb, showDb, alterDb, db := backend.CheckDatabaseFromTokens(tokens)
     if !checkDb {
         db = req.FormValue("db")
+        if db == "" {
+            db, _ = backend.GetDatabaseFromTokens(tokens)
+        }
     }
-    if db == "" {
-        db, _ = backend.GetDatabaseFromTokens(tokens)
-    }
-    if !showDb && db == "" {
-        w.WriteHeader(400)
-        hs.write(w, "database not found")
-        return
-    }
-    if len(hs.DbList) > 0 && !showDb && !util.MapHasKey(hs.DbMap, db) {
-        w.WriteHeader(400)
-        hs.write(w, fmt.Sprintf("database forbidden: %s", db))
-        return
+    if !showDb {
+        if db == "" {
+            w.WriteHeader(400)
+            hs.write(w, "database not found")
+            return
+        }
+        if len(hs.DbList) > 0 && !util.MapHasKey(hs.DbMap, db) {
+            w.WriteHeader(400)
+            hs.write(w, fmt.Sprintf("database forbidden: %s", db))
+            return
+        }
     }
 
     body, err := hs.Query(w, req, tokens, db, alterDb)

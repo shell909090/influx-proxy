@@ -141,7 +141,7 @@ func ScanToken(data []byte, atEOF bool) (advance int, token []byte, err error) {
 }
 
 func ScanTokens(q string, n int) (tokens []string) {
-    q = strings.TrimRight(q, ";")
+    q = strings.TrimRight(strings.TrimSpace(q), "; ")
     buf := bytes.NewBuffer([]byte(q))
     scanner := bufio.NewScanner(buf)
     scanner.Buffer([]byte(q), len(q))
