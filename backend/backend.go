@@ -58,8 +58,8 @@ type Backend struct {
 
 func (backend *Backend) OpenFile(dataDir string) {
     var err error
-    fileNamePrefix := filepath.Join(dataDir, backend.Name)
-    backend.Producer, err = os.OpenFile(fileNamePrefix+".dat", os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
+    filename := filepath.Join(dataDir, backend.Name)
+    backend.Producer, err = os.OpenFile(filename+".dat", os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
     if err != nil {
         log.Printf("open producer error: %s %s", backend.Url, err)
         panic(err)
@@ -70,13 +70,13 @@ func (backend *Backend) OpenFile(dataDir string) {
         panic(err)
     }
 
-    backend.Consumer, err = os.OpenFile(fileNamePrefix+".dat", os.O_RDONLY, 0644)
+    backend.Consumer, err = os.OpenFile(filename+".dat", os.O_RDONLY, 0644)
     if err != nil {
         log.Printf("open consumer error: %s %s", backend.Url, err)
         panic(err)
     }
 
-    backend.Meta, err = os.OpenFile(fileNamePrefix+".rec", os.O_RDWR|os.O_CREATE, 0644)
+    backend.Meta, err = os.OpenFile(filename+".rec", os.O_RDWR|os.O_CREATE, 0644)
     if err != nil {
         log.Printf("open meta error: %s %s", backend.Url, err)
         panic(err)
