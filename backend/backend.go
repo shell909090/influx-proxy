@@ -373,6 +373,10 @@ func (backend *Backend) Rewrite() (err error) {
     }
 
     p := bytes.SplitN(b, []byte(" "), 2)
+    if len(p) < 2 {
+        log.Print("rewrite read invalid data with length: ", len(p))
+        return
+    }
     err = backend.WriteCompressed(string(p[0]), p[1])
 
     switch err {
