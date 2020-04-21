@@ -365,7 +365,8 @@ func (backend *Backend) RewriteLoop() {
 func (backend *Backend) Rewrite() (err error) {
     b, err := backend.ReadFile()
     if err != nil {
-        log.Print("rewrite read data error: ", err)
+        log.Print("rewrite read file error: ", err)
+        return
     }
     if b == nil {
         return
