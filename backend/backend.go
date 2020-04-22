@@ -306,7 +306,7 @@ func (backend *Backend) FlushBuffer(db string) (err error) {
         }
     }
 
-    b := bytes.Join([][]byte{[]byte(db), p}, []byte(" "))
+    b := bytes.Join([][]byte{[]byte(url.QueryEscape(db)), p}, []byte(" "))
     err = backend.WriteFile(b)
     if err != nil {
         log.Printf("write db and data to file error with db: %s, length: %d error: %s", db, len(p), err)
@@ -377,7 +377,12 @@ func (backend *Backend) Rewrite() (err error) {
         log.Print("rewrite read invalid data with length: ", len(p))
         return
     }
-    err = backend.WriteCompressed(string(p[0]), p[1])
+    db, err := url.QueryUnescape(string(p[0]))
+    if err != nil {
+        log.Print("rewrite db unescape error: ", err)
+        return
+    }
+    err = backend.WriteCompressed(db, p[1])
 
     switch err {
     case nil:
