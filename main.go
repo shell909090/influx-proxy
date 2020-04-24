@@ -24,7 +24,7 @@ func main() {
     flag.BoolVar(&Version, "version", false, "proxy version")
     flag.Parse()
     if Version {
-        fmt.Printf("Version:    %s\n", config.Version)
+        fmt.Printf("Version:    %s\n", service.Version)
         fmt.Printf("Git commit: %s\n", GitCommit)
         fmt.Printf("Go version: %s\n", runtime.Version())
         fmt.Printf("Build time: %s\n", BuildTime)

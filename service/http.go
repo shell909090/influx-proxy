@@ -7,7 +7,6 @@ import (
     "errors"
     "fmt"
     "github.com/chengshiwen/influx-proxy/backend"
-    "github.com/chengshiwen/influx-proxy/config"
     "github.com/chengshiwen/influx-proxy/util"
     "io/ioutil"
     "log"
@@ -18,6 +17,10 @@ import (
     "strconv"
     "strings"
     "sync"
+)
+
+const (
+    Version = "2.4.6"
 )
 
 type HttpService struct {
@@ -565,7 +568,7 @@ func (hs *HttpService) addHeader(w http.ResponseWriter) {
 }
 
 func (hs *HttpService) addVerHeader(w http.ResponseWriter) {
-    w.Header().Add("X-Influxdb-Version", config.Version)
+    w.Header().Add("X-Influxdb-Version", Version)
 }
 
 func (hs *HttpService) addJsonHeader(w http.ResponseWriter) {

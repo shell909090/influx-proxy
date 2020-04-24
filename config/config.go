@@ -1,7 +1,6 @@
 package config
 
 const (
-    Version            = "2.4.6"
     IdleTimeout        = 10
     HttpTimeout        = 10
     CheckPingInterval  = 1
