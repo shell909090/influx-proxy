@@ -122,6 +122,10 @@ The configurations in `proxy.json` are the following:
 * `vnode_size`: the size of virtual nodes for consistent hash, default is 256
 * `flush_size`: default config is 10000, wait 10000 points write
 * `flush_time`: default config is 1s, wait 1 second write whether point count has bigger than flush_size config
+* `check_interval`: default config is 1s, check backend active every 1 second
+* `rewrite_interval`: default config is 10s, rewrite every 10 seconds
+* `write_timeout`: default config is 10s, write timeout until 10 seconds
+* `idle_timeout`: default config is 10s, keep-alives wait time
 * `log_enabled`: enable the logging of debug messages for troubleshooting, default is false
 * `username`: proxy username, with encryption if auth_secure is enabled
 * `password`: proxy password, with encryption if auth_secure is enabled

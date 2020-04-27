@@ -3,7 +3,6 @@ package backend
 import (
     "bytes"
     "fmt"
-    "github.com/chengshiwen/influx-proxy/config"
     "github.com/chengshiwen/influx-proxy/util"
     "github.com/influxdata/influxdb1-client/models"
     "io/ioutil"
@@ -210,7 +209,7 @@ func (circle *Circle) concatByResults(bodies [][]byte) (rsp *Response, err error
     return ResponseFromResults(results), nil
 }
 
-func (circle *Circle) Migrate(srcBackend *Backend, dstBackends []*Backend, db, meas string, seconds int) error {
+func (circle *Circle) Migrate(srcBackend *Backend, dstBackends []*Backend, db, meas string, seconds int, batch int) error {
     timeClause := ""
     if seconds > 0 {
         timeClause = fmt.Sprintf(" where time >= %ds", time.Now().Unix()-int64(seconds))
@@ -265,7 +264,7 @@ func (circle *Circle) Migrate(srcBackend *Backend, dstBackends []*Backend, db, m
         ts, _ := time.Parse(time.RFC3339Nano, value[0].(string))
         line := fmt.Sprintf("%s %s %d", mtagStr, fieldStr, ts.UnixNano())
         lines = append(lines, line)
-        if (idx + 1) % config.MigrateBatchSize == 0 || idx + 1 == vlen {
+        if (idx + 1) % batch == 0 || idx + 1 == vlen {
             if len(lines) != 0 {
                 lineData := strings.Join(lines, "\n")
                 for _, dstBackend := range dstBackends {

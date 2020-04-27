@@ -7,7 +7,6 @@ import (
     "encoding/binary"
     "errors"
     "fmt"
-    "github.com/chengshiwen/influx-proxy/config"
     "github.com/chengshiwen/influx-proxy/util"
     "io"
     "io/ioutil"
@@ -317,10 +316,10 @@ func (backend *Backend) FlushBuffer(db string) (err error) {
 
 // handle background
 
-func (backend *Backend) FlushBufferBackground(flushTimeout time.Duration) {
+func (backend *Backend) FlushBufferBackground(flushTime int) {
     for {
         select {
-        case <- time.After(flushTimeout * time.Second):
+        case <- time.After(time.Duration(flushTime) * time.Second):
             for db := range backend.BufferMap {
                 if backend.BufferMap[db].Counter > 0 {
                     backend.LockDbMap[db].Lock()
@@ -335,27 +334,27 @@ func (backend *Backend) FlushBufferBackground(flushTimeout time.Duration) {
     }
 }
 
-func (backend *Backend) RewriteBackground() {
+func (backend *Backend) RewriteBackground(rewriteInterval int) {
     for {
         select {
-        case <- time.After(config.RewriteInterval * time.Second):
+        case <- time.After(time.Duration(rewriteInterval) * time.Second):
             if !backend.RewriteRunning && backend.IsData() {
                 backend.RewriteRunning = true
-                go backend.RewriteLoop()
+                go backend.RewriteLoop(rewriteInterval)
             }
         }
     }
 }
 
-func (backend *Backend) RewriteLoop() {
+func (backend *Backend) RewriteLoop(rewriteInterval int) {
     for backend.IsData() {
         if !backend.Active {
-            time.Sleep(config.WaitActiveInterval * time.Second)
+            time.Sleep(time.Duration(rewriteInterval) * time.Second)
             continue
         }
         err := backend.Rewrite()
         if err != nil {
-            time.Sleep(config.RewriteInterval * time.Second)
+            time.Sleep(time.Duration(rewriteInterval) * time.Second)
             continue
         }
     }
@@ -409,17 +408,17 @@ func (backend *Backend) Rewrite() (err error) {
     return
 }
 
-func (backend *Backend) CheckActiveBackground() {
+func (backend *Backend) CheckActiveBackground(checkInterval int) {
     for {
         backend.Active = backend.Ping()
-        time.Sleep(config.CheckPingInterval * time.Second)
+        time.Sleep(time.Duration(checkInterval) * time.Second)
     }
 }
 
 // handle http
 
-func NewClient(tlsSkip bool) *http.Client {
-    return &http.Client{Transport: NewTransport(tlsSkip), Timeout: config.HttpTimeout * time.Second}
+func NewClient(tlsSkip bool, timeout int) *http.Client {
+    return &http.Client{Transport: NewTransport(tlsSkip), Timeout: time.Duration(timeout) * time.Second}
 }
 
 func NewTransport(tlsSkip bool) *http.Transport {

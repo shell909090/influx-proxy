@@ -29,7 +29,11 @@ type Proxy struct {
     HashKey                 string                          `json:"hash_key"`
     VNodeSize               int                             `json:"vnode_size"`
     FlushSize               int                             `json:"flush_size"`
-    FlushTime               time.Duration                   `json:"flush_time"`
+    FlushTime               int                             `json:"flush_time"`
+    CheckInterval           int                             `json:"check_interval"`
+    RewriteInterval         int                             `json:"rewrite_interval"`
+    WriteTimeout            int                             `json:"write_timeout"`
+    IdleTimeout             int                             `json:"idle_timeout"`
     LogEnabled              bool                            `json:"log_enabled"`
     Username                string                          `json:"username"`
     Password                string                          `json:"password"`
@@ -40,6 +44,7 @@ type Proxy struct {
     HaAddrs                 []string                        `json:"ha_addrs"`
     IsResyncing             bool                            `json:"is_resyncing"`
     MigrateCpus             int                             `json:"migrate_cpus"`
+    MigrateBatch            int                             `json:"migrate_batch"`
     MigrateStats            []map[string]*MigrateInfo       `json:"migrate_stats"`
     Lock                    *sync.RWMutex                   `json:"lock"`
 }
@@ -117,8 +122,23 @@ func LoadProxyConfig(file string) (proxy *Proxy, err error) {
     if proxy.FlushTime <= 0 {
         proxy.FlushTime = 1
     }
+    if proxy.CheckInterval <= 0 {
+        proxy.CheckInterval = 1
+    }
+    if proxy.RewriteInterval <= 0 {
+        proxy.RewriteInterval = 10
+    }
+    if proxy.WriteTimeout <= 0 {
+        proxy.WriteTimeout = 10
+    }
+    if proxy.IdleTimeout <= 0 {
+        proxy.IdleTimeout = 10
+    }
     if proxy.MigrateCpus <= 0 {
         proxy.MigrateCpus = 1
+    }
+    if proxy.MigrateBatch <= 0 {
+        proxy.MigrateBatch = 25000
     }
     err = proxy.CheckBackends()
     if err != nil {
@@ -181,7 +201,7 @@ func (proxy *Proxy) initBackend(circle *Circle, backend *Backend, idx int) {
 
     backend.AuthSecure = proxy.AuthSecure
     backend.BufferMap = make(map[string]*CBuffer)
-    backend.Client = NewClient(strings.HasPrefix(backend.Url, "https"))
+    backend.Client = NewClient(strings.HasPrefix(backend.Url, "https"), proxy.WriteTimeout)
     backend.Transport = NewTransport(strings.HasPrefix(backend.Url, "https"))
     backend.Active = true
     backend.LockDbMap = make(map[string]*sync.RWMutex)
@@ -189,9 +209,9 @@ func (proxy *Proxy) initBackend(circle *Circle, backend *Backend, idx int) {
     backend.LockFile = &sync.RWMutex{}
     backend.OpenFile(proxy.DataDir)
 
-    go backend.CheckActiveBackground()
+    go backend.CheckActiveBackground(proxy.CheckInterval)
     go backend.FlushBufferBackground(proxy.FlushTime)
-    go backend.RewriteBackground()
+    go backend.RewriteBackground(proxy.RewriteInterval)
 }
 
 func (proxy *Proxy) initMigrateStats(circle *Circle) {
@@ -350,7 +370,7 @@ func (proxy *Proxy) GetBackendUrls(backends []*Backend) []string {
 }
 
 func (proxy *Proxy) Migrate(backend *Backend, dstBackends []*Backend, circle *Circle, db, meas string, seconds int) {
-    err := circle.Migrate(backend, dstBackends, db, meas, seconds)
+    err := circle.Migrate(backend, dstBackends, db, meas, seconds, proxy.MigrateBatch)
     if err != nil {
         util.Mlog.Printf("migrate error:%s src:%s dst:%v circle:%d db:%s measurement:%s seconds:%d", err, backend.Url, proxy.GetBackendUrls(dstBackends), circle.CircleId, db, meas, seconds)
     }
@@ -639,7 +659,7 @@ func (proxy *Proxy) SetMigrating(circle *Circle, migrating bool) {
 
 func (proxy *Proxy) SetResyncingAndBroadcast(resyncing bool) {
     proxy.SetResyncing(resyncing)
-    client := NewClient(proxy.HTTPSEnabled)
+    client := NewClient(proxy.HTTPSEnabled, 10)
     for _, addr := range proxy.HaAddrs {
         url := fmt.Sprintf("http://%s/migrate/state?resyncing=%t", addr, resyncing)
         proxy.PostBroadcast(client, url)
@@ -648,7 +668,7 @@ func (proxy *Proxy) SetResyncingAndBroadcast(resyncing bool) {
 
 func (proxy *Proxy) SetMigratingAndBroadcast(circle *Circle, migrating bool) {
     proxy.SetMigrating(circle, migrating)
-    client := NewClient(proxy.HTTPSEnabled)
+    client := NewClient(proxy.HTTPSEnabled, 10)
     for _, addr := range proxy.HaAddrs {
         url := fmt.Sprintf("http://%s/migrate/state?circle_id=%d&migrating=%t", addr, circle.CircleId, migrating)
         proxy.PostBroadcast(client, url)

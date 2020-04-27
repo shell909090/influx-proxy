@@ -4,7 +4,6 @@ import (
     "flag"
     "fmt"
     "github.com/chengshiwen/influx-proxy/backend"
-    "github.com/chengshiwen/influx-proxy/config"
     "github.com/chengshiwen/influx-proxy/service"
     "log"
     "net/http"
@@ -44,7 +43,7 @@ func main() {
     server := &http.Server{
         Addr:        proxy.ListenAddr,
         Handler:     mux,
-        IdleTimeout: config.IdleTimeout * time.Second,
+        IdleTimeout: time.Duration(proxy.IdleTimeout) * time.Second,
     }
     if proxy.HTTPSEnabled {
         log.Printf("https service start, listen on %s", server.Addr)
