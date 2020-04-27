@@ -63,6 +63,11 @@ $ # build linux amd64
 $ make linux
 ```
 
+Tutorial
+-----------
+
+[Chinese](https://git.io/influx-proxy-wiki)
+
 Description
 -----------
 
@@ -108,29 +113,29 @@ Proxy Configuration
 The configurations in `proxy.json` are the following:
 
 * `circles`: circle list
-  * `name`: circle name
-  * `backends`: backend list belong to the circle
-    * `name`: backend name
-    * `url`: influxdb addr or other http backend which supports influxdb line protocol
-    * `username`: influxdb username, with encryption if proxy auth_secure is enabled
-    * `password`: influxdb password, with encryption if proxy auth_secure is enabled
-* `listen_addr`: proxy listen addr
-* `db_list`: database list permitted to access
-* `data_dir`: data dir to save .dat .rec, default is "data"
-* `mlog_dir`: log dir to save rebalance, recovery, resync or clear operation
-* `hash_key`: backend key for consistent hash, including "idx", "name" or "url", default is "idx", once changed rebalance operation is necessary
-* `vnode_size`: the size of virtual nodes for consistent hash, default is 256
-* `flush_size`: default config is 10000, wait 10000 points write
-* `flush_time`: default config is 1s, wait 1 second write whether point count has bigger than flush_size config
-* `check_interval`: default config is 1s, check backend active every 1 second
-* `rewrite_interval`: default config is 10s, rewrite every 10 seconds
-* `write_timeout`: default config is 10s, write timeout until 10 seconds
-* `idle_timeout`: default config is 10s, keep-alives wait time
-* `log_enabled`: enable the logging of debug messages for troubleshooting, default is false
-* `username`: proxy username, with encryption if auth_secure is enabled
-* `password`: proxy password, with encryption if auth_secure is enabled
-* `auth_secure`: secure auth with encryption, default is false
-* `https_enabled`: enable https, default is false
+  * `name`: circle name, `required`
+  * `backends`: backend list belong to the circle, `required`
+    * `name`: backend name, `required`
+    * `url`: influxdb addr or other http backend which supports influxdb line protocol, `required`
+    * `username`: influxdb username, with encryption if proxy auth_secure is enabled, default is `empty` which means no auth
+    * `password`: influxdb password, with encryption if proxy auth_secure is enabled, default is `empty` which means no auth
+* `listen_addr`: proxy listen addr, default is `:7076`
+* `db_list`: database list permitted to access, default is `[]`
+* `data_dir`: data dir to save .dat .rec, default is `data`
+* `mlog_dir`: log dir to save rebalance, recovery, resync or clear operation, default is `log`
+* `hash_key`: backend key for consistent hash, including "idx", "name" or "url", default is `idx`, once changed rebalance operation is necessary
+* `vnode_size`: the size of virtual nodes for consistent hash, default is `256`
+* `flush_size`: default is `10000`, wait 10000 points write
+* `flush_time`: default is `1`, wait 1 second write whether point count has bigger than flush_size config
+* `check_interval`: default is `1`, check backend active every 1 second
+* `rewrite_interval`: default is `10`, rewrite every 10 seconds
+* `write_timeout`: default is `10`, write timeout until 10 seconds
+* `idle_timeout`: default is `10`, keep-alives wait time until 10 seconds
+* `log_enabled`: enable the logging of debug messages for troubleshooting, default is `false`
+* `username`: proxy username, with encryption if auth_secure is enabled, default is `empty` which means no auth
+* `password`: proxy password, with encryption if auth_secure is enabled, default is `empty` which means no auth
+* `auth_secure`: secure auth with encryption, default is `false`
+* `https_enabled`: enable https, default is `false`
 * `https_cert`: the ssl certificate to use when https is enabled
 * `https_key`: use a separate private key location
 
@@ -167,6 +172,7 @@ Only support match the following commands.
 * `delete from`
 * `drop series from`
 * `drop measurement`
+* `on clause` (the `db` parameter takes precedence when the parameter is set in `/query` http endpoint)
 
 HTTP Endpoints
 --------
