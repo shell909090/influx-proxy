@@ -81,137 +81,137 @@ import "testing"
 // SHOW USERS
 
 func TestGetDatabaseFromInfluxQL(t *testing.T) {
-    assertDatabase(t, "ALTER RETENTION POLICY \"1h.cpu\" ON \"mydb\" DEFAULT", "mydb")
-    assertDatabase(t, "ALTER RETENTION POLICY \"policy1\" ON \"somedb\" DURATION 1h REPLICATION 4", "somedb")
-    assertDatabase(t, "CREATE DATABASE \"foo\"", "foo")
-    assertDatabase(t, "CREATE DATABASE \"bar\" WITH DURATION 1d REPLICATION 1 SHARD DURATION 30m NAME \"myrp\"", "bar")
-    assertDatabase(t, "CREATE DATABASE \"mydb\" WITH NAME \"myrp\"", "mydb")
-    assertDatabase(t, "CREATE RETENTION POLICY \"10m.events\" ON \"somedb\" DURATION 60m REPLICATION 2 SHARD DURATION 30m", "somedb")
-    assertDatabase(t, "CREATE SUBSCRIPTION \"sub0\" ON \"mydb\".\"autogen\" DESTINATIONS ALL 'udp://example.com:9090'", "mydb")
-    assertDatabase(t, "CREATE SUBSCRIPTION \"sub0\" ON \"my.db\".autogen DESTINATIONS ALL 'udp://example.com:9090'", "my.db")
-    assertDatabase(t, "CREATE SUBSCRIPTION \"sub0\" ON mydb.autogen DESTINATIONS ALL 'udp://example.com:9090'", "mydb")
-    assertDatabase(t, "CREATE SUBSCRIPTION \"sub0\" ON mydb.\"autogen\" DESTINATIONS ALL 'udp://example.com:9090'", "mydb")
+	assertDatabase(t, "ALTER RETENTION POLICY \"1h.cpu\" ON \"mydb\" DEFAULT", "mydb")
+	assertDatabase(t, "ALTER RETENTION POLICY \"policy1\" ON \"somedb\" DURATION 1h REPLICATION 4", "somedb")
+	assertDatabase(t, "CREATE DATABASE \"foo\"", "foo")
+	assertDatabase(t, "CREATE DATABASE \"bar\" WITH DURATION 1d REPLICATION 1 SHARD DURATION 30m NAME \"myrp\"", "bar")
+	assertDatabase(t, "CREATE DATABASE \"mydb\" WITH NAME \"myrp\"", "mydb")
+	assertDatabase(t, "CREATE RETENTION POLICY \"10m.events\" ON \"somedb\" DURATION 60m REPLICATION 2 SHARD DURATION 30m", "somedb")
+	assertDatabase(t, "CREATE SUBSCRIPTION \"sub0\" ON \"mydb\".\"autogen\" DESTINATIONS ALL 'udp://example.com:9090'", "mydb")
+	assertDatabase(t, "CREATE SUBSCRIPTION \"sub0\" ON \"my.db\".autogen DESTINATIONS ALL 'udp://example.com:9090'", "my.db")
+	assertDatabase(t, "CREATE SUBSCRIPTION \"sub0\" ON mydb.autogen DESTINATIONS ALL 'udp://example.com:9090'", "mydb")
+	assertDatabase(t, "CREATE SUBSCRIPTION \"sub0\" ON mydb.\"autogen\" DESTINATIONS ALL 'udp://example.com:9090'", "mydb")
 
-    assertDatabase(t, "DROP CONTINUOUS QUERY \"myquery\" ON \"mydb\"", "mydb")
-    assertDatabase(t, "DROP DATABASE \"mydb\"", "mydb")
-    assertDatabase(t, "DROP RETENTION POLICY \"1h.cpu\" ON \"mydb\"", "mydb")
-    assertDatabase(t, "DROP SUBSCRIPTION \"sub0\" ON \"mydb\".\"autogen\"", "mydb")
-    assertDatabase(t, "GRANT READ ON \"mydb\" TO \"jdoe\"", "mydb")
-    assertDatabase(t, "REVOKE READ ON \"mydb\" FROM \"jdoe\"", "mydb")
-    assertDatabase(t, "SHOW FIELD KEY EXACT CARDINALITY ON mydb", "mydb")
-    assertDatabase(t, "SHOW MEASUREMENT EXACT CARDINALITY ON mydb", "mydb")
-    assertDatabase(t, "SHOW RETENTION POLICIES ON \"mydb\"", "mydb")
-    assertDatabase(t, "SHOW SERIES CARDINALITY ON mydb", "mydb")
-    assertDatabase(t, "SHOW SERIES EXACT CARDINALITY ON mydb", "mydb")
+	assertDatabase(t, "DROP CONTINUOUS QUERY \"myquery\" ON \"mydb\"", "mydb")
+	assertDatabase(t, "DROP DATABASE \"mydb\"", "mydb")
+	assertDatabase(t, "DROP RETENTION POLICY \"1h.cpu\" ON \"mydb\"", "mydb")
+	assertDatabase(t, "DROP SUBSCRIPTION \"sub0\" ON \"mydb\".\"autogen\"", "mydb")
+	assertDatabase(t, "GRANT READ ON \"mydb\" TO \"jdoe\"", "mydb")
+	assertDatabase(t, "REVOKE READ ON \"mydb\" FROM \"jdoe\"", "mydb")
+	assertDatabase(t, "SHOW FIELD KEY EXACT CARDINALITY ON mydb", "mydb")
+	assertDatabase(t, "SHOW MEASUREMENT EXACT CARDINALITY ON mydb", "mydb")
+	assertDatabase(t, "SHOW RETENTION POLICIES ON \"mydb\"", "mydb")
+	assertDatabase(t, "SHOW SERIES CARDINALITY ON mydb", "mydb")
+	assertDatabase(t, "SHOW SERIES EXACT CARDINALITY ON mydb", "mydb")
 
-    assertDatabase(t, "CREATE DATABASE foo;", "foo")
-    assertDatabase(t, "CREATE DATABASE \"f.oo\"", "f.oo")
-    assertDatabase(t, "CREATE DATABASE \"f,oo\"", "f,oo")
-    assertDatabase(t, "CREATE DATABASE \"f oo\"", "f oo")
-    assertDatabase(t, "CREATE DATABASE \"f\\\"oo\"", "f\"oo")
+	assertDatabase(t, "CREATE DATABASE foo;", "foo")
+	assertDatabase(t, "CREATE DATABASE \"f.oo\"", "f.oo")
+	assertDatabase(t, "CREATE DATABASE \"f,oo\"", "f,oo")
+	assertDatabase(t, "CREATE DATABASE \"f oo\"", "f oo")
+	assertDatabase(t, "CREATE DATABASE \"f\\\"oo\"", "f\"oo")
 }
 
 func assertDatabase(t *testing.T, q string, d string) {
-    qd, err := GetDatabaseFromInfluxQL(q)
-    if err != nil {
-        t.Errorf("error: %s, %s", q, err)
-        return
-    }
-    if qd != d {
-        t.Errorf("database wrong: %s, %s != %s", q, qd, d)
-        return
-    }
+	qd, err := GetDatabaseFromInfluxQL(q)
+	if err != nil {
+		t.Errorf("error: %s, %s", q, err)
+		return
+	}
+	if qd != d {
+		t.Errorf("database wrong: %s, %s != %s", q, qd, d)
+		return
+	}
 }
 
 func TestGetMeasurementFromInfluxQL(t *testing.T) {
-    assertMeasurement(t, "DELETE FROM \"cpu\"", "cpu")
-    assertMeasurement(t, "DELETE FROM \"cpu\" WHERE time < '2000-01-01T00:00:00Z'", "cpu")
+	assertMeasurement(t, "DELETE FROM \"cpu\"", "cpu")
+	assertMeasurement(t, "DELETE FROM \"cpu\" WHERE time < '2000-01-01T00:00:00Z'", "cpu")
 
-    assertMeasurement(t, "DROP MEASUREMENT cpu;", "cpu")
-    assertMeasurement(t, "DROP MEASUREMENT \"cpu\"", "cpu")
-    assertMeasurement(t, "DROP SERIES FROM \"cpu\" WHERE cpu = 'cpu8'", "cpu")
-    assertMeasurement(t, "DROP SERIES FROM \"telegraf\"..\"cp u\" WHERE cpu = 'cpu8'", "cp u")
-    assertMeasurement(t, "DROP SERIES FROM \"telegraf\".\"autogen\".\"cp u\" WHERE cpu = 'cpu8'", "cp u")
+	assertMeasurement(t, "DROP MEASUREMENT cpu;", "cpu")
+	assertMeasurement(t, "DROP MEASUREMENT \"cpu\"", "cpu")
+	assertMeasurement(t, "DROP SERIES FROM \"cpu\" WHERE cpu = 'cpu8'", "cpu")
+	assertMeasurement(t, "DROP SERIES FROM \"telegraf\"..\"cp u\" WHERE cpu = 'cpu8'", "cp u")
+	assertMeasurement(t, "DROP SERIES FROM \"telegraf\".\"autogen\".\"cp u\" WHERE cpu = 'cpu8'", "cp u")
 
-    assertMeasurement(t, "REVOKE ALL PRIVILEGES FROM \"jdoe\"", "jdoe")
-    assertMeasurement(t, "REVOKE READ ON \"mydb\" FROM \"jdoe\"", "jdoe")
+	assertMeasurement(t, "REVOKE ALL PRIVILEGES FROM \"jdoe\"", "jdoe")
+	assertMeasurement(t, "REVOKE READ ON \"mydb\" FROM \"jdoe\"", "jdoe")
 
-    assertMeasurement(t, "select * from cpu", "cpu")
-    assertMeasurement(t, "(select *) from \"c.pu\"", "c.pu")
-    assertMeasurement(t, "[select *] from \"c,pu\"", "c,pu")
-    assertMeasurement(t, "{select *} from \"c pu\"", "c pu")
-    assertMeasurement(t, "select * from \"cpu\"", "cpu")
-    assertMeasurement(t, "select * from \"c\\\"pu\"", "c\"pu")
-    assertMeasurement(t, "select * from 'cpu'", "cpu")
-    // assertMeasurement(t, "select * from db.autogen.cpu", "cpu")
-    // assertMeasurement(t, "select * from db.autogen.\"cpu.load\"", "cpu.load")
-    // assertMeasurement(t, "select * from db.\"autogen\".\"cpu.load\"", "cpu.load")
-    assertMeasurement(t, "select * from \"db\".\"autogen\".\"cpu.load\"", "cpu.load")
-    assertMeasurement(t, "select * from \"d.b\".\"autogen\".\"cpu.load\"", "cpu.load")
+	assertMeasurement(t, "select * from cpu", "cpu")
+	assertMeasurement(t, "(select *) from \"c.pu\"", "c.pu")
+	assertMeasurement(t, "[select *] from \"c,pu\"", "c,pu")
+	assertMeasurement(t, "{select *} from \"c pu\"", "c pu")
+	assertMeasurement(t, "select * from \"cpu\"", "cpu")
+	assertMeasurement(t, "select * from \"c\\\"pu\"", "c\"pu")
+	assertMeasurement(t, "select * from 'cpu'", "cpu")
+	// assertMeasurement(t, "select * from db.autogen.cpu", "cpu")
+	// assertMeasurement(t, "select * from db.autogen.\"cpu.load\"", "cpu.load")
+	// assertMeasurement(t, "select * from db.\"autogen\".\"cpu.load\"", "cpu.load")
+	assertMeasurement(t, "select * from \"db\".\"autogen\".\"cpu.load\"", "cpu.load")
+	assertMeasurement(t, "select * from \"d.b\".\"autogen\".\"cpu.load\"", "cpu.load")
 
-    assertMeasurement(t, "SELECT mean(\"value\") INTO \"cpu\\\"_1h\".:MEASUREMENT FROM /cpu.*/", "/cpu.*/")
-    assertMeasurement(t, "SELECT mean(\"value\") FROM \"cpu\" WHERE \"region\" = 'uswest' GROUP BY time(10m) fill(0)", "cpu")
+	assertMeasurement(t, "SELECT mean(\"value\") INTO \"cpu\\\"_1h\".:MEASUREMENT FROM /cpu.*/", "/cpu.*/")
+	assertMeasurement(t, "SELECT mean(\"value\") FROM \"cpu\" WHERE \"region\" = 'uswest' GROUP BY time(10m) fill(0)", "cpu")
 
-    // assertMeasurement(t, "SHOW FIELD KEYS", "cpu")
-    assertMeasurement(t, "SHOW FIELD KEYS FROM \"cpu\"", "cpu")
-    assertMeasurement(t, "SHOW FIELD KEYS FROM \"1h\".\"cpu\"", "cpu")
-    assertMeasurement(t, "SHOW FIELD KEYS FROM 1h.cpu", "cpu")
-    assertMeasurement(t, "SHOW FIELD KEYS FROM \"cpu.load\"", "cpu.load")
-    assertMeasurement(t, "SHOW FIELD KEYS FROM 1h.\"cpu.load\"", "cpu.load")
-    assertMeasurement(t, "SHOW FIELD KEYS FROM \"1h\".\"cpu.load\"", "cpu.load")
-    assertMeasurement(t, "SHOW SERIES FROM \"cpu\" WHERE cpu = 'cpu8'", "cpu")
-    assertMeasurement(t, "SHOW SERIES FROM \"telegraf\"..\"cp.u\" WHERE cpu = 'cpu8'", "cp.u")
-    assertMeasurement(t, "SHOW SERIES FROM \"telegraf\".\"autogen\".\"cp.u\" WHERE cpu = 'cpu8'", "cp.u")
+	// assertMeasurement(t, "SHOW FIELD KEYS", "cpu")
+	assertMeasurement(t, "SHOW FIELD KEYS FROM \"cpu\"", "cpu")
+	assertMeasurement(t, "SHOW FIELD KEYS FROM \"1h\".\"cpu\"", "cpu")
+	assertMeasurement(t, "SHOW FIELD KEYS FROM 1h.cpu", "cpu")
+	assertMeasurement(t, "SHOW FIELD KEYS FROM \"cpu.load\"", "cpu.load")
+	assertMeasurement(t, "SHOW FIELD KEYS FROM 1h.\"cpu.load\"", "cpu.load")
+	assertMeasurement(t, "SHOW FIELD KEYS FROM \"1h\".\"cpu.load\"", "cpu.load")
+	assertMeasurement(t, "SHOW SERIES FROM \"cpu\" WHERE cpu = 'cpu8'", "cpu")
+	assertMeasurement(t, "SHOW SERIES FROM \"telegraf\"..\"cp.u\" WHERE cpu = 'cpu8'", "cp.u")
+	assertMeasurement(t, "SHOW SERIES FROM \"telegraf\".\"autogen\".\"cp.u\" WHERE cpu = 'cpu8'", "cp.u")
 
-    // assertMeasurement(t, "SHOW TAG KEYS", "cpu")
-    assertMeasurement(t, "SHOW TAG KEYS FROM cpu", "cpu")
-    assertMeasurement(t, "SHOW TAG KEYS FROM \"cpu\" WHERE \"region\" = 'uswest'", "cpu")
-    // assertMeasurement(t, "SHOW TAG KEYS WHERE \"host\" = 'serverA'", "cpu")
+	// assertMeasurement(t, "SHOW TAG KEYS", "cpu")
+	assertMeasurement(t, "SHOW TAG KEYS FROM cpu", "cpu")
+	assertMeasurement(t, "SHOW TAG KEYS FROM \"cpu\" WHERE \"region\" = 'uswest'", "cpu")
+	// assertMeasurement(t, "SHOW TAG KEYS WHERE \"host\" = 'serverA'", "cpu")
 
-    // assertMeasurement(t, "SHOW TAG VALUES WITH KEY = \"region\"", "cpu")
-    assertMeasurement(t, "SHOW TAG VALUES FROM \"cpu\" WITH KEY = \"region\"", "cpu")
-    // assertMeasurement(t, "SHOW TAG VALUES WITH KEY !~ /.*c.*/", "cpu")
-    assertMeasurement(t, "SHOW TAG VALUES FROM \"cpu\" WITH KEY IN (\"region\", \"host\") WHERE \"service\" = 'redis'", "cpu")
+	// assertMeasurement(t, "SHOW TAG VALUES WITH KEY = \"region\"", "cpu")
+	assertMeasurement(t, "SHOW TAG VALUES FROM \"cpu\" WITH KEY = \"region\"", "cpu")
+	// assertMeasurement(t, "SHOW TAG VALUES WITH KEY !~ /.*c.*/", "cpu")
+	assertMeasurement(t, "SHOW TAG VALUES FROM \"cpu\" WITH KEY IN (\"region\", \"host\") WHERE \"service\" = 'redis'", "cpu")
 }
 
 func assertMeasurement(t *testing.T, q string, m string) {
-    qm, err := GetMeasurementFromInfluxQL(q)
-    if err != nil {
-        t.Errorf("error: %s, %s", q, err)
-        return
-    }
-    if qm != m {
-        t.Errorf("measurement wrong: %s, %s != %s", q, qm, m)
-        return
-    }
+	qm, err := GetMeasurementFromInfluxQL(q)
+	if err != nil {
+		t.Errorf("error: %s, %s", q, err)
+		return
+	}
+	if qm != m {
+		t.Errorf("measurement wrong: %s, %s != %s", q, qm, m)
+		return
+	}
 }
 
 func BenchmarkGetDatabaseFromInfluxQL(b *testing.B) {
-    q := "CREATE SUBSCRIPTION \"sub0\" ON \"mydb\".\"autogen\" DESTINATIONS ALL 'udp://example.com:9090'"
-    for i := 0; i < b.N; i++ {
-        qd, err := GetDatabaseFromInfluxQL(q)
-        if err != nil {
-            b.Errorf("error: %s", err)
-            return
-        }
-        if qd != "mydb" {
-            b.Errorf("database wrong: %s != %s", qd, "mydb")
-            return
-        }
-    }
+	q := "CREATE SUBSCRIPTION \"sub0\" ON \"mydb\".\"autogen\" DESTINATIONS ALL 'udp://example.com:9090'"
+	for i := 0; i < b.N; i++ {
+		qd, err := GetDatabaseFromInfluxQL(q)
+		if err != nil {
+			b.Errorf("error: %s", err)
+			return
+		}
+		if qd != "mydb" {
+			b.Errorf("database wrong: %s != %s", qd, "mydb")
+			return
+		}
+	}
 }
 
 func BenchmarkGetMeasurementFromInfluxQL(b *testing.B) {
-    q := "SELECT mean(\"value\") FROM \"cpu\" WHERE \"region\" = 'uswest' GROUP BY time(10m) fill(0)"
-    for i := 0; i < b.N; i++ {
-        qm, err := GetMeasurementFromInfluxQL(q)
-        if err != nil {
-            b.Errorf("error: %s", err)
-            return
-        }
-        if qm != "cpu" {
-            b.Errorf("measurement wrong: %s != %s", qm, "cpu")
-            return
-        }
-    }
+	q := "SELECT mean(\"value\") FROM \"cpu\" WHERE \"region\" = 'uswest' GROUP BY time(10m) fill(0)"
+	for i := 0; i < b.N; i++ {
+		qm, err := GetMeasurementFromInfluxQL(q)
+		if err != nil {
+			b.Errorf("error: %s", err)
+			return
+		}
+		if qm != "cpu" {
+			b.Errorf("measurement wrong: %s != %s", qm, "cpu")
+			return
+		}
+	}
 }
