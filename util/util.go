@@ -8,6 +8,13 @@ import (
 	"os"
 )
 
+func MinInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 func MapHasKey(m map[string]bool, k string) bool {
 	if _, ok := m[k]; ok {
 		return true

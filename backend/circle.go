@@ -235,8 +235,8 @@ func (circle *Circle) Migrate(srcBackend *Backend, dstBackends []*Backend, db, m
 	}
 	fieldKeys := srcBackend.GetFieldKeys(db, meas)
 
-	vlen := len(series[0].Values)
-	var lines []string
+	valen := len(series[0].Values)
+	lines := make([]string, 0, util.MinInt(valen, batch))
 	for idx, value := range series[0].Values {
 		mtagSet := []string{util.EscapeMeasurement(meas)}
 		fieldSet := make([]string, 0)
@@ -264,7 +264,7 @@ func (circle *Circle) Migrate(srcBackend *Backend, dstBackends []*Backend, db, m
 		ts, _ := time.Parse(time.RFC3339Nano, value[0].(string))
 		line := fmt.Sprintf("%s %s %d", mtagStr, fieldStr, ts.UnixNano())
 		lines = append(lines, line)
-		if (idx+1)%batch == 0 || idx+1 == vlen {
+		if (idx+1)%batch == 0 || idx+1 == valen {
 			if len(lines) != 0 {
 				lineData := strings.Join(lines, "\n")
 				for _, dstBackend := range dstBackends {
