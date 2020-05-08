@@ -65,7 +65,7 @@ type MigrateInfo struct {
 }
 
 func NewProxy(file string) (proxy *Proxy, err error) {
-	proxy, err = LoadProxyConfig(file)
+	proxy, err = LoadConfig(file)
 	if err != nil {
 		return
 	}
@@ -87,7 +87,7 @@ func NewProxy(file string) (proxy *Proxy, err error) {
 	return
 }
 
-func LoadProxyConfig(file string) (proxy *Proxy, err error) {
+func LoadConfig(file string) (proxy *Proxy, err error) {
 	proxy = &Proxy{}
 	f, err := os.Open(file)
 	defer f.Close()
@@ -99,6 +99,23 @@ func LoadProxyConfig(file string) (proxy *Proxy, err error) {
 	if err != nil {
 		return
 	}
+	proxy.SetDefaultConfig()
+	err = proxy.CheckConfig()
+	if err != nil {
+		return
+	}
+	log.Printf("%d circles loaded from file", len(proxy.Circles))
+	for id, circle := range proxy.Circles {
+		log.Printf("circle %d: %d backends loaded", id, len(circle.Backends))
+	}
+	log.Printf("hash key: %s", proxy.HashKey)
+	if len(proxy.DbList) > 0 {
+		log.Printf("db list: %v", proxy.DbList)
+	}
+	return
+}
+
+func (proxy *Proxy) SetDefaultConfig() {
 	if proxy.ListenAddr == "" {
 		proxy.ListenAddr = ":7076"
 	}
@@ -110,8 +127,6 @@ func LoadProxyConfig(file string) (proxy *Proxy, err error) {
 	}
 	if proxy.HashKey == "" {
 		proxy.HashKey = "idx"
-	} else if proxy.HashKey != "idx" && proxy.HashKey != "name" && proxy.HashKey != "url" {
-		return nil, errors.New("invalid hash_key, should be idx, name or url")
 	}
 	if proxy.VNodeSize <= 0 {
 		proxy.VNodeSize = 256
@@ -140,22 +155,12 @@ func LoadProxyConfig(file string) (proxy *Proxy, err error) {
 	if proxy.MigrateBatch <= 0 {
 		proxy.MigrateBatch = 25000
 	}
-	err = proxy.CheckBackends()
-	if err != nil {
-		return
-	}
-	log.Printf("%d circles loaded from file", len(proxy.Circles))
-	for id, circle := range proxy.Circles {
-		log.Printf("circle %d: %d backends loaded", id, len(circle.Backends))
-	}
-	log.Printf("hash key: %s", proxy.HashKey)
-	if len(proxy.DbList) > 0 {
-		log.Printf("db list: %v", proxy.DbList)
-	}
-	return
 }
 
-func (proxy *Proxy) CheckBackends() error {
+func (proxy *Proxy) CheckConfig() (err error) {
+	if len(proxy.Circles) == 0 {
+		return errors.New("circles cannot be empty")
+	}
 	rec := make(map[string]bool)
 	for _, circle := range proxy.Circles {
 		if len(circle.Backends) == 0 {
@@ -171,7 +176,10 @@ func (proxy *Proxy) CheckBackends() error {
 			rec[backend.Name] = true
 		}
 	}
-	return nil
+	if proxy.HashKey != "idx" && proxy.HashKey != "name" && proxy.HashKey != "url" {
+		return errors.New("invalid hash_key, should be idx, name or url")
+	}
+	return
 }
 
 func (proxy *Proxy) initCircle(circle *Circle) {
