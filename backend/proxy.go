@@ -322,13 +322,8 @@ func (proxy *Proxy) WriteData(data *LineData) {
 
 	key := GetKey(data.Db, meas)
 	backends := proxy.GetBackends(key)
-	// fmt.Printf("%s key: %s; backends:", time.Now().Format("2006-01-02 15:04:05"), key)
-	// for _, b := range backends {
-	//     fmt.Printf(" %s", b.Name)
-	// }
-	// fmt.Printf("\n")
 	if len(backends) == 0 {
-		log.Printf("write data: %v, error: get backends length is 0", data)
+		log.Printf("write data error: get backends return 0")
 		return
 	}
 
