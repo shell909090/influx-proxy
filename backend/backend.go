@@ -301,7 +301,7 @@ func (backend *Backend) FlushBuffer(db string) (err error) {
 			log.Printf("bad backend, drop all data")
 			return nil
 		default:
-			log.Printf("write http error: %s", err)
+			log.Printf("write http error: %s %s, length: %d", backend.Url, db, len(p))
 		}
 	}
 
@@ -392,7 +392,7 @@ func (backend *Backend) Rewrite() (err error) {
 		log.Printf("bad backend, drop all data")
 		err = nil
 	default:
-		log.Printf("rewrite http error: %s", err)
+		log.Printf("rewrite http error: %s %s, length: %d", backend.Url, db, len(p[1]))
 
 		err = backend.RollbackMeta()
 		if err != nil {
@@ -590,9 +590,12 @@ func (backend *Backend) QueryIQL(db, query string) ([]byte, error) {
 }
 
 func (backend *Backend) GetSeriesValues(db, query string) []string {
-	p, _ := backend.Query(NewRequest(db, query), nil, true)
-	series, _ := SeriesFromResponseBytes(p)
 	var values []string
+	p, err := backend.Query(NewRequest(db, query), nil, true)
+	if err != nil {
+		return values
+	}
+	series, _ := SeriesFromResponseBytes(p)
 	for _, s := range series {
 		for _, v := range s.Values {
 			if s.Name == "databases" && v[0].(string) == "_internal" {
@@ -617,10 +620,13 @@ func (backend *Backend) GetTagKeys(db, meas string) []string {
 }
 
 func (backend *Backend) GetFieldKeys(db, meas string) map[string]string {
-	query := fmt.Sprintf("show field keys from \"%s\"", meas)
-	p, _ := backend.Query(NewRequest(db, query), nil, true)
-	series, _ := SeriesFromResponseBytes(p)
 	fieldKeys := make(map[string]string)
+	query := fmt.Sprintf("show field keys from \"%s\"", meas)
+	p, err := backend.Query(NewRequest(db, query), nil, true)
+	if err != nil {
+		return fieldKeys
+	}
+	series, _ := SeriesFromResponseBytes(p)
 	for _, s := range series {
 		for _, v := range s.Values {
 			fieldKeys[v[0].(string)] = v[1].(string)

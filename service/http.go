@@ -97,9 +97,9 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
 
 	body, err := hs.Query(w, req, tokens, db, alterDb)
 	if err != nil {
-		log.Printf("query error: %s %s %s", q, db, err)
+		log.Printf("query error: %s, the query is %s, db is %s", err, q, db)
 		w.WriteHeader(400)
-		hs.write(w, fmt.Sprintf("query error: %s", err))
+		hs.writeResp(w, fmt.Sprintf("query error: %s", err))
 		return
 	}
 	w.Write(body)
@@ -579,6 +579,10 @@ func (hs *HttpService) write(w http.ResponseWriter, msg string) {
 	if hs.LogEnabled {
 		log.Printf(msg)
 	}
+	hs.writeResp(w, msg)
+}
+
+func (hs *HttpService) writeResp(w http.ResponseWriter, msg string) {
 	if w.Header().Get("Content-Type") == "application/json" {
 		rsp := backend.ResponseFromError(msg, true)
 		w.Write(util.MarshalJson(rsp, false, true))

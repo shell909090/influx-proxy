@@ -6,7 +6,6 @@ import (
 	"github.com/chengshiwen/influx-proxy/util"
 	"github.com/influxdata/influxdb1-client/models"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"stathat.com/c/consistent"
 	"strings"
@@ -87,7 +86,6 @@ func (circle *Circle) Query(w http.ResponseWriter, req *http.Request, tokens []s
 		req.Body = ioutil.NopCloser(bytes.NewBuffer(reqBodyBytes))
 		body, err := backend.Query(req, w, true)
 		if err != nil {
-			log.Printf("backend query error: %s %s", backend.Url, err)
 			return nil, err
 		}
 		if body != nil {
