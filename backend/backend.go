@@ -619,8 +619,8 @@ func (backend *Backend) GetTagKeys(db, meas string) []string {
 	return backend.GetSeriesValues(db, fmt.Sprintf("show tag keys from \"%s\"", meas))
 }
 
-func (backend *Backend) GetFieldKeys(db, meas string) map[string]string {
-	fieldKeys := make(map[string]string)
+func (backend *Backend) GetFieldKeys(db, meas string) map[string][]string {
+	fieldKeys := make(map[string][]string)
 	query := fmt.Sprintf("show field keys from \"%s\"", meas)
 	p, err := backend.Query(NewRequest(db, query), nil, true)
 	if err != nil {
@@ -629,7 +629,8 @@ func (backend *Backend) GetFieldKeys(db, meas string) map[string]string {
 	series, _ := SeriesFromResponseBytes(p)
 	for _, s := range series {
 		for _, v := range s.Values {
-			fieldKeys[v[0].(string)] = v[1].(string)
+			fk := v[0].(string)
+			fieldKeys[fk] = append(fieldKeys[fk], v[1].(string))
 		}
 	}
 	return fieldKeys

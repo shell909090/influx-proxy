@@ -13,6 +13,8 @@ import (
 	"time"
 )
 
+var FieldDataTypes = []string{"float", "integer", "string", "boolean"}
+
 type Circle struct {
 	Name         string                     `json:"name"`
 	CircleId     int                        `json:"circle_id"`
@@ -232,6 +234,7 @@ func (circle *Circle) Migrate(srcBackend *Backend, dstBackends []*Backend, db, m
 		tagMap[t] = true
 	}
 	fieldKeys := srcBackend.GetFieldKeys(db, meas)
+	fieldMap := reformFieldKeys(fieldKeys)
 
 	valen := len(series[0].Values)
 	lines := make([]string, 0, util.MinInt(valen, batch))
@@ -245,12 +248,12 @@ func (circle *Circle) Migrate(srcBackend *Backend, dstBackends []*Backend, db, m
 				if v != nil {
 					mtagSet = append(mtagSet, fmt.Sprintf("%s=%s", util.EscapeTag(k), util.EscapeTag(v.(string))))
 				}
-			} else if vtype, ok := fieldKeys[k]; ok {
+			} else if vtype, ok := fieldMap[k]; ok {
 				if v != nil {
 					if vtype == "float" || vtype == "boolean" {
 						fieldSet = append(fieldSet, fmt.Sprintf("%s=%v", util.EscapeTag(k), v))
 					} else if vtype == "integer" {
-						fieldSet = append(fieldSet, fmt.Sprintf("%s=%di", util.EscapeTag(k), int64(v.(float64))))
+						fieldSet = append(fieldSet, fmt.Sprintf("%s=%vi", util.EscapeTag(k), v))
 					} else if vtype == "string" {
 						fieldSet = append(fieldSet, fmt.Sprintf("%s=\"%s\"", util.EscapeTag(k), models.EscapeStringField(v.(string))))
 					}
@@ -276,4 +279,31 @@ func (circle *Circle) Migrate(srcBackend *Backend, dstBackends []*Backend, db, m
 		}
 	}
 	return nil
+}
+
+func reformFieldKeys(fieldKeys map[string][]string) map[string]string {
+	// The SELECT statement returns all field values if all values have the same type.
+	// If field value types differ across shards, InfluxDB first performs any applicable cast operations and
+	// then returns all values with the type that occurs first in the following list: float, integer, string, boolean.
+	fieldHash := make(map[string]map[string]bool, len(fieldKeys))
+	for field, types := range fieldKeys {
+		fieldHash[field] = make(map[string]bool, len(types))
+		for _, t := range types {
+			fieldHash[field][t] = true
+		}
+	}
+	fieldMap := make(map[string]string, len(fieldKeys))
+	for field, types := range fieldKeys {
+		if len(types) == 1 {
+			fieldMap[field] = types[0]
+		} else {
+			for _, dt := range FieldDataTypes {
+				if _, ok := fieldHash[field][dt]; ok {
+					fieldMap[field] = dt
+					break
+				}
+			}
+		}
+	}
+	return fieldMap
 }
