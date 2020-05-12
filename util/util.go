@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
+	"github.com/deckarep/golang-set"
 	"io"
 	"os"
 )
@@ -15,11 +16,12 @@ func MinInt(a, b int) int {
 	return b
 }
 
-func MapHasKey(m map[string]bool, k string) bool {
-	if _, ok := m[k]; ok {
-		return true
+func NewSetFromStrSlice(s []string) mapset.Set {
+	set := mapset.NewSet()
+	for _, v := range s {
+		set.Add(v)
 	}
-	return false
+	return set
 }
 
 func PathExist(path string) (bool, error) {

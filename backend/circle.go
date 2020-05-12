@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/chengshiwen/influx-proxy/util"
+	"github.com/deckarep/golang-set"
 	"github.com/influxdata/influxdb1-client/models"
 	"io/ioutil"
 	"net/http"
@@ -229,10 +230,7 @@ func (circle *Circle) Migrate(srcBackend *Backend, dstBackends []*Backend, db, m
 	columns := series[0].Columns
 
 	tagKeys := srcBackend.GetTagKeys(db, meas)
-	tagMap := make(map[string]bool, 0)
-	for _, t := range tagKeys {
-		tagMap[t] = true
-	}
+	tagMap := util.NewSetFromStrSlice(tagKeys)
 	fieldKeys := srcBackend.GetFieldKeys(db, meas)
 	fieldMap := reformFieldKeys(fieldKeys)
 
@@ -244,7 +242,7 @@ func (circle *Circle) Migrate(srcBackend *Backend, dstBackends []*Backend, db, m
 		for i := 1; i < len(value); i++ {
 			k := columns[i]
 			v := value[i]
-			if _, ok := tagMap[k]; ok {
+			if tagMap.Contains(k) {
 				if v != nil {
 					mtagSet = append(mtagSet, fmt.Sprintf("%s=%s", util.EscapeTag(k), util.EscapeTag(v.(string))))
 				}
@@ -285,12 +283,9 @@ func reformFieldKeys(fieldKeys map[string][]string) map[string]string {
 	// The SELECT statement returns all field values if all values have the same type.
 	// If field value types differ across shards, InfluxDB first performs any applicable cast operations and
 	// then returns all values with the type that occurs first in the following list: float, integer, string, boolean.
-	fieldHash := make(map[string]map[string]bool, len(fieldKeys))
+	fieldSet := make(map[string]mapset.Set, len(fieldKeys))
 	for field, types := range fieldKeys {
-		fieldHash[field] = make(map[string]bool, len(types))
-		for _, t := range types {
-			fieldHash[field][t] = true
-		}
+		fieldSet[field] = util.NewSetFromStrSlice(types)
 	}
 	fieldMap := make(map[string]string, len(fieldKeys))
 	for field, types := range fieldKeys {
@@ -298,7 +293,7 @@ func reformFieldKeys(fieldKeys map[string][]string) map[string]string {
 			fieldMap[field] = types[0]
 		} else {
 			for _, dt := range FieldDataTypes {
-				if _, ok := fieldHash[field][dt]; ok {
+				if fieldSet[field].Contains(dt) {
 					fieldMap[field] = dt
 					break
 				}

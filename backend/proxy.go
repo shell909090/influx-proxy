@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/chengshiwen/influx-proxy/util"
+	"github.com/deckarep/golang-set"
 	"io/ioutil"
 	"log"
 	"math/rand"
@@ -23,7 +24,7 @@ type Proxy struct {
 	Circles         []*Circle                 `json:"circles"`
 	ListenAddr      string                    `json:"listen_addr"`
 	DbList          []string                  `json:"db_list"`
-	DbMap           map[string]bool           `json:"db_map"`
+	DbSet           mapset.Set                `json:"db_set"`
 	DataDir         string                    `json:"data_dir"`
 	MlogDir         string                    `json:"mlog_dir"`
 	HashKey         string                    `json:"hash_key"`
@@ -80,10 +81,7 @@ func NewProxy(file string) (proxy *Proxy, err error) {
 		proxy.initCircle(circle)
 		proxy.initMigrateStats(circle)
 	}
-	proxy.DbMap = make(map[string]bool)
-	for _, db := range proxy.DbList {
-		proxy.DbMap[db] = true
-	}
+	proxy.DbSet = util.NewSetFromStrSlice(proxy.DbList)
 	return
 }
 
@@ -161,7 +159,7 @@ func (proxy *Proxy) CheckConfig() (err error) {
 	if len(proxy.Circles) == 0 {
 		return errors.New("circles cannot be empty")
 	}
-	rec := make(map[string]bool)
+	rec := mapset.NewSet()
 	for _, circle := range proxy.Circles {
 		if len(circle.Backends) == 0 {
 			return errors.New("backends cannot be empty")
@@ -170,10 +168,10 @@ func (proxy *Proxy) CheckConfig() (err error) {
 			if backend.Name == "" {
 				return errors.New("backend name cannot be empty")
 			}
-			if _, ok := rec[backend.Name]; ok {
+			if rec.Contains(backend.Name) {
 				return errors.New("backend name exists: " + backend.Name)
 			}
-			rec[backend.Name] = true
+			rec.Add(backend.Name)
 		}
 	}
 	if proxy.HashKey != "idx" && proxy.HashKey != "name" && proxy.HashKey != "url" {
@@ -246,22 +244,22 @@ func (proxy *Proxy) GetBackends(key string) []*Backend {
 func (proxy *Proxy) Query(w http.ResponseWriter, req *http.Request, tokens []string, db string, alterDb bool) (body []byte, err error) {
 	if CheckSelectOrShowFromTokens(tokens) {
 		var circle *Circle
-		badIds := make(map[int]bool)
+		badIds := mapset.NewSet()
 		for {
 			id := rand.Intn(len(proxy.Circles))
-			if _, ok := badIds[id]; ok {
+			if badIds.Contains(id) {
 				continue
 			}
 			circle = proxy.Circles[id]
 			if circle.IsMigrating {
-				badIds[id] = true
+				badIds.Add(id)
 				continue
 			}
 			if circle.CheckStatus() {
 				break
 			}
-			badIds[id] = true
-			if len(badIds) == len(proxy.Circles) {
+			badIds.Add(id)
+			if badIds.Cardinality() == len(proxy.Circles) {
 				return nil, errors.New("circles unavailable")
 			}
 			time.Sleep(time.Microsecond)
@@ -447,27 +445,27 @@ func (proxy *Proxy) Recovery(fromCircleId, toCircleId int, recoveryUrls []string
 	if len(databases) == 0 {
 		databases = proxy.GetDatabases()
 	}
-	recoveryUrlMap := make(map[string]bool)
+	recoveryUrlSet := mapset.NewSet()
 	if len(recoveryUrls) != 0 {
 		for _, u := range recoveryUrls {
-			recoveryUrlMap[u] = true
+			recoveryUrlSet.Add(u)
 		}
 	} else {
 		for _, b := range toCircle.Backends {
-			recoveryUrlMap[b.Url] = true
+			recoveryUrlSet.Add(b.Url)
 		}
 	}
 	proxy.ClearMigrateStats()
 	for _, backend := range fromCircle.Backends {
 		fromCircle.MigrateWg.Add(1)
-		go proxy.RecoveryBackend(backend, fromCircle, toCircle, recoveryUrlMap, databases)
+		go proxy.RecoveryBackend(backend, fromCircle, toCircle, recoveryUrlSet, databases)
 	}
 	fromCircle.MigrateWg.Wait()
 	defer proxy.SetMigratingAndBroadcast(toCircle, false)
 	util.Mlog.Printf("recovery done")
 }
 
-func (proxy *Proxy) RecoveryBackend(backend *Backend, fromCircle, toCircle *Circle, recoveryUrlMap map[string]bool, databases []string) {
+func (proxy *Proxy) RecoveryBackend(backend *Backend, fromCircle, toCircle *Circle, recoveryUrlSet mapset.Set, databases []string) {
 	var migrateCount int
 	defer fromCircle.MigrateWg.Done()
 	fromCircleId := fromCircle.CircleId
@@ -488,7 +486,7 @@ func (proxy *Proxy) RecoveryBackend(backend *Backend, fromCircle, toCircle *Circ
 		for j, meas := range measuresOfDbs[i] {
 			key := GetKey(db, meas)
 			dstBackend := toCircle.GetBackend(key)
-			if _, ok := recoveryUrlMap[dstBackend.Url]; ok {
+			if recoveryUrlSet.Contains(dstBackend.Url) {
 				util.Mlog.Printf("src:%s dst:%s db:%s measurement:%s", backend.Url, dstBackend.Url, db, meas)
 				migrateCount++
 				fromCircle.BackendWgMap[backend.Url].Add(1)

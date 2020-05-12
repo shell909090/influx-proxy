@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"errors"
+	"github.com/deckarep/golang-set"
 	"github.com/influxdata/influxdb1-client/models"
 	"io"
 	"log"
@@ -13,21 +14,21 @@ import (
 )
 
 var (
-	SupportCmds = map[string]bool{
-		"show measurements":       true,
-		"show series":             true,
-		"show field keys":         true,
-		"show tag keys":           true,
-		"show tag values":         true,
-		"show retention policies": true,
-		"show stats":              true,
-		"show databases":          true,
-		"create database":         true,
-		"drop database":           true,
-		"delete from":             true,
-		"drop series from":        true,
-		"drop measurement":        true,
-	}
+	SupportCmds = mapset.NewSet(
+		"show measurements",
+		"show series",
+		"show field keys",
+		"show tag keys",
+		"show tag values",
+		"show retention policies",
+		"show stats",
+		"show databases",
+		"create database",
+		"drop database",
+		"delete from",
+		"drop series from",
+		"drop measurement",
+	)
 )
 
 var (
@@ -271,11 +272,11 @@ func CheckQuery(q string) (tokens []string, check bool) {
 		}
 	}
 	stmt2 := GetHeadStmtFromTokens(tokens, 2)
-	if _, ok := SupportCmds[stmt2]; ok {
+	if SupportCmds.Contains(stmt2) {
 		return tokens, true
 	}
 	stmt3 := GetHeadStmtFromTokens(tokens, 3)
-	if _, ok := SupportCmds[stmt3]; ok {
+	if SupportCmds.Contains(stmt3) {
 		return tokens, true
 	}
 	return tokens, false
