@@ -362,7 +362,7 @@ func ScanTime(buf []byte) (int, bool) {
 }
 
 func LineToNano(line []byte, precision string) []byte {
-	line = bytes.TrimRight(line, " \t\r\n")
+	line = bytes.TrimSpace(line)
 	pos, found := ScanTime(line)
 	if found {
 		if precision == "ns" || precision == "n" {
