@@ -30,10 +30,15 @@ func main() {
 		fmt.Printf("OS/Arch:    %s/%s\n", runtime.GOOS, runtime.GOARCH)
 		return
 	}
+	if GitCommit == "" {
+		log.Printf("version: %s", service.Version)
+	} else {
+		log.Printf("version: %s, commit: %s, build: %s", service.Version, GitCommit, BuildTime)
+	}
 
 	proxy, err := backend.NewProxy(ConfigFile)
 	if err != nil {
-		fmt.Println("config source load failed:", err.Error())
+		log.Print("config source load failed: ", err)
 		return
 	}
 	hs := service.HttpService{Proxy: proxy}
