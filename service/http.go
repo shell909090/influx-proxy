@@ -2,12 +2,12 @@ package service
 
 import (
 	"bytes"
-	"compress/gzip"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/chengshiwen/influx-proxy/backend"
 	"github.com/chengshiwen/influx-proxy/util"
+	gzip "github.com/klauspost/pgzip"
 	"io/ioutil"
 	"log"
 	"net/http"

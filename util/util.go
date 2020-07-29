@@ -2,9 +2,9 @@ package util
 
 import (
 	"bytes"
-	"compress/gzip"
 	"encoding/json"
 	"github.com/deckarep/golang-set"
+	gzip "github.com/klauspost/pgzip"
 	"io"
 	"os"
 )

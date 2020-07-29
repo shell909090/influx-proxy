@@ -2,12 +2,12 @@ package backend
 
 import (
 	"bytes"
-	"compress/gzip"
 	"crypto/tls"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"github.com/chengshiwen/influx-proxy/util"
+	gzip "github.com/klauspost/pgzip"
 	"io"
 	"io/ioutil"
 	"log"
