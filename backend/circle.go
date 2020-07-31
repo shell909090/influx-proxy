@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"stathat.com/c/consistent"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -19,17 +20,45 @@ var FieldDataTypes = []string{"float", "integer", "string", "boolean"}
 type Circle struct {
 	Name         string                     `json:"name"`
 	CircleId     int                        `json:"circle_id"`
-	Router       *consistent.Consistent     `json:"router"`
 	Backends     []*Backend                 `json:"backends"`
-	MapToBackend map[string]*Backend        `json:"map_to_backend"`
+	router       *consistent.Consistent     `json:"router"`
+	mapToBackend map[string]*Backend        `json:"map_to_backend"`
 	BackendWgMap map[string]*sync.WaitGroup `json:"backend_wg_map"`
 	IsMigrating  bool                       `json:"is_migrating"`
 	MigrateWg    *sync.WaitGroup            `json:"migrate_wg"`
 }
 
+func (circle *Circle) InitCircle(proxy *Proxy, circleId int) {
+	circle.CircleId = circleId
+	circle.router = consistent.New()
+	circle.router.NumberOfReplicas = proxy.VNodeSize
+	circle.mapToBackend = make(map[string]*Backend)
+	circle.BackendWgMap = make(map[string]*sync.WaitGroup)
+	circle.IsMigrating = false
+	circle.MigrateWg = &sync.WaitGroup{}
+	for idx, backend := range circle.Backends {
+		circle.BackendWgMap[backend.Url] = &sync.WaitGroup{}
+		circle.addRouter(proxy, backend, idx)
+		backend.InitBackend(proxy)
+	}
+}
+
+func (circle *Circle) addRouter(proxy *Proxy, backend *Backend, idx int) {
+	if proxy.HashKey == "name" {
+		circle.router.Add(backend.Name)
+		circle.mapToBackend[backend.Name] = backend
+	} else if proxy.HashKey == "url" {
+		circle.router.Add(backend.Url)
+		circle.mapToBackend[backend.Url] = backend
+	} else {
+		circle.router.Add(strconv.Itoa(idx))
+		circle.mapToBackend[strconv.Itoa(idx)] = backend
+	}
+}
+
 func (circle *Circle) GetBackend(key string) *Backend {
-	value, _ := circle.Router.Get(key)
-	return circle.MapToBackend[value]
+	value, _ := circle.router.Get(key)
+	return circle.mapToBackend[value]
 }
 
 func (circle *Circle) GetHealth() []map[string]interface{} {

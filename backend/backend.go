@@ -43,19 +43,48 @@ type Backend struct {
 	FlushTime       int                     `json:"flush_time"`
 	CheckInterval   int                     `json:"check_interval"`
 	RewriteInterval int                     `json:"rewrite_interval"`
-	RewriteTicker   *time.Ticker            `json:"rewrite_ticker"`
+	rewriteTicker   *time.Ticker            `json:"rewrite_ticker"`
 	RewriteRunning  bool                    `json:"rewrite_running"`
-	DataFlag        bool                    `json:"data_flag"`
-	Producer        *os.File                `json:"producer"`
-	Consumer        *os.File                `json:"consumer"`
-	Meta            *os.File                `json:"meta"`
-	Client          *http.Client            `json:"client"`
-	Transport       *http.Transport         `json:"transport"`
+	dataFlag        bool                    `json:"data_flag"`
+	producer        *os.File                `json:"producer"`
+	consumer        *os.File                `json:"consumer"`
+	meta            *os.File                `json:"meta"`
+	client          *http.Client            `json:"client"`
+	transport       *http.Transport         `json:"transport"`
 	Active          bool                    `json:"active"`
-	ChWrite         chan *LineData          `json:"ch_write"`
-	ChTimer         <-chan time.Time        `json:"ch_timer"`
-	BufferMap       map[string]*CacheBuffer `json:"buffer_map"`
-	Lock            *sync.RWMutex           `json:"lock"`
+	chWrite         chan *LineData          `json:"ch_write"`
+	chTimer         <-chan time.Time        `json:"ch_timer"`
+	bufferMap       map[string]*CacheBuffer `json:"buffer_map"`
+	lock            sync.RWMutex            `json:"lock"`
+}
+
+func NewSimpleBackend(name, url, username, password string, authSecure bool) *Backend {
+	return &Backend{
+		Name:       name,
+		Url:        url,
+		Username:   username,
+		Password:   password,
+		AuthSecure: authSecure,
+		transport:  NewTransport(strings.HasPrefix(url, "https")),
+		Active:     true,
+	}
+}
+
+func (backend *Backend) InitBackend(proxy *Proxy) {
+	backend.AuthSecure = proxy.AuthSecure
+	backend.FlushSize = proxy.FlushSize
+	backend.FlushTime = proxy.FlushTime
+	backend.CheckInterval = proxy.CheckInterval
+	backend.RewriteInterval = proxy.RewriteInterval
+	backend.rewriteTicker = time.NewTicker(time.Duration(proxy.RewriteInterval) * time.Second)
+	backend.client = NewClient(strings.HasPrefix(backend.Url, "https"), proxy.WriteTimeout)
+	backend.transport = NewTransport(strings.HasPrefix(backend.Url, "https"))
+	backend.Active = true
+	backend.chWrite = make(chan *LineData, 16)
+	backend.bufferMap = make(map[string]*CacheBuffer)
+	backend.OpenFile(proxy.DataDir)
+	go backend.CheckActive()
+	go backend.Worker()
 }
 
 // handle file
@@ -63,46 +92,46 @@ type Backend struct {
 func (backend *Backend) OpenFile(dataDir string) {
 	var err error
 	filename := filepath.Join(dataDir, backend.Name)
-	backend.Producer, err = os.OpenFile(filename+".dat", os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
+	backend.producer, err = os.OpenFile(filename+".dat", os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
 	if err != nil {
 		log.Printf("open producer error: %s %s", backend.Url, err)
 		panic(err)
 	}
-	producerOffset, err := backend.Producer.Seek(0, io.SeekEnd)
+	producerOffset, err := backend.producer.Seek(0, io.SeekEnd)
 	if err != nil {
 		log.Printf("seek producer error: %s %s", backend.Url, err)
 		panic(err)
 	}
 
-	backend.Consumer, err = os.OpenFile(filename+".dat", os.O_RDONLY, 0644)
+	backend.consumer, err = os.OpenFile(filename+".dat", os.O_RDONLY, 0644)
 	if err != nil {
 		log.Printf("open consumer error: %s %s", backend.Url, err)
 		panic(err)
 	}
 
-	backend.Meta, err = os.OpenFile(filename+".rec", os.O_RDWR|os.O_CREATE, 0644)
+	backend.meta, err = os.OpenFile(filename+".rec", os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
 		log.Printf("open meta error: %s %s", backend.Url, err)
 		panic(err)
 	}
 
 	backend.RollbackMeta()
-	offset, _ := backend.Consumer.Seek(0, io.SeekCurrent)
-	backend.DataFlag = producerOffset > offset
+	offset, _ := backend.consumer.Seek(0, io.SeekCurrent)
+	backend.dataFlag = producerOffset > offset
 }
 
 func (backend *Backend) WriteFile(p []byte) (err error) {
-	backend.Lock.Lock()
-	defer backend.Lock.Unlock()
+	backend.lock.Lock()
+	defer backend.lock.Unlock()
 
 	var length = uint32(len(p))
-	err = binary.Write(backend.Producer, binary.BigEndian, length)
+	err = binary.Write(backend.producer, binary.BigEndian, length)
 	if err != nil {
 		log.Print("write length error: ", err)
 		return
 	}
 
-	n, err := backend.Producer.Write(p)
+	n, err := backend.producer.Write(p)
 	if err != nil {
 		log.Print("write error: ", err)
 		return
@@ -111,20 +140,20 @@ func (backend *Backend) WriteFile(p []byte) (err error) {
 		return io.ErrShortWrite
 	}
 
-	err = backend.Producer.Sync()
+	err = backend.producer.Sync()
 	if err != nil {
 		log.Print("sync meta error: ", err)
 		return
 	}
 
-	backend.DataFlag = true
+	backend.dataFlag = true
 	return
 }
 
 func (backend *Backend) IsData() bool {
-	backend.Lock.Lock()
-	defer backend.Lock.Unlock()
-	return backend.DataFlag
+	backend.lock.Lock()
+	defer backend.lock.Unlock()
+	return backend.dataFlag
 }
 
 func (backend *Backend) ReadFile() (p []byte, err error) {
@@ -133,14 +162,14 @@ func (backend *Backend) ReadFile() (p []byte, err error) {
 	}
 	var length uint32
 
-	err = binary.Read(backend.Consumer, binary.BigEndian, &length)
+	err = binary.Read(backend.consumer, binary.BigEndian, &length)
 	if err != nil {
 		log.Print("read length error: ", err)
 		return
 	}
 	p = make([]byte, length)
 
-	_, err = io.ReadFull(backend.Consumer, p)
+	_, err = io.ReadFull(backend.consumer, p)
 	if err != nil {
 		log.Print("read error: ", err)
 		return
@@ -149,17 +178,17 @@ func (backend *Backend) ReadFile() (p []byte, err error) {
 }
 
 func (backend *Backend) RollbackMeta() (err error) {
-	backend.Lock.Lock()
-	defer backend.Lock.Unlock()
+	backend.lock.Lock()
+	defer backend.lock.Unlock()
 
-	_, err = backend.Meta.Seek(0, io.SeekStart)
+	_, err = backend.meta.Seek(0, io.SeekStart)
 	if err != nil {
 		log.Printf("seek meta error: %s %s", backend.Url, err)
 		return
 	}
 
 	var offset int64
-	err = binary.Read(backend.Meta, binary.BigEndian, &offset)
+	err = binary.Read(backend.meta, binary.BigEndian, &offset)
 	if err != nil {
 		if err != io.EOF {
 			log.Printf("read meta error: %s %s", backend.Url, err)
@@ -167,7 +196,7 @@ func (backend *Backend) RollbackMeta() (err error) {
 		return
 	}
 
-	_, err = backend.Consumer.Seek(offset, io.SeekStart)
+	_, err = backend.consumer.Seek(offset, io.SeekStart)
 	if err != nil {
 		log.Printf("seek consumer error: %s %s", backend.Url, err)
 		return
@@ -176,16 +205,16 @@ func (backend *Backend) RollbackMeta() (err error) {
 }
 
 func (backend *Backend) UpdateMeta() (err error) {
-	backend.Lock.Lock()
-	defer backend.Lock.Unlock()
+	backend.lock.Lock()
+	defer backend.lock.Unlock()
 
-	producerOffset, err := backend.Producer.Seek(0, io.SeekCurrent)
+	producerOffset, err := backend.producer.Seek(0, io.SeekCurrent)
 	if err != nil {
 		log.Printf("seek producer error: %s %s", backend.Url, err)
 		return
 	}
 
-	offset, err := backend.Consumer.Seek(0, io.SeekCurrent)
+	offset, err := backend.consumer.Seek(0, io.SeekCurrent)
 	if err != nil {
 		log.Printf("seek consumer error: %s %s", backend.Url, err)
 		return
@@ -200,20 +229,20 @@ func (backend *Backend) UpdateMeta() (err error) {
 		offset = 0
 	}
 
-	_, err = backend.Meta.Seek(0, io.SeekStart)
+	_, err = backend.meta.Seek(0, io.SeekStart)
 	if err != nil {
 		log.Printf("seek meta error: %s %s", backend.Url, err)
 		return
 	}
 
 	log.Printf("write meta: %s, %d", backend.Url, offset)
-	err = binary.Write(backend.Meta, binary.BigEndian, &offset)
+	err = binary.Write(backend.meta, binary.BigEndian, &offset)
 	if err != nil {
 		log.Printf("write meta error: %s %s", backend.Url, err)
 		return
 	}
 
-	err = backend.Meta.Sync()
+	err = backend.meta.Sync()
 	if err != nil {
 		log.Printf("sync meta error: %s %s", backend.Url, err)
 		return
@@ -223,30 +252,30 @@ func (backend *Backend) UpdateMeta() (err error) {
 }
 
 func (backend *Backend) CleanUp() (err error) {
-	_, err = backend.Consumer.Seek(0, io.SeekStart)
+	_, err = backend.consumer.Seek(0, io.SeekStart)
 	if err != nil {
 		log.Print("seek consumer error: ", err)
 		return
 	}
-	err = backend.Producer.Truncate(0)
+	err = backend.producer.Truncate(0)
 	if err != nil {
 		log.Print("truncate error: ", err)
 		return
 	}
-	_, err = backend.Producer.Seek(0, io.SeekStart)
+	_, err = backend.producer.Seek(0, io.SeekStart)
 	if err != nil {
 		log.Print("seek producer error: ", err)
 		return
 	}
-	backend.DataFlag = false
+	backend.dataFlag = false
 	return
 }
 
 func (backend *Backend) Close() {
-	backend.Producer.Close()
-	backend.Consumer.Close()
-	backend.Meta.Close()
-	close(backend.ChWrite)
+	backend.producer.Close()
+	backend.consumer.Close()
+	backend.meta.Close()
+	close(backend.chWrite)
 }
 
 // handle write
@@ -254,7 +283,7 @@ func (backend *Backend) Close() {
 func (backend *Backend) Worker() {
 	for {
 		select {
-		case data, ok := <-backend.ChWrite:
+		case data, ok := <-backend.chWrite:
 			if !ok {
 				// closed
 				backend.Flush()
@@ -263,26 +292,26 @@ func (backend *Backend) Worker() {
 			}
 			backend.WriteBuffer(data)
 
-		case <-backend.ChTimer:
+		case <-backend.chTimer:
 			backend.Flush()
 
-		case <-backend.RewriteTicker.C:
+		case <-backend.rewriteTicker.C:
 			backend.RewriteIdle()
 		}
 	}
 }
 
 func (backend *Backend) WriteData(data *LineData) (err error) {
-	backend.ChWrite <- data
+	backend.chWrite <- data
 	return
 }
 
 func (backend *Backend) WriteBuffer(data *LineData) (err error) {
 	db := data.Db
-	cb, ok := backend.BufferMap[db]
+	cb, ok := backend.bufferMap[db]
 	if !ok {
-		backend.BufferMap[db] = &CacheBuffer{Buffer: &bytes.Buffer{}}
-		cb = backend.BufferMap[db]
+		backend.bufferMap[db] = &CacheBuffer{Buffer: &bytes.Buffer{}}
+		cb = backend.bufferMap[db]
 	}
 	cb.Counter++
 	n, err := cb.Buffer.Write(data.Line)
@@ -302,14 +331,14 @@ func (backend *Backend) WriteBuffer(data *LineData) (err error) {
 		if err != nil {
 			return
 		}
-	case backend.ChTimer == nil:
-		backend.ChTimer = time.After(time.Duration(backend.FlushTime) * time.Second)
+	case backend.chTimer == nil:
+		backend.chTimer = time.After(time.Duration(backend.FlushTime) * time.Second)
 	}
 	return
 }
 
 func (backend *Backend) FlushBuffer(db string) (err error) {
-	cb := backend.BufferMap[db]
+	cb := backend.bufferMap[db]
 	p := cb.Buffer.Bytes()
 	cb.Buffer.Reset()
 	cb.Counter = 0
@@ -352,9 +381,9 @@ func (backend *Backend) FlushBuffer(db string) (err error) {
 }
 
 func (backend *Backend) Flush() {
-	backend.ChTimer = nil
-	for db := range backend.BufferMap {
-		if backend.BufferMap[db].Counter > 0 {
+	backend.chTimer = nil
+	for db := range backend.bufferMap {
+		if backend.bufferMap[db].Counter > 0 {
 			err := backend.FlushBuffer(db)
 			if err != nil {
 				log.Printf("flush buffer background error: %s %s", backend.Url, err)
@@ -492,7 +521,7 @@ func (backend *Backend) CheckActive() {
 }
 
 func (backend *Backend) Ping() bool {
-	resp, err := backend.Client.Get(backend.Url + "/ping")
+	resp, err := backend.client.Get(backend.Url + "/ping")
 	if err != nil {
 		log.Print("http error: ", err)
 		return false
@@ -531,7 +560,7 @@ func (backend *Backend) WriteStream(db string, stream io.Reader, compressed bool
 		req.Header.Add("Content-Encoding", "gzip")
 	}
 
-	resp, err := backend.Client.Do(req)
+	resp, err := backend.client.Do(req)
 	if err != nil {
 		log.Print("http error: ", err)
 		backend.Active = false
@@ -585,7 +614,7 @@ func (backend *Backend) Query(req *http.Request, w http.ResponseWriter, decompre
 	}
 
 	q := strings.TrimSpace(req.FormValue("q"))
-	resp, err := backend.Transport.RoundTrip(req)
+	resp, err := backend.transport.RoundTrip(req)
 	if err != nil {
 		log.Printf("query error: %s, the query is %s", err, q)
 		return nil, err

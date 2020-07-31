@@ -12,8 +12,6 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
-	"stathat.com/c/consistent"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -47,7 +45,7 @@ type Proxy struct {
 	MigrateCpus     int                       `json:"migrate_cpus"`
 	MigrateBatch    int                       `json:"migrate_batch"`
 	MigrateStats    []map[string]*MigrateInfo `json:"migrate_stats"`
-	Lock            *sync.RWMutex             `json:"lock"`
+	lock            sync.RWMutex              `json:"lock"`
 }
 
 type LineData struct {
@@ -74,14 +72,15 @@ func NewProxy(file string) (proxy *Proxy, err error) {
 	if err != nil {
 		return
 	}
-	proxy.MigrateStats = make([]map[string]*MigrateInfo, len(proxy.Circles))
-	proxy.Lock = &sync.RWMutex{}
-	for circleId, circle := range proxy.Circles {
-		circle.CircleId = circleId
-		proxy.initCircle(circle)
-		proxy.initMigrateStats(circle)
-	}
 	proxy.DbSet = util.NewSetFromStrSlice(proxy.DbList)
+	proxy.MigrateStats = make([]map[string]*MigrateInfo, len(proxy.Circles))
+	for circleId, circle := range proxy.Circles {
+		circle.InitCircle(proxy, circleId)
+		proxy.MigrateStats[circleId] = make(map[string]*MigrateInfo)
+		for _, backend := range circle.Backends {
+			proxy.MigrateStats[circleId][backend.Url] = &MigrateInfo{}
+		}
+	}
 	return
 }
 
@@ -178,57 +177,6 @@ func (proxy *Proxy) CheckConfig() (err error) {
 		return errors.New("invalid hash_key, should be idx, name or url")
 	}
 	return
-}
-
-func (proxy *Proxy) initCircle(circle *Circle) {
-	circle.Router = consistent.New()
-	circle.Router.NumberOfReplicas = proxy.VNodeSize
-	circle.MapToBackend = make(map[string]*Backend)
-	circle.BackendWgMap = make(map[string]*sync.WaitGroup)
-	circle.IsMigrating = false
-	circle.MigrateWg = &sync.WaitGroup{}
-	for idx, backend := range circle.Backends {
-		circle.BackendWgMap[backend.Url] = &sync.WaitGroup{}
-		proxy.initBackend(circle, backend, idx)
-	}
-}
-
-func (proxy *Proxy) initBackend(circle *Circle, backend *Backend, idx int) {
-	if proxy.HashKey == "name" {
-		circle.Router.Add(backend.Name)
-		circle.MapToBackend[backend.Name] = backend
-	} else if proxy.HashKey == "url" {
-		circle.Router.Add(backend.Url)
-		circle.MapToBackend[backend.Url] = backend
-	} else {
-		circle.Router.Add(strconv.Itoa(idx))
-		circle.MapToBackend[strconv.Itoa(idx)] = backend
-	}
-
-	backend.AuthSecure = proxy.AuthSecure
-	backend.FlushSize = proxy.FlushSize
-	backend.FlushTime = proxy.FlushTime
-	backend.CheckInterval = proxy.CheckInterval
-	backend.RewriteInterval = proxy.RewriteInterval
-	backend.RewriteTicker = time.NewTicker(time.Duration(proxy.RewriteInterval) * time.Second)
-	backend.Client = NewClient(strings.HasPrefix(backend.Url, "https"), proxy.WriteTimeout)
-	backend.Transport = NewTransport(strings.HasPrefix(backend.Url, "https"))
-	backend.Active = true
-	backend.ChWrite = make(chan *LineData, 16)
-	backend.BufferMap = make(map[string]*CacheBuffer)
-	backend.Lock = &sync.RWMutex{}
-	backend.OpenFile(proxy.DataDir)
-
-	go backend.CheckActive()
-	go backend.Worker()
-}
-
-func (proxy *Proxy) initMigrateStats(circle *Circle) {
-	circleId := circle.CircleId
-	proxy.MigrateStats[circleId] = make(map[string]*MigrateInfo)
-	for _, backend := range circle.Backends {
-		proxy.MigrateStats[circleId][backend.Url] = &MigrateInfo{}
-	}
 }
 
 func GetKey(db, meas string) string {
@@ -651,14 +599,14 @@ func (proxy *Proxy) ClearMigrateStats() {
 }
 
 func (proxy *Proxy) SetResyncing(resyncing bool) {
-	proxy.Lock.Lock()
-	defer proxy.Lock.Unlock()
+	proxy.lock.Lock()
+	defer proxy.lock.Unlock()
 	proxy.IsResyncing = resyncing
 }
 
 func (proxy *Proxy) SetMigrating(circle *Circle, migrating bool) {
-	proxy.Lock.Lock()
-	defer proxy.Lock.Unlock()
+	proxy.lock.Lock()
+	defer proxy.lock.Unlock()
 	circle.IsMigrating = migrating
 }
 
