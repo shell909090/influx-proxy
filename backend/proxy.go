@@ -206,18 +206,21 @@ func (proxy *Proxy) initBackend(circle *Circle, backend *Backend, idx int) {
 	}
 
 	backend.AuthSecure = proxy.AuthSecure
-	backend.BufferMap = make(map[string]*CBuffer)
+	backend.FlushSize = proxy.FlushSize
+	backend.FlushTime = proxy.FlushTime
+	backend.CheckInterval = proxy.CheckInterval
+	backend.RewriteInterval = proxy.RewriteInterval
+	backend.RewriteTicker = time.NewTicker(time.Duration(proxy.RewriteInterval) * time.Second)
 	backend.Client = NewClient(strings.HasPrefix(backend.Url, "https"), proxy.WriteTimeout)
 	backend.Transport = NewTransport(strings.HasPrefix(backend.Url, "https"))
 	backend.Active = true
-	backend.LockDbMap = make(map[string]*sync.RWMutex)
-	backend.LockBuffer = &sync.RWMutex{}
-	backend.LockFile = &sync.RWMutex{}
+	backend.ChWrite = make(chan *LineData, 16)
+	backend.BufferMap = make(map[string]*CacheBuffer)
+	backend.Lock = &sync.RWMutex{}
 	backend.OpenFile(proxy.DataDir)
 
-	go backend.CheckActiveBackground(proxy.CheckInterval)
-	go backend.FlushBufferBackground(proxy.FlushTime)
-	go backend.RewriteBackground(proxy.RewriteInterval)
+	go backend.CheckActive()
+	go backend.Worker()
 }
 
 func (proxy *Proxy) initMigrateStats(circle *Circle) {
@@ -314,7 +317,7 @@ func (proxy *Proxy) Query(w http.ResponseWriter, req *http.Request, tokens []str
 	return
 }
 
-func (proxy *Proxy) WriteData(data *LineData) {
+func (proxy *Proxy) Write(data *LineData) {
 	nanoLine := LineToNano(data.Line, data.Precision)
 	meas, err := ScanKey(nanoLine)
 	if err != nil {
@@ -339,7 +342,7 @@ func (proxy *Proxy) WriteData(data *LineData) {
 	}
 
 	for _, backend := range backends {
-		err := backend.WriteBuffer(data, proxy.FlushSize)
+		err := backend.WriteData(data)
 		if err != nil {
 			log.Printf("write data to buffer error: %s, %s, %s, %s, %s", err, backend.Url, data.Db, data.Precision, string(data.Line))
 		}

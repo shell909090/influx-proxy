@@ -28,29 +28,34 @@ var (
 	ErrUnknown      = errors.New("unknown error")
 )
 
-type CBuffer struct {
+type CacheBuffer struct {
 	Buffer  *bytes.Buffer `json:"buffer"`
 	Counter int           `json:"counter"`
 }
 
 type Backend struct {
-	Name           string                   `json:"name"`
-	Url            string                   `json:"url"`
-	Username       string                   `json:"username"`
-	Password       string                   `json:"password"`
-	AuthSecure     bool                     `json:"auth_secure"`
-	BufferMap      map[string]*CBuffer      `json:"buffer_map"`
-	DataFlag       bool                     `json:"data_flag"`
-	Producer       *os.File                 `json:"producer"`
-	Consumer       *os.File                 `json:"consumer"`
-	Meta           *os.File                 `json:"meta"`
-	Client         *http.Client             `json:"client"`
-	Transport      *http.Transport          `json:"transport"`
-	Active         bool                     `json:"active"`
-	RewriteRunning bool                     `json:"rewrite_running"`
-	LockDbMap      map[string]*sync.RWMutex `json:"lock_db_map"`
-	LockBuffer     *sync.RWMutex            `json:"lock_buffer"`
-	LockFile       *sync.RWMutex            `json:"lock_file"`
+	Name            string                  `json:"name"`
+	Url             string                  `json:"url"`
+	Username        string                  `json:"username"`
+	Password        string                  `json:"password"`
+	AuthSecure      bool                    `json:"auth_secure"`
+	FlushSize       int                     `json:"flush_size"`
+	FlushTime       int                     `json:"flush_time"`
+	CheckInterval   int                     `json:"check_interval"`
+	RewriteInterval int                     `json:"rewrite_interval"`
+	RewriteTicker   *time.Ticker            `json:"rewrite_ticker"`
+	RewriteRunning  bool                    `json:"rewrite_running"`
+	DataFlag        bool                    `json:"data_flag"`
+	Producer        *os.File                `json:"producer"`
+	Consumer        *os.File                `json:"consumer"`
+	Meta            *os.File                `json:"meta"`
+	Client          *http.Client            `json:"client"`
+	Transport       *http.Transport         `json:"transport"`
+	Active          bool                    `json:"active"`
+	ChWrite         chan *LineData          `json:"ch_write"`
+	ChTimer         <-chan time.Time        `json:"ch_timer"`
+	BufferMap       map[string]*CacheBuffer `json:"buffer_map"`
+	Lock            *sync.RWMutex           `json:"lock"`
 }
 
 // handle file
@@ -87,8 +92,8 @@ func (backend *Backend) OpenFile(dataDir string) {
 }
 
 func (backend *Backend) WriteFile(p []byte) (err error) {
-	backend.LockFile.Lock()
-	defer backend.LockFile.Unlock()
+	backend.Lock.Lock()
+	defer backend.Lock.Unlock()
 
 	var length = uint32(len(p))
 	err = binary.Write(backend.Producer, binary.BigEndian, length)
@@ -117,8 +122,8 @@ func (backend *Backend) WriteFile(p []byte) (err error) {
 }
 
 func (backend *Backend) IsData() bool {
-	backend.LockFile.Lock()
-	defer backend.LockFile.Unlock()
+	backend.Lock.Lock()
+	defer backend.Lock.Unlock()
 	return backend.DataFlag
 }
 
@@ -144,8 +149,8 @@ func (backend *Backend) ReadFile() (p []byte, err error) {
 }
 
 func (backend *Backend) RollbackMeta() (err error) {
-	backend.LockFile.Lock()
-	defer backend.LockFile.Unlock()
+	backend.Lock.Lock()
+	defer backend.Lock.Unlock()
 
 	_, err = backend.Meta.Seek(0, io.SeekStart)
 	if err != nil {
@@ -171,8 +176,8 @@ func (backend *Backend) RollbackMeta() (err error) {
 }
 
 func (backend *Backend) UpdateMeta() (err error) {
-	backend.LockFile.Lock()
-	defer backend.LockFile.Unlock()
+	backend.Lock.Lock()
+	defer backend.Lock.Unlock()
 
 	producerOffset, err := backend.Producer.Seek(0, io.SeekCurrent)
 	if err != nil {
@@ -241,41 +246,73 @@ func (backend *Backend) Close() {
 	backend.Producer.Close()
 	backend.Consumer.Close()
 	backend.Meta.Close()
+	close(backend.ChWrite)
 }
 
-// handle write buffer
+// handle write
 
-func (backend *Backend) CheckBufferMapAndLockDbMap(db string) {
-	if _, ok := backend.BufferMap[db]; !ok {
-		backend.LockBuffer.Lock()
-		backend.BufferMap[db] = &CBuffer{Buffer: &bytes.Buffer{}}
-		backend.LockDbMap[db] = &sync.RWMutex{}
-		defer backend.LockBuffer.Unlock()
+func (backend *Backend) Worker() {
+	for {
+		select {
+		case data, ok := <-backend.ChWrite:
+			if !ok {
+				// closed
+				backend.Flush()
+				backend.Close()
+				return
+			}
+			backend.WriteBuffer(data)
+
+		case <-backend.ChTimer:
+			backend.Flush()
+
+		case <-backend.RewriteTicker.C:
+			backend.RewriteIdle()
+		}
 	}
 }
 
-func (backend *Backend) WriteBuffer(data *LineData, bufferMaxSize int) (err error) {
-	db := data.Db
-	backend.CheckBufferMapAndLockDbMap(db)
-	backend.LockDbMap[db].Lock()
-	defer backend.LockDbMap[db].Unlock()
+func (backend *Backend) WriteData(data *LineData) (err error) {
+	backend.ChWrite <- data
+	return
+}
 
-	backend.BufferMap[db].Buffer.Write(data.Line)
-	backend.BufferMap[db].Counter++
-	if backend.BufferMap[db].Counter > bufferMaxSize {
+func (backend *Backend) WriteBuffer(data *LineData) (err error) {
+	db := data.Db
+	cb, ok := backend.BufferMap[db]
+	if !ok {
+		backend.BufferMap[db] = &CacheBuffer{Buffer: &bytes.Buffer{}}
+		cb = backend.BufferMap[db]
+	}
+	cb.Counter++
+	n, err := cb.Buffer.Write(data.Line)
+	if err != nil {
+		log.Printf("buffer write error: %s\n", err)
+		return
+	}
+	if n != len(data.Line) {
+		err = io.ErrShortWrite
+		log.Printf("buffer write error: %s\n", err)
+		return
+	}
+
+	switch {
+	case cb.Counter >= backend.FlushSize:
 		err = backend.FlushBuffer(db)
 		if err != nil {
 			return
 		}
+	case backend.ChTimer == nil:
+		backend.ChTimer = time.After(time.Duration(backend.FlushTime) * time.Second)
 	}
 	return
 }
 
 func (backend *Backend) FlushBuffer(db string) (err error) {
-	bc := backend.BufferMap[db]
-	p := bc.Buffer.Bytes()
-	bc.Buffer.Truncate(0)
-	bc.Counter = 0
+	cb := backend.BufferMap[db]
+	p := cb.Buffer.Bytes()
+	cb.Buffer.Reset()
+	cb.Counter = 0
 	if len(p) == 0 {
 		return
 	}
@@ -296,10 +333,10 @@ func (backend *Backend) FlushBuffer(db string) (err error) {
 			return
 		case ErrBadRequest:
 			log.Printf("bad request, drop all data")
-			return nil
+			return
 		case ErrNotFound:
 			log.Printf("bad backend, drop all data")
-			return nil
+			return
 		default:
 			log.Printf("write http error: %s %s, length: %d", backend.Url, db, len(p))
 		}
@@ -314,47 +351,34 @@ func (backend *Backend) FlushBuffer(db string) (err error) {
 	return
 }
 
-// handle background
-
-func (backend *Backend) FlushBufferBackground(flushTime int) {
-	for {
-		select {
-		case <-time.After(time.Duration(flushTime) * time.Second):
-			for db := range backend.BufferMap {
-				if backend.BufferMap[db].Counter > 0 {
-					backend.LockDbMap[db].Lock()
-					err := backend.FlushBuffer(db)
-					if err != nil {
-						log.Printf("flush buffer background error: %s %s", backend.Url, err)
-					}
-					backend.LockDbMap[db].Unlock()
-				}
+func (backend *Backend) Flush() {
+	backend.ChTimer = nil
+	for db := range backend.BufferMap {
+		if backend.BufferMap[db].Counter > 0 {
+			err := backend.FlushBuffer(db)
+			if err != nil {
+				log.Printf("flush buffer background error: %s %s", backend.Url, err)
 			}
 		}
 	}
 }
 
-func (backend *Backend) RewriteBackground(rewriteInterval int) {
-	for {
-		select {
-		case <-time.After(time.Duration(rewriteInterval) * time.Second):
-			if !backend.RewriteRunning && backend.IsData() {
-				backend.RewriteRunning = true
-				go backend.RewriteLoop(rewriteInterval)
-			}
-		}
+func (backend *Backend) RewriteIdle() {
+	if !backend.RewriteRunning && backend.IsData() {
+		backend.RewriteRunning = true
+		go backend.RewriteLoop()
 	}
 }
 
-func (backend *Backend) RewriteLoop(rewriteInterval int) {
+func (backend *Backend) RewriteLoop() {
 	for backend.IsData() {
 		if !backend.Active {
-			time.Sleep(time.Duration(rewriteInterval) * time.Second)
+			time.Sleep(time.Duration(backend.RewriteInterval) * time.Second)
 			continue
 		}
 		err := backend.Rewrite()
 		if err != nil {
-			time.Sleep(time.Duration(rewriteInterval) * time.Second)
+			time.Sleep(time.Duration(backend.RewriteInterval) * time.Second)
 			continue
 		}
 	}
@@ -408,13 +432,6 @@ func (backend *Backend) Rewrite() (err error) {
 	return
 }
 
-func (backend *Backend) CheckActiveBackground(checkInterval int) {
-	for {
-		backend.Active = backend.Ping()
-		time.Sleep(time.Duration(checkInterval) * time.Second)
-	}
-}
-
 // handle http
 
 func NewClient(tlsSkip bool, timeout int) *http.Client {
@@ -465,6 +482,13 @@ func SetBasicAuth(req *http.Request, username string, password string, authSecur
 
 func (backend *Backend) SetBasicAuth(req *http.Request) {
 	SetBasicAuth(req, backend.Username, backend.Password, backend.AuthSecure)
+}
+
+func (backend *Backend) CheckActive() {
+	for {
+		backend.Active = backend.Ping()
+		time.Sleep(time.Duration(backend.CheckInterval) * time.Second)
+	}
 }
 
 func (backend *Backend) Ping() bool {

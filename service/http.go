@@ -158,7 +158,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
 			Precision: precision,
 		}
 		hs.Logf("write: %s %s %s", db, precision, line)
-		hs.WriteData(data)
+		hs.Write(data)
 	}
 	w.WriteHeader(204)
 	return
