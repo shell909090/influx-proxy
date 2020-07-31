@@ -47,6 +47,7 @@
     "rewrite_interval": 10,
     "write_timeout": 10,
     "idle_timeout": 10,
+    "conn_pool_size": 20,
     "log_enabled": false,
     "username": "",
     "password": "",

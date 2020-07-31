@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"github.com/chengshiwen/influx-proxy/util"
 	gzip "github.com/klauspost/pgzip"
+	"github.com/panjf2000/ants"
 	"io"
 	"io/ioutil"
 	"log"
@@ -49,12 +50,14 @@ type Backend struct {
 	producer        *os.File                `json:"producer"`
 	consumer        *os.File                `json:"consumer"`
 	meta            *os.File                `json:"meta"`
+	pool            *ants.Pool              `json:"pool"`
 	client          *http.Client            `json:"client"`
 	transport       *http.Transport         `json:"transport"`
 	Active          bool                    `json:"active"`
 	chWrite         chan *LineData          `json:"ch_write"`
 	chTimer         <-chan time.Time        `json:"ch_timer"`
 	bufferMap       map[string]*CacheBuffer `json:"buffer_map"`
+	wg              sync.WaitGroup          `json:"wg"`
 	lock            sync.RWMutex            `json:"lock"`
 }
 
@@ -71,6 +74,7 @@ func NewSimpleBackend(name, url, username, password string, authSecure bool) *Ba
 }
 
 func (backend *Backend) InitBackend(proxy *Proxy) {
+	var err error
 	backend.AuthSecure = proxy.AuthSecure
 	backend.FlushSize = proxy.FlushSize
 	backend.FlushTime = proxy.FlushTime
@@ -83,6 +87,11 @@ func (backend *Backend) InitBackend(proxy *Proxy) {
 	backend.chWrite = make(chan *LineData, 16)
 	backend.bufferMap = make(map[string]*CacheBuffer)
 	backend.OpenFile(proxy.DataDir)
+	backend.pool, err = ants.NewPool(proxy.ConnPoolSize)
+	if err != nil {
+		panic(err)
+	}
+
 	go backend.CheckActive()
 	go backend.Worker()
 }
@@ -287,6 +296,7 @@ func (backend *Backend) Worker() {
 			if !ok {
 				// closed
 				backend.Flush()
+				backend.wg.Wait()
 				backend.Close()
 				return
 			}
@@ -314,6 +324,9 @@ func (backend *Backend) WriteBuffer(data *LineData) (err error) {
 		cb = backend.bufferMap[db]
 	}
 	cb.Counter++
+	if cb.Buffer == nil {
+		cb.Buffer = &bytes.Buffer{}
+	}
 	n, err := cb.Buffer.Write(data.Line)
 	if err != nil {
 		log.Printf("buffer write error: %s\n", err)
@@ -339,44 +352,51 @@ func (backend *Backend) WriteBuffer(data *LineData) (err error) {
 
 func (backend *Backend) FlushBuffer(db string) (err error) {
 	cb := backend.bufferMap[db]
+	if cb.Buffer == nil {
+		return
+	}
 	p := cb.Buffer.Bytes()
-	cb.Buffer.Reset()
+	cb.Buffer = nil
 	cb.Counter = 0
 	if len(p) == 0 {
 		return
 	}
 
-	var buf bytes.Buffer
-	err = Compress(&buf, p)
-	if err != nil {
-		log.Print("compress buffer error: ", err)
-		return
-	}
-
-	p = buf.Bytes()
-
-	if backend.Active {
-		err = backend.WriteCompressed(db, p)
-		switch err {
-		case nil:
+	backend.wg.Add(1)
+	backend.pool.Submit(func() {
+		defer backend.wg.Done()
+		var buf bytes.Buffer
+		err = Compress(&buf, p)
+		if err != nil {
+			log.Print("compress buffer error: ", err)
 			return
-		case ErrBadRequest:
-			log.Printf("bad request, drop all data")
-			return
-		case ErrNotFound:
-			log.Printf("bad backend, drop all data")
-			return
-		default:
-			log.Printf("write http error: %s %s, length: %d", backend.Url, db, len(p))
 		}
-	}
 
-	b := bytes.Join([][]byte{[]byte(url.QueryEscape(db)), p}, []byte(" "))
-	err = backend.WriteFile(b)
-	if err != nil {
-		log.Printf("write db and data to file error with db: %s, length: %d error: %s", db, len(p), err)
-		return
-	}
+		p = buf.Bytes()
+
+		if backend.Active {
+			err = backend.WriteCompressed(db, p)
+			switch err {
+			case nil:
+				return
+			case ErrBadRequest:
+				log.Printf("bad request, drop all data")
+				return
+			case ErrNotFound:
+				log.Printf("bad backend, drop all data")
+				return
+			default:
+				log.Printf("write http error: %s %s, length: %d", backend.Url, db, len(p))
+			}
+		}
+
+		b := bytes.Join([][]byte{[]byte(url.QueryEscape(db)), p}, []byte(" "))
+		err = backend.WriteFile(b)
+		if err != nil {
+			log.Printf("write db and data to file error with db: %s, length: %d error: %s", db, len(p), err)
+			return
+		}
+	})
 	return
 }
 

@@ -33,6 +33,7 @@ type Proxy struct {
 	RewriteInterval int                       `json:"rewrite_interval"`
 	WriteTimeout    int                       `json:"write_timeout"`
 	IdleTimeout     int                       `json:"idle_timeout"`
+	ConnPoolSize    int                       `json:"conn_pool_size"`
 	LogEnabled      bool                      `json:"log_enabled"`
 	Username        string                    `json:"username"`
 	Password        string                    `json:"password"`
@@ -145,6 +146,9 @@ func (proxy *Proxy) SetDefaultConfig() {
 	}
 	if proxy.IdleTimeout <= 0 {
 		proxy.IdleTimeout = 10
+	}
+	if proxy.ConnPoolSize <= 0 {
+		proxy.ConnPoolSize = 20
 	}
 	if proxy.MigrateCpus <= 0 {
 		proxy.MigrateCpus = 1
