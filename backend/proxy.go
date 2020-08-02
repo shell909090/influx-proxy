@@ -184,14 +184,18 @@ func (proxy *Proxy) CheckConfig() (err error) {
 }
 
 func GetKey(db, meas string) string {
-	return fmt.Sprintf("%s,%s", db, meas)
+	var b strings.Builder
+	b.WriteString(db)
+	b.WriteString(",")
+	b.WriteString(meas)
+	return b.String()
 }
 
 func (proxy *Proxy) GetBackends(key string) []*Backend {
-	backends := make([]*Backend, 0)
-	for _, circle := range proxy.Circles {
+	backends := make([]*Backend, len(proxy.Circles))
+	for i, circle := range proxy.Circles {
 		backend := circle.GetBackend(key)
-		backends = append(backends, backend)
+		backends[i] = backend
 	}
 	return backends
 }

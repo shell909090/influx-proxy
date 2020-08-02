@@ -3,7 +3,7 @@ InfluxDB Proxy
 
 This project adds a basic high availability and consistent hash layer to InfluxDB.
 
-NOTE: influx-proxy must be built with Go 1.8+, don't implement udp.
+NOTE: influx-proxy must be built with Go 1.10+, don't implement udp.
 
 Why
 ---
@@ -40,7 +40,7 @@ Features
 Requirements
 -----------
 
-* Golang >= 1.8
+* Golang >= 1.10
 
 Usage
 ------------
@@ -129,6 +129,7 @@ The configurations in `proxy.json` are the following:
 * `rewrite_interval`: default is `10`, rewrite every 10 seconds
 * `write_timeout`: default is `10`, write timeout until 10 seconds
 * `idle_timeout`: default is `10`, keep-alives wait time until 10 seconds
+* `conn_pool_size`: default is 20, create a connection pool which size is 20
 * `log_enabled`: enable the logging of debug messages for troubleshooting, default is `false`
 * `username`: proxy username, with encryption if auth_secure is enabled, default is `empty` which means no auth
 * `password`: proxy password, with encryption if auth_secure is enabled, default is `empty` which means no auth
