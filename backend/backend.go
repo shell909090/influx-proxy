@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"github.com/chengshiwen/influx-proxy/util"
 	gzip "github.com/klauspost/pgzip"
-	"github.com/panjf2000/ants"
+	"github.com/panjf2000/ants/v2"
 	"io"
 	"io/ioutil"
 	"log"

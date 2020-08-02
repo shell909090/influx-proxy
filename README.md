@@ -3,7 +3,7 @@ InfluxDB Proxy
 
 This project adds a basic high availability and consistent hash layer to InfluxDB.
 
-NOTE: influx-proxy must be built with Go 1.10+, don't implement udp.
+NOTE: influx-proxy must be built with Go 1.14+ with Go module support, don't implement udp.
 
 Why
 ---
@@ -40,7 +40,7 @@ Features
 Requirements
 -----------
 
-* Golang >= 1.10
+* Golang >= 1.14 with Go module support
 
 Usage
 ------------
