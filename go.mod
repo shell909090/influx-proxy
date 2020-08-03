@@ -3,6 +3,7 @@ module github.com/chengshiwen/influx-proxy
 go 1.14
 
 require (
+	github.com/BurntSushi/toml v0.3.1 // indirect
 	github.com/deckarep/golang-set v1.7.1
 	github.com/influxdata/influxdb1-client v0.0.0-20200515024757-02f0bf5dbca3
 	github.com/json-iterator/go v1.1.10

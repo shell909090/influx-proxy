@@ -7,14 +7,17 @@
 ## Keywords:
 ## X-URL:
 
+export GO_BUILD=GO111MODULE=on go build -o bin/influx-proxy -ldflags "-s -X main.GitCommit=$(shell git rev-parse --short HEAD) -X 'main.BuildTime=$(shell date '+%Y-%m-%d %H:%M:%S')'"
+
 all: build
 
 build:
 	mkdir -p bin
-	go build -o bin/influx-proxy -ldflags "-X main.GitCommit=$(shell git rev-parse HEAD | cut -c 1-7) -X 'main.BuildTime=$(shell date '+%Y-%m-%d %H:%M:%S')'" github.com/chengshiwen/influx-proxy
+	$(GO_BUILD)
 
 linux:
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o bin/influx-proxy -ldflags "-s -X main.GitCommit=$(shell git rev-parse HEAD | cut -c 1-7) -X 'main.BuildTime=$(shell date '+%Y-%m-%d %H:%M:%S')'" github.com/chengshiwen/influx-proxy
+	mkdir -p bin
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GO_BUILD)
 
 test:
 	go test -v github.com/chengshiwen/influx-proxy/backend
@@ -26,7 +29,7 @@ run:
 	go run main.go
 
 fmt:
-	find . -name "*.go" -exec go fmt {} \;
+	go fmt ./...
 
 clean:
 	rm -rf bin data log

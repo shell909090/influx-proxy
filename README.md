@@ -48,8 +48,10 @@ Usage
 #### Quickstart
 
 ```sh
-$ go get -u github.com/chengshiwen/influx-proxy
-$ $GOPATH/bin/influx-proxy -config /path/to/proxy.json
+$ git clone https://github.com/chengshiwen/influx-proxy.git
+$ cd influx-proxy
+$ make
+$ ./bin/influx-proxy -config proxy.json
 ```
 
 #### Build Release
@@ -177,6 +179,14 @@ HTTP Endpoints
 --------
 
 [HTTP Endpoints](https://github.com/chengshiwen/influx-proxy/wiki/HTTP-Endpoints)
+
+Benchmark
+-----------
+
+There are two tools for benchmarking InfluxDB, which can also be applied to InfluxDB Proxy:
+
+* [influx-stress](https://github.com/chengshiwen/influx-stress) is a stress tool for generating artificial load on InfluxDB.
+* [influxdb-comparisons](https://github.com/influxdata/influxdb-comparisons) contains code for benchmarking InfluxDB against other databases and time series solutions.
 
 License
 -------
