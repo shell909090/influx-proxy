@@ -280,7 +280,7 @@ func (proxy *Proxy) Write(data *LineData) {
 		log.Printf("scan key error: %s", err)
 		return
 	}
-	if ScanSpace(nanoLine[len(meas):]) != 2 {
+	if !CheckSpace(nanoLine[len(meas):]) {
 		log.Printf("invalid format, drop data: %s %s %s", data.Db, data.Precision, string(data.Line))
 		return
 	}

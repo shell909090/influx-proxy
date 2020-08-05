@@ -326,31 +326,6 @@ func ScanKey(pointbuf []byte) (key string, err error) {
 	return "", io.EOF
 }
 
-func ScanSpace(buf []byte) (cnt int) {
-	buflen := len(buf)
-	for i := 0; i < buflen; {
-		switch buf[i] {
-		case '\\':
-			i += 2
-		case '"':
-			end, _, err := FindEndWithQuote(buf, i, '"')
-			if err != nil {
-				log.Printf("scan quote error: %s\n", err)
-				return
-			}
-			i = end
-		case ' ', '\t':
-			if i == 0 || (buf[i-1] != ' ' && buf[i-1] != '\t') {
-				cnt++
-			}
-			i++
-		default:
-			i++
-		}
-	}
-	return
-}
-
 func ScanTime(buf []byte) (int, bool) {
 	i := len(buf) - 1
 	for ; i >= 0; i-- {
@@ -358,7 +333,7 @@ func ScanTime(buf []byte) (int, bool) {
 			break
 		}
 	}
-	return i, i > 0 && i < len(buf)-1 && (buf[i] == ' ' || buf[i] == '\t' || buf[i] == 0)
+	return i, i > 0 && i < len(buf)-1 && (buf[i] == ' ' || buf[i] == 0)
 }
 
 func LineToNano(line []byte, precision string) []byte {
@@ -395,4 +370,38 @@ func BytesToInt64(buf []byte) int64 {
 		res = res*10 + int64(buf[i]-'0')
 	}
 	return res
+}
+
+func CheckSpace(buf []byte) bool {
+	buflen := len(buf)
+	// find the first unescaped space, and pick the last for consecutive spaces
+	i := 0
+Loop:
+	for i < buflen {
+		switch buf[i] {
+		case '\\':
+			i += 2
+		case ' ':
+			for i < buflen-1 {
+				if buf[i+1] == ' ' {
+					i++
+				} else {
+					break Loop
+				}
+			}
+		default:
+			i++
+		}
+	}
+	// find the last unescaped space, and pick the first for consecutive spaces
+	// buf has trimmed right spaces and ends with timestamp
+	j := bytes.LastIndexByte(buf, ' ')
+	for j > 0 {
+		if buf[j-1] == ' ' {
+			j--
+		} else {
+			break
+		}
+	}
+	return j-i > 3
 }
