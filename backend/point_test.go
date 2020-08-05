@@ -1,6 +1,9 @@
 package backend
 
 import (
+	"bytes"
+	"fmt"
+	"io"
 	"strings"
 	"testing"
 )
@@ -57,6 +60,37 @@ func TestScanKey(t *testing.T) {
 		if err != nil || got != tt.want {
 			t.Errorf("%v: got %v, want %v", tt.name, got, tt.want)
 			continue
+		}
+	}
+}
+
+func BenchmarkScanKey(b *testing.B) {
+	buf := &bytes.Buffer{}
+	for i := 0; i < b.N; i++ {
+		fmt.Fprintf(buf, "%s%d,a=%d,b=2 c=3 1596819659\n", "name", i, i)
+	}
+	b.ResetTimer()
+
+	var err error
+	var line []byte
+	for {
+		line, err = buf.ReadBytes('\n')
+		switch err {
+		default:
+			b.Error(err)
+			return
+		case io.EOF, nil:
+		}
+
+		if len(line) == 0 {
+			break
+		}
+
+		line = bytes.TrimRight(line, " \t\r\n")
+		_, err = ScanKey(line)
+		if err != nil {
+			b.Error(err)
+			return
 		}
 	}
 }
@@ -177,6 +211,33 @@ func TestLineToNano(t *testing.T) {
 	}
 }
 
+func BenchmarkLineToNano(b *testing.B) {
+	buf := &bytes.Buffer{}
+	for i := 0; i < b.N; i++ {
+		fmt.Fprintf(buf, "%s%d,a=%d,b=2 c=3 1596819659\n", "name", i, i)
+	}
+	b.ResetTimer()
+
+	var err error
+	var line []byte
+	for {
+		line, err = buf.ReadBytes('\n')
+		switch err {
+		default:
+			b.Error(err)
+			return
+		case io.EOF, nil:
+		}
+
+		if len(line) == 0 {
+			break
+		}
+
+		line = bytes.TrimRight(line, " \t\r\n")
+		LineToNano(line, "s")
+	}
+}
+
 func TestCheckSpace(t *testing.T) {
 	tests := []struct {
 		name string
@@ -280,5 +341,32 @@ func TestCheckSpace(t *testing.T) {
 			t.Errorf("%v: got %v, want %v", tt.name, got, tt.want)
 			continue
 		}
+	}
+}
+
+func BenchmarkCheckSpace(b *testing.B) {
+	buf := &bytes.Buffer{}
+	for i := 0; i < b.N; i++ {
+		fmt.Fprintf(buf, "%s%d,a=%d,b=2 c=3 1596819659\n", "name", i, i)
+	}
+	b.ResetTimer()
+
+	var err error
+	var line []byte
+	for {
+		line, err = buf.ReadBytes('\n')
+		switch err {
+		default:
+			b.Error(err)
+			return
+		case io.EOF, nil:
+		}
+
+		if len(line) == 0 {
+			break
+		}
+
+		line = bytes.TrimRight(line, " \t\r\n")
+		CheckSpace(line)
 	}
 }
