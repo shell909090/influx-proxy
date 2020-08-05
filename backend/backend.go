@@ -54,7 +54,7 @@ type Backend struct {
 	client          *http.Client            `json:"client"`
 	transport       *http.Transport         `json:"transport"`
 	Active          bool                    `json:"active"`
-	chWrite         chan *LineData          `json:"ch_write"`
+	chWrite         chan *LinePoint         `json:"ch_write"`
 	chTimer         <-chan time.Time        `json:"ch_timer"`
 	bufferMap       map[string]*CacheBuffer `json:"buffer_map"`
 	wg              sync.WaitGroup          `json:"wg"`
@@ -84,7 +84,7 @@ func (backend *Backend) InitBackend(proxy *Proxy) {
 	backend.client = NewClient(strings.HasPrefix(backend.Url, "https"), proxy.WriteTimeout)
 	backend.transport = NewTransport(strings.HasPrefix(backend.Url, "https"))
 	backend.Active = true
-	backend.chWrite = make(chan *LineData, 16)
+	backend.chWrite = make(chan *LinePoint, 16)
 	backend.bufferMap = make(map[string]*CacheBuffer)
 	backend.OpenFile(proxy.DataDir)
 	backend.pool, err = ants.NewPool(proxy.ConnPoolSize)
@@ -292,7 +292,7 @@ func (backend *Backend) Close() {
 func (backend *Backend) Worker() {
 	for {
 		select {
-		case data, ok := <-backend.chWrite:
+		case p, ok := <-backend.chWrite:
 			if !ok {
 				// closed
 				backend.Flush()
@@ -300,7 +300,7 @@ func (backend *Backend) Worker() {
 				backend.Close()
 				return
 			}
-			backend.WriteBuffer(data)
+			backend.WriteBuffer(p)
 
 		case <-backend.chTimer:
 			backend.Flush()
@@ -311,13 +311,13 @@ func (backend *Backend) Worker() {
 	}
 }
 
-func (backend *Backend) WriteData(data *LineData) (err error) {
-	backend.chWrite <- data
+func (backend *Backend) WritePoint(point *LinePoint) (err error) {
+	backend.chWrite <- point
 	return
 }
 
-func (backend *Backend) WriteBuffer(data *LineData) (err error) {
-	db := data.Db
+func (backend *Backend) WriteBuffer(point *LinePoint) (err error) {
+	db := point.Db
 	cb, ok := backend.bufferMap[db]
 	if !ok {
 		backend.bufferMap[db] = &CacheBuffer{Buffer: &bytes.Buffer{}}
@@ -327,12 +327,12 @@ func (backend *Backend) WriteBuffer(data *LineData) (err error) {
 	if cb.Buffer == nil {
 		cb.Buffer = &bytes.Buffer{}
 	}
-	n, err := cb.Buffer.Write(data.Line)
+	n, err := cb.Buffer.Write(point.Line)
 	if err != nil {
 		log.Printf("buffer write error: %s\n", err)
 		return
 	}
-	if n != len(data.Line) {
+	if n != len(point.Line) {
 		err = io.ErrShortWrite
 		log.Printf("buffer write error: %s\n", err)
 		return

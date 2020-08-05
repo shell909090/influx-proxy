@@ -49,12 +49,6 @@ type Proxy struct {
 	lock            sync.RWMutex              `json:"lock"`
 }
 
-type LineData struct {
-	Db        string `json:"db"`
-	Line      []byte `json:"line"`
-	Precision string `json:"precision"`
-}
-
 type MigrateInfo struct {
 	DatabaseTotal    int32 `json:"database_total"`
 	DatabaseDone     int32 `json:"database_done"`
@@ -273,34 +267,34 @@ func (proxy *Proxy) Query(w http.ResponseWriter, req *http.Request, tokens []str
 	return
 }
 
-func (proxy *Proxy) Write(data *LineData) {
-	nanoLine := LineToNano(data.Line, data.Precision)
+func (proxy *Proxy) Write(point *LinePoint) {
+	nanoLine := LineToNano(point.Line, point.Precision)
 	meas, err := ScanKey(nanoLine)
 	if err != nil {
 		log.Printf("scan key error: %s", err)
 		return
 	}
 	if !CheckSpace(nanoLine[len(meas):]) {
-		log.Printf("invalid format, drop data: %s %s %s", data.Db, data.Precision, string(data.Line))
+		log.Printf("invalid format, drop data: %s %s %s", point.Db, point.Precision, string(point.Line))
 		return
 	}
-	data.Line = nanoLine
+	point.Line = nanoLine
 
-	key := GetKey(data.Db, meas)
+	key := GetKey(point.Db, meas)
 	backends := proxy.GetBackends(key)
 	if len(backends) == 0 {
 		log.Printf("write data error: get backends return 0")
 		return
 	}
 
-	if !bytes.HasSuffix(data.Line, []byte("\n")) {
-		data.Line = append(data.Line, []byte("\n")...)
+	if !bytes.HasSuffix(point.Line, []byte("\n")) {
+		point.Line = append(point.Line, []byte("\n")...)
 	}
 
 	for _, backend := range backends {
-		err := backend.WriteData(data)
+		err := backend.WritePoint(point)
 		if err != nil {
-			log.Printf("write data to buffer error: %s, %s, %s, %s, %s", err, backend.Url, data.Db, data.Precision, string(data.Line))
+			log.Printf("write data to buffer error: %s, %s, %s, %s, %s", err, backend.Url, point.Db, point.Precision, string(point.Line))
 		}
 	}
 }

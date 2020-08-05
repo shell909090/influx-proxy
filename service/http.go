@@ -152,13 +152,13 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
 		if len(line) == 0 {
 			continue
 		}
-		data := &backend.LineData{
+		point := &backend.LinePoint{
 			Db:        db,
 			Line:      line,
 			Precision: precision,
 		}
 		hs.Logf("write: %s %s %s", db, precision, line)
-		hs.Write(data)
+		hs.Write(point)
 	}
 	w.WriteHeader(204)
 	return
