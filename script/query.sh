@@ -10,6 +10,8 @@ curl -G 'http://127.0.0.1:7076/query?db=db1' --data-urlencode 'q=select * from c
 curl -G 'http://127.0.0.1:7076/query?db=db1' --data-urlencode 'q=select * from cpu2'
 curl -G 'http://127.0.0.1:7076/query?db=db2' --data-urlencode 'q=select * from cpu3;'
 curl -G 'http://127.0.0.1:7076/query?db=db2' --data-urlencode 'q=select * from cpu4'
+curl -G 'http://127.0.0.1:7076/query?db=db2' --data-urlencode 'q=select * from "measurement with spaces, commas and \"quotes\""'
+curl -G 'http://127.0.0.1:7076/query?db=db2' --data-urlencode 'q=select * from "\"measurement with spaces, commas and \"quotes\"\""'
 
 curl -G 'http://127.0.0.1:7076/query?db=db1' --data-urlencode 'q=show tag keys from cpu1'
 curl -G 'http://127.0.0.1:7076/query' --data-urlencode 'q=show FIELD keys on db1 from cpu2'

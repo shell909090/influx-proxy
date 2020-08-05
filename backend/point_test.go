@@ -43,7 +43,12 @@ func TestScanKey(t *testing.T) {
 		},
 		{
 			name: "test7",
-			line: []byte("\"measurement\\ with\\ spaces\\,\\ commas\\ and\\ \\\"quotes\\\"\",tag\\ key\\ with\\ equals\\ \\==tag\\,value\\,with\"commas\" field_k\\ey\\ with\\ \\==\"string field value, only \\\" need be escaped\""),
+			line: []byte("measurement\\ with\\ spaces\\,\\ commas\\ and\\ \"quotes\",tag\\ key\\ with\\ equals\\ \\==tag\\ value\\ with\"spaces\" field_k\\ey\\ with\\ \\==\"string field value, multiple backslashes \\,\\\\,\\\\\\,\\\\\\\\\""),
+			want: "measurement with spaces, commas and \"quotes\"",
+		},
+		{
+			name: "test8",
+			line: []byte("\"measurement\\ with\\ spaces\\,\\ commas\\ and\\ \"quotes\"\",tag\\ key\\ with\\ equals\\ \\==tag\\,value\\,with\"commas\" field_k\\ey\\ with\\ \\==\"string field value, only \\\" need be escaped\""),
 			want: "\"measurement with spaces, commas and \"quotes\"\"",
 		},
 	}
@@ -215,12 +220,12 @@ func TestCheckSpace(t *testing.T) {
 		},
 		{
 			name: "test8",
-			line: []byte("\"measurement\\ with\\ spaces\\,\\ commas\\ and\\ \\\"quotes\\\"\",tag\\ key\\ with\\ equals\\ \\==tag\\,value\\,with\"commas\" field_k\\ey\\ with\\ \\==\"string field value, only \\\" need be escaped\""),
+			line: []byte("measurement\\ with\\ spaces\\,\\ commas\\ and\\ \"quotes\",tag\\ key\\ with\\ equals\\ \\==tag\\ value\\ with\"spaces\" field_k\\ey\\ with\\ \\==\"string field value, multiple backslashes \\,\\\\,\\\\\\,\\\\\\\\\""),
 			want: true,
 		},
 		{
 			name: "test9",
-			line: []byte("\"measurement\\ with\\ spaces\\,\\ commas\\ and\\ \\\"quotes\\\"\",tag\\ key\\ with\\ equals\\ \\==tag\\,value\\,with\"commas\" field_k\\ey\\ with\\ \\==\"string field value, multiple backslashes \\,\\\\,\\\\\\,\\\\\\\\\""),
+			line: []byte("\"measurement\\ with\\ spaces\\,\\ commas\\ and\\ \"quotes\"\",tag\\ key\\ with\\ equals\\ \\==tag\\,value\\,with\"commas\" field_k\\ey\\ with\\ \\==\"string field value, only \\\" need be escaped\""),
 			want: true,
 		},
 		{

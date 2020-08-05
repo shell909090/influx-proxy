@@ -24,3 +24,7 @@ curl -i -X POST 'http://127.0.0.1:7076/write?db=db2&precision=ms' --data-binary 
 'cpu4 idle=14,system=31i,user="Dwayne Johnson",admin=true,character="\", ,\,\\,\\\,\\\\"
 cpu4 idle=39,system=56i,user="Jay Chou",brief\ desc="the best \"singer\"" 1422568543702
 cpu4 idle=47,system=93i,user="Stephen Chow",admin=true,brief\ desc="the best \"novelist\""  1596819420440'
+
+curl -i -X POST 'http://127.0.0.1:7076/write?db=db2' --data-binary \
+'measurement\ with\ spaces\,\ commas\ and\ "quotes",tag\ key\ with\ equals\ \==tag\ value\ with"spaces" field_k\ey\ with\ \=="string field value, multiple backslashes \,\\,\\\,\\\\"
+"measurement\ with\ spaces\,\ commas\ and\ "quotes"",tag\ key\ with\ equals\ \==tag\,value\,with"commas" field_k\ey\ with\ \=="string field value, only \" need be escaped"'
