@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	Version = "2.4.7"
+	Version = "2.5.0"
 )
 
 type HttpService struct {
