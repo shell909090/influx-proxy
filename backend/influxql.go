@@ -9,22 +9,20 @@ import (
 	"strings"
 )
 
-var (
-	SupportCmds = mapset.NewSet(
-		"show measurements",
-		"show series",
-		"show field keys",
-		"show tag keys",
-		"show tag values",
-		"show retention policies",
-		"show stats",
-		"show databases",
-		"create database",
-		"drop database",
-		"delete from",
-		"drop series from",
-		"drop measurement",
-	)
+var SupportCmds = mapset.NewSet(
+	"show measurements",
+	"show series",
+	"show field keys",
+	"show tag keys",
+	"show tag values",
+	"show retention policies",
+	"show stats",
+	"show databases",
+	"create database",
+	"drop database",
+	"delete from",
+	"drop series from",
+	"drop measurement",
 )
 
 var (
