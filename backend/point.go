@@ -5,6 +5,7 @@ import (
 	"github.com/influxdata/influxdb1-client/models"
 	"io"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -15,19 +16,19 @@ type LinePoint struct {
 }
 
 func ScanKey(pointbuf []byte) (key string, err error) {
-	keyslice := make([]byte, 0)
+	var b strings.Builder
 	buflen := len(pointbuf)
 	for i := 0; i < buflen; i++ {
 		c := pointbuf[i]
 		switch c {
 		case '\\':
 			i++
-			keyslice = append(keyslice, pointbuf[i])
+			b.WriteByte(pointbuf[i])
 		case ' ', ',':
-			key = string(keyslice)
+			key = b.String()
 			return
 		default:
-			keyslice = append(keyslice, c)
+			b.WriteByte(c)
 		}
 	}
 	return "", io.EOF

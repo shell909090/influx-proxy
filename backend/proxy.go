@@ -179,6 +179,7 @@ func (proxy *Proxy) CheckConfig() (err error) {
 
 func GetKey(db, meas string) string {
 	var b strings.Builder
+	b.Grow(len(db) + len(meas) + 1)
 	b.WriteString(db)
 	b.WriteString(",")
 	b.WriteString(meas)
