@@ -22,6 +22,7 @@ type Circle struct {
 	CircleId     int                        `json:"circle_id"`
 	Backends     []*Backend                 `json:"backends"`
 	router       *consistent.Consistent     `json:"router"`
+	routerCaches map[string]*Backend        `json:"router_caches"`
 	mapToBackend map[string]*Backend        `json:"map_to_backend"`
 	BackendWgMap map[string]*sync.WaitGroup `json:"backend_wg_map"`
 	IsMigrating  bool                       `json:"is_migrating"`
@@ -32,6 +33,7 @@ func (circle *Circle) InitCircle(proxy *Proxy, circleId int) {
 	circle.CircleId = circleId
 	circle.router = consistent.New()
 	circle.router.NumberOfReplicas = proxy.VNodeSize
+	circle.routerCaches = make(map[string]*Backend)
 	circle.mapToBackend = make(map[string]*Backend)
 	circle.BackendWgMap = make(map[string]*sync.WaitGroup)
 	circle.IsMigrating = false
@@ -57,8 +59,14 @@ func (circle *Circle) addRouter(proxy *Proxy, backend *Backend, idx int) {
 }
 
 func (circle *Circle) GetBackend(key string) *Backend {
-	value, _ := circle.router.Get(key)
-	return circle.mapToBackend[value]
+	if backend, ok := circle.routerCaches[key]; ok {
+		return backend
+	} else {
+		value, _ := circle.router.Get(key)
+		backend := circle.mapToBackend[value]
+		circle.routerCaches[key] = backend
+		return backend
+	}
 }
 
 func (circle *Circle) GetHealth() []map[string]interface{} {
