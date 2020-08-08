@@ -269,13 +269,13 @@ func (proxy *Proxy) Query(w http.ResponseWriter, req *http.Request, tokens []str
 }
 
 func (proxy *Proxy) Write(point *LinePoint) {
-	nanoLine := LineToNano(point.Line, point.Precision)
+	nanoLine := AppendNano(point.Line, point.Precision)
 	meas, err := ScanKey(nanoLine)
 	if err != nil {
 		log.Printf("scan key error: %s", err)
 		return
 	}
-	if !CheckSpace(nanoLine[len(meas):]) {
+	if !RapidCheck(nanoLine[len(meas):]) {
 		log.Printf("invalid format, drop data: %s %s %s", point.Db, point.Precision, string(point.Line))
 		return
 	}

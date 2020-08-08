@@ -16,8 +16,9 @@ type LinePoint struct {
 }
 
 func ScanKey(pointbuf []byte) (key string, err error) {
-	var b strings.Builder
 	buflen := len(pointbuf)
+	var b strings.Builder
+	b.Grow(buflen)
 	for i := 0; i < buflen; i++ {
 		c := pointbuf[i]
 		switch c {
@@ -44,23 +45,22 @@ func ScanTime(buf []byte) (int, bool) {
 	return i, i > 0 && i < len(buf)-1 && (buf[i] == ' ' || buf[i] == 0)
 }
 
-func LineToNano(line []byte, precision string) []byte {
+func AppendNano(line []byte, precision string) []byte {
 	line = bytes.TrimSpace(line)
 	pos, found := ScanTime(line)
 	if found {
 		if precision == "ns" || precision == "n" {
 			return line
 		} else if precision == "u" {
-			return append(line, []byte("000")...)
+			return append(line, '0', '0', '0')
 		} else if precision == "ms" {
-			return append(line, []byte("000000")...)
+			return append(line, '0', '0', '0', '0', '0', '0')
 		} else if precision == "s" {
-			return append(line, []byte("000000000")...)
+			return append(line, '0', '0', '0', '0', '0', '0', '0', '0', '0')
 		} else {
 			mul := models.GetPrecisionMultiplier(precision)
 			nano := BytesToInt64(line[pos+1:]) * mul
-			bytenano := Int64ToBytes(nano)
-			return bytes.Join([][]byte{line[:pos], bytenano}, []byte(" "))
+			return append(line[:pos+1], Int64ToBytes(nano)...)
 		}
 	} else {
 		return append(line, []byte(" "+strconv.FormatInt(time.Now().UnixNano(), 10))...)
@@ -80,7 +80,7 @@ func BytesToInt64(buf []byte) int64 {
 	return res
 }
 
-func CheckSpace(buf []byte) bool {
+func RapidCheck(buf []byte) bool {
 	buflen := len(buf)
 	// find the first unescaped space, and pick the last for consecutive spaces
 	i := 0

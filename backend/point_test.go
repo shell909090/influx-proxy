@@ -95,7 +95,7 @@ func BenchmarkScanKey(b *testing.B) {
 	}
 }
 
-func TestLineToNano(t *testing.T) {
+func TestAppendNano(t *testing.T) {
 	tests := []struct {
 		name string
 		line []byte
@@ -196,7 +196,7 @@ func TestLineToNano(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		got := LineToNano(tt.line, tt.unit)
+		got := AppendNano(tt.line, tt.unit)
 		if tt.time {
 			if string(got) != tt.want {
 				t.Errorf("%v: got %v, want %v", tt.name, string(got), tt.want)
@@ -211,7 +211,7 @@ func TestLineToNano(t *testing.T) {
 	}
 }
 
-func BenchmarkLineToNano(b *testing.B) {
+func BenchmarkAppendNano(b *testing.B) {
 	buf := &bytes.Buffer{}
 	for i := 0; i < b.N; i++ {
 		fmt.Fprintf(buf, "%s%d,a=%d,b=2 c=3 1596819659\n", "name", i, i)
@@ -234,11 +234,11 @@ func BenchmarkLineToNano(b *testing.B) {
 		}
 
 		line = bytes.TrimRight(line, " \t\r\n")
-		LineToNano(line, "s")
+		AppendNano(line, "s")
 	}
 }
 
-func TestCheckSpace(t *testing.T) {
+func TestRapidCheck(t *testing.T) {
 	tests := []struct {
 		name string
 		line []byte
@@ -336,7 +336,7 @@ func TestCheckSpace(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		got := CheckSpace(tt.line)
+		got := RapidCheck(tt.line)
 		if got != tt.want {
 			t.Errorf("%v: got %v, want %v", tt.name, got, tt.want)
 			continue
@@ -344,7 +344,7 @@ func TestCheckSpace(t *testing.T) {
 	}
 }
 
-func BenchmarkCheckSpace(b *testing.B) {
+func BenchmarkRapidCheck(b *testing.B) {
 	buf := &bytes.Buffer{}
 	for i := 0; i < b.N; i++ {
 		fmt.Fprintf(buf, "%s%d,a=%d,b=2 c=3 1596819659\n", "name", i, i)
@@ -367,6 +367,6 @@ func BenchmarkCheckSpace(b *testing.B) {
 		}
 
 		line = bytes.TrimRight(line, " \t\r\n")
-		CheckSpace(line)
+		RapidCheck(line)
 	}
 }
