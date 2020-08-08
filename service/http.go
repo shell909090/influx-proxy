@@ -1,7 +1,6 @@
 package service
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -66,7 +65,9 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
 		hs.write(w, "query not found")
 		return
 	}
-	hs.Logf("query: %s db=%s q=%s", req.Method, req.FormValue("db"), q)
+	if hs.LogEnabled {
+		log.Printf("query: %s %s %s, client: %s", req.Method, req.FormValue("db"), q, req.RemoteAddr)
+	}
 
 	tokens, check := backend.CheckQuery(q)
 	if !check {
@@ -147,20 +148,13 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	lines := bytes.Split(p, []byte{'\n'})
-	for _, line := range lines {
-		if len(line) == 0 {
-			continue
-		}
-		point := &backend.LinePoint{
-			Db:        db,
-			Line:      line,
-			Precision: precision,
-		}
-		hs.Logf("write: %s %s %s", db, precision, line)
-		hs.Write(point)
+	err = hs.Write(p, db, precision)
+	if err == nil {
+		w.WriteHeader(204)
 	}
-	w.WriteHeader(204)
+	if hs.LogEnabled {
+		log.Printf("write: %s %s %s, client: %s", db, precision, string(p), req.RemoteAddr)
+	}
 	return
 }
 

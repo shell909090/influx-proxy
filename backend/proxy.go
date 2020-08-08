@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/chengshiwen/influx-proxy/util"
 	"github.com/deckarep/golang-set"
+	"io"
 	"io/ioutil"
 	"log"
 	"math/rand"
@@ -268,30 +269,50 @@ func (proxy *Proxy) Query(w http.ResponseWriter, req *http.Request, tokens []str
 	return
 }
 
-func (proxy *Proxy) Write(point *LinePoint) {
-	nanoLine := AppendNano(point.Line, point.Precision)
+func (proxy *Proxy) Write(p []byte, db, precision string) (err error) {
+	buf := bytes.NewBuffer(p)
+	var line []byte
+	for {
+		line, err = buf.ReadBytes('\n')
+		switch err {
+		default:
+			log.Printf("error: %s\n", err)
+			return
+		case io.EOF, nil:
+			err = nil
+		}
+		if len(line) == 0 {
+			break
+		}
+		proxy.WriteRow(line, db, precision)
+	}
+	return
+}
+
+func (proxy *Proxy) WriteRow(line []byte, db, precision string) {
+	nanoLine := AppendNano(line, precision)
 	meas, err := ScanKey(nanoLine)
 	if err != nil {
 		log.Printf("scan key error: %s", err)
 		return
 	}
 	if !RapidCheck(nanoLine[len(meas):]) {
-		log.Printf("invalid format, drop data: %s %s %s", point.Db, point.Precision, string(point.Line))
+		log.Printf("invalid format, drop data: %s %s %s", db, precision, string(line))
 		return
 	}
-	point.Line = nanoLine
 
-	key := GetKey(point.Db, meas)
+	key := GetKey(db, meas)
 	backends := proxy.GetBackends(key)
 	if len(backends) == 0 {
 		log.Printf("write data error: get backends return 0")
 		return
 	}
 
+	point := &LinePoint{db, nanoLine}
 	for _, backend := range backends {
 		err := backend.WritePoint(point)
 		if err != nil {
-			log.Printf("write data to buffer error: %s, %s, %s, %s, %s", err, backend.Url, point.Db, point.Precision, string(point.Line))
+			log.Printf("write data to buffer error: %s, %s, %s, %s, %s", err, backend.Url, db, precision, string(line))
 		}
 	}
 }

@@ -317,7 +317,7 @@ func (backend *Backend) WritePoint(point *LinePoint) (err error) {
 }
 
 func (backend *Backend) WriteBuffer(point *LinePoint) (err error) {
-	db := point.Db
+	db, line := point.Db, point.Line
 	cb, ok := backend.bufferMap[db]
 	if !ok {
 		backend.bufferMap[db] = &CacheBuffer{Buffer: &bytes.Buffer{}}
@@ -327,17 +327,17 @@ func (backend *Backend) WriteBuffer(point *LinePoint) (err error) {
 	if cb.Buffer == nil {
 		cb.Buffer = &bytes.Buffer{}
 	}
-	n, err := cb.Buffer.Write(point.Line)
+	n, err := cb.Buffer.Write(line)
 	if err != nil {
 		log.Printf("buffer write error: %s\n", err)
 		return
 	}
-	if n != len(point.Line) {
+	if n != len(line) {
 		err = io.ErrShortWrite
 		log.Printf("buffer write error: %s\n", err)
 		return
 	}
-	if point.Line[len(point.Line)-1] != '\n' {
+	if line[len(line)-1] != '\n' {
 		_, err = cb.Buffer.Write([]byte{'\n'})
 		if err != nil {
 			log.Printf("buffer write error: %s\n", err)
@@ -397,7 +397,7 @@ func (backend *Backend) FlushBuffer(db string) (err error) {
 			}
 		}
 
-		b := bytes.Join([][]byte{[]byte(url.QueryEscape(db)), p}, []byte(" "))
+		b := bytes.Join([][]byte{[]byte(url.QueryEscape(db)), p}, []byte{' '})
 		err = backend.WriteFile(b)
 		if err != nil {
 			log.Printf("write db and data to file error with db: %s, length: %d error: %s", db, len(p), err)
@@ -451,7 +451,7 @@ func (backend *Backend) Rewrite() (err error) {
 		return
 	}
 
-	p := bytes.SplitN(b, []byte(" "), 2)
+	p := bytes.SplitN(b, []byte{' '}, 2)
 	if len(p) < 2 {
 		log.Print("rewrite read invalid data with length: ", len(p))
 		return
