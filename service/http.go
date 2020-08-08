@@ -147,7 +147,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	lines := bytes.Split(p, []byte("\n"))
+	lines := bytes.Split(p, []byte{'\n'})
 	for _, line := range lines {
 		if len(line) == 0 {
 			continue

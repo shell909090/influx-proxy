@@ -288,10 +288,6 @@ func (proxy *Proxy) Write(point *LinePoint) {
 		return
 	}
 
-	if !bytes.HasSuffix(point.Line, []byte("\n")) {
-		point.Line = append(point.Line, []byte("\n")...)
-	}
-
 	for _, backend := range backends {
 		err := backend.WritePoint(point)
 		if err != nil {

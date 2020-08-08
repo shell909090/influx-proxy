@@ -337,6 +337,13 @@ func (backend *Backend) WriteBuffer(point *LinePoint) (err error) {
 		log.Printf("buffer write error: %s\n", err)
 		return
 	}
+	if point.Line[len(point.Line)-1] != '\n' {
+		_, err = cb.Buffer.Write([]byte{'\n'})
+		if err != nil {
+			log.Printf("buffer write error: %s\n", err)
+			return
+		}
+	}
 
 	switch {
 	case cb.Counter >= backend.FlushSize:
