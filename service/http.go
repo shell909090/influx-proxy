@@ -356,7 +356,7 @@ func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request
 			return
 		}
 		for _, b := range body.Backends {
-			backends = append(backends, backend.NewSimpleBackend(b.Name, b.Url, b.Username, b.Password, hs.AuthSecure))
+			backends = append(backends, backend.NewSimpleBackend(b.Name, b.Url, b.Username, b.Password, hs.AuthSecure, hs.ConnPoolSize))
 			hs.MigrateStats[circleId][b.Url] = &backend.MigrateInfo{}
 			hs.Circles[circleId].BackendWgMap[b.Url] = &sync.WaitGroup{}
 		}

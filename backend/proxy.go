@@ -632,7 +632,7 @@ func (proxy *Proxy) SetMigrating(circle *Circle, migrating bool) {
 
 func (proxy *Proxy) SetResyncingAndBroadcast(resyncing bool) {
 	proxy.SetResyncing(resyncing)
-	client := NewClient(proxy.HTTPSEnabled, 10)
+	client := NewClient(proxy.ConnPoolSize, proxy.HTTPSEnabled, 10)
 	for _, addr := range proxy.HaAddrs {
 		url := fmt.Sprintf("http://%s/migrate/state?resyncing=%t", addr, resyncing)
 		proxy.PostBroadcast(client, url)
@@ -641,7 +641,7 @@ func (proxy *Proxy) SetResyncingAndBroadcast(resyncing bool) {
 
 func (proxy *Proxy) SetMigratingAndBroadcast(circle *Circle, migrating bool) {
 	proxy.SetMigrating(circle, migrating)
-	client := NewClient(proxy.HTTPSEnabled, 10)
+	client := NewClient(proxy.ConnPoolSize, proxy.HTTPSEnabled, 10)
 	for _, addr := range proxy.HaAddrs {
 		url := fmt.Sprintf("http://%s/migrate/state?circle_id=%d&migrating=%t", addr, circle.CircleId, migrating)
 		proxy.PostBroadcast(client, url)

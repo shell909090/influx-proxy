@@ -12,6 +12,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -62,14 +63,14 @@ type Backend struct {
 	lock          sync.RWMutex
 }
 
-func NewSimpleBackend(name, url, username, password string, authSecure bool) *Backend {
+func NewSimpleBackend(name, url, username, password string, authSecure bool, connSize int) *Backend {
 	return &Backend{
 		Name:       name,
 		Url:        url,
 		Username:   username,
 		Password:   password,
 		AuthSecure: authSecure,
-		transport:  NewTransport(strings.HasPrefix(url, "https")),
+		transport:  NewTransport(connSize, strings.HasPrefix(url, "https")),
 		Active:     true,
 	}
 }
@@ -82,8 +83,8 @@ func (backend *Backend) InitBackend(proxy *Proxy) {
 	backend.CheckInterval = proxy.CheckInterval
 	backend.RewriteInterval = proxy.RewriteInterval
 	backend.rewriteTicker = time.NewTicker(time.Duration(proxy.RewriteInterval) * time.Second)
-	backend.client = NewClient(strings.HasPrefix(backend.Url, "https"), proxy.WriteTimeout)
-	backend.transport = NewTransport(strings.HasPrefix(backend.Url, "https"))
+	backend.client = NewClient(proxy.ConnPoolSize, strings.HasPrefix(backend.Url, "https"), proxy.WriteTimeout)
+	backend.transport = NewTransport(proxy.ConnPoolSize, strings.HasPrefix(backend.Url, "https"))
 	backend.Active = true
 	backend.chWrite = make(chan *LinePoint, 16)
 	backend.bufferMap = make(map[string]*CacheBuffer)
@@ -491,12 +492,23 @@ func (backend *Backend) Rewrite() (err error) {
 
 // handle http
 
-func NewClient(tlsSkip bool, timeout int) *http.Client {
-	return &http.Client{Transport: NewTransport(tlsSkip), Timeout: time.Duration(timeout) * time.Second}
+func NewClient(connSize int, tlsSkip bool, timeout int) *http.Client {
+	return &http.Client{Transport: NewTransport(connSize, tlsSkip), Timeout: time.Duration(timeout) * time.Second}
 }
 
-func NewTransport(tlsSkip bool) *http.Transport {
-	return &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: tlsSkip}}
+func NewTransport(connSize int, tlsSkip bool) (transport *http.Transport) {
+	return &http.Transport{
+		DialContext: (&net.Dialer{
+			Timeout:   time.Second * 30,
+			KeepAlive: time.Second * 30,
+		}).DialContext,
+		MaxIdleConns:          connSize * 2,
+		MaxIdleConnsPerHost:   connSize * 2,
+		IdleConnTimeout:       time.Second * 60,
+		TLSHandshakeTimeout:   time.Second * 10,
+		ExpectContinueTimeout: time.Second * 1,
+		TLSClientConfig:       &tls.Config{InsecureSkipVerify: tlsSkip},
+	}
 }
 
 func Compress(buf *bytes.Buffer, p []byte) (err error) {
