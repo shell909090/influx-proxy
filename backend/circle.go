@@ -21,12 +21,13 @@ type Circle struct {
 	Name         string                     `json:"name"`
 	CircleId     int                        `json:"circle_id"`
 	Backends     []*Backend                 `json:"backends"`
-	router       *consistent.Consistent     `json:"router"`
-	routerCaches map[string]*Backend        `json:"router_caches"`
-	mapToBackend map[string]*Backend        `json:"map_to_backend"`
 	BackendWgMap map[string]*sync.WaitGroup `json:"backend_wg_map"`
 	IsMigrating  bool                       `json:"is_migrating"`
 	MigrateWg    *sync.WaitGroup            `json:"migrate_wg"`
+
+	router       *consistent.Consistent
+	routerCaches map[string]*Backend
+	mapToBackend map[string]*Backend
 }
 
 func (circle *Circle) InitCircle(proxy *Proxy, circleId int) {

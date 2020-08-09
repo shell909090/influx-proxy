@@ -47,7 +47,7 @@ type Proxy struct {
 	MigrateCpus     int                       `json:"migrate_cpus"`
 	MigrateBatch    int                       `json:"migrate_batch"`
 	MigrateStats    []map[string]*MigrateInfo `json:"migrate_stats"`
-	lock            sync.RWMutex              `json:"lock"`
+	lock            sync.RWMutex
 }
 
 type MigrateInfo struct {

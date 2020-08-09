@@ -35,30 +35,31 @@ type CacheBuffer struct {
 }
 
 type Backend struct {
-	Name            string                  `json:"name"`
-	Url             string                  `json:"url"`
-	Username        string                  `json:"username"`
-	Password        string                  `json:"password"`
-	AuthSecure      bool                    `json:"auth_secure"`
-	FlushSize       int                     `json:"flush_size"`
-	FlushTime       int                     `json:"flush_time"`
-	CheckInterval   int                     `json:"check_interval"`
-	RewriteInterval int                     `json:"rewrite_interval"`
-	rewriteTicker   *time.Ticker            `json:"rewrite_ticker"`
-	RewriteRunning  bool                    `json:"rewrite_running"`
-	dataFlag        bool                    `json:"data_flag"`
-	producer        *os.File                `json:"producer"`
-	consumer        *os.File                `json:"consumer"`
-	meta            *os.File                `json:"meta"`
-	pool            *ants.Pool              `json:"pool"`
-	client          *http.Client            `json:"client"`
-	transport       *http.Transport         `json:"transport"`
-	Active          bool                    `json:"active"`
-	chWrite         chan *LinePoint         `json:"ch_write"`
-	chTimer         <-chan time.Time        `json:"ch_timer"`
-	bufferMap       map[string]*CacheBuffer `json:"buffer_map"`
-	wg              sync.WaitGroup          `json:"wg"`
-	lock            sync.RWMutex            `json:"lock"`
+	Name            string `json:"name"`
+	Url             string `json:"url"`
+	Username        string `json:"username"`
+	Password        string `json:"password"`
+	AuthSecure      bool   `json:"auth_secure"`
+	FlushSize       int    `json:"flush_size"`
+	FlushTime       int    `json:"flush_time"`
+	CheckInterval   int    `json:"check_interval"`
+	RewriteInterval int    `json:"rewrite_interval"`
+	RewriteRunning  bool   `json:"rewrite_running"`
+
+	rewriteTicker *time.Ticker
+	dataFlag      bool
+	producer      *os.File
+	consumer      *os.File
+	meta          *os.File
+	pool          *ants.Pool
+	client        *http.Client
+	transport     *http.Transport
+	Active        bool
+	chWrite       chan *LinePoint
+	chTimer       <-chan time.Time
+	bufferMap     map[string]*CacheBuffer
+	wg            sync.WaitGroup
+	lock          sync.RWMutex
 }
 
 func NewSimpleBackend(name, url, username, password string, authSecure bool) *Backend {
@@ -619,7 +620,6 @@ func (backend *Backend) WriteStream(db string, stream io.Reader, compressed bool
 	default: // mostly tcp connection timeout, or request entity too large
 		return ErrUnknown
 	}
-	return nil
 }
 
 func (backend *Backend) Query(req *http.Request, w http.ResponseWriter, decompressed bool) ([]byte, error) {
