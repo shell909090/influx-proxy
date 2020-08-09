@@ -18,10 +18,6 @@ import (
 	"sync"
 )
 
-const (
-	Version = "2.5.0"
-)
-
 type HttpService struct {
 	*backend.Proxy
 }
@@ -554,7 +550,7 @@ func (hs *HttpService) addHeader(w http.ResponseWriter) {
 }
 
 func (hs *HttpService) addVerHeader(w http.ResponseWriter) {
-	w.Header().Add("X-Influxdb-Version", Version)
+	w.Header().Add("X-Influxdb-Version", backend.VERSION)
 }
 
 func (hs *HttpService) addJsonHeader(w http.ResponseWriter) {

@@ -23,7 +23,7 @@ func main() {
 	flag.BoolVar(&Version, "version", false, "proxy version")
 	flag.Parse()
 	if Version {
-		fmt.Printf("Version:    %s\n", service.Version)
+		fmt.Printf("Version:    %s\n", backend.VERSION)
 		fmt.Printf("Git commit: %s\n", GitCommit)
 		fmt.Printf("Go version: %s\n", runtime.Version())
 		fmt.Printf("Build time: %s\n", BuildTime)
@@ -31,9 +31,9 @@ func main() {
 		return
 	}
 	if GitCommit == "" {
-		log.Printf("version: %s", service.Version)
+		log.Printf("version: %s", backend.VERSION)
 	} else {
-		log.Printf("version: %s, commit: %s, build: %s", service.Version, GitCommit, BuildTime)
+		log.Printf("version: %s, commit: %s, build: %s", backend.VERSION, GitCommit, BuildTime)
 	}
 
 	proxy, err := backend.NewProxy(ConfigFile)
