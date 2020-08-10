@@ -31,71 +31,78 @@ var (
 )
 
 type CacheBuffer struct {
-	Buffer  *bytes.Buffer `json:"buffer"`
-	Counter int           `json:"counter"`
+	Buffer  *bytes.Buffer
+	Counter int
 }
 
 type Backend struct {
-	Name            string `json:"name"`
-	Url             string `json:"url"`
-	Username        string `json:"username"`
-	Password        string `json:"password"`
-	AuthSecure      bool   `json:"auth_secure"`
-	FlushSize       int    `json:"flush_size"`
-	FlushTime       int    `json:"flush_time"`
-	CheckInterval   int    `json:"check_interval"`
-	RewriteInterval int    `json:"rewrite_interval"`
-	RewriteRunning  bool   `json:"rewrite_running"`
-
-	rewriteTicker *time.Ticker
-	dataFlag      bool
-	producer      *os.File
-	consumer      *os.File
-	meta          *os.File
-	pool          *ants.Pool
-	client        *http.Client
-	transport     *http.Transport
-	Active        bool
-	chWrite       chan *LinePoint
-	chTimer       <-chan time.Time
-	bufferMap     map[string]*CacheBuffer
-	wg            sync.WaitGroup
-	lock          sync.RWMutex
+	Name            string
+	Url             string
+	Username        string
+	Password        string
+	authSecure      bool
+	flushSize       int
+	flushTime       int
+	checkInterval   int
+	rewriteInterval int
+	rewriteTicker   *time.Ticker
+	rewriteRunning  bool
+	dataFlag        bool
+	producer        *os.File
+	consumer        *os.File
+	meta            *os.File
+	pool            *ants.Pool
+	client          *http.Client
+	transport       *http.Transport
+	Active          bool
+	chWrite         chan *LinePoint
+	chTimer         <-chan time.Time
+	bufferMap       map[string]*CacheBuffer
+	wg              sync.WaitGroup
+	lock            sync.RWMutex
 }
 
-func NewSimpleBackend(name, url, username, password string, authSecure bool, connSize int) *Backend {
-	return &Backend{
-		Name:       name,
-		Url:        url,
-		Username:   username,
-		Password:   password,
-		AuthSecure: authSecure,
-		transport:  NewTransport(connSize, strings.HasPrefix(url, "https")),
-		Active:     true,
+func NewBackend(cfg *BackendConfig, pxcfg *ProxyConfig) (backend *Backend) {
+	backend = &Backend{
+		Name:     cfg.Name,
+		Url:      cfg.Url,
+		Username: cfg.Username,
+		Password: cfg.Password,
 	}
-}
-
-func (backend *Backend) InitBackend(proxy *Proxy) {
-	var err error
-	backend.AuthSecure = proxy.AuthSecure
-	backend.FlushSize = proxy.FlushSize
-	backend.FlushTime = proxy.FlushTime
-	backend.CheckInterval = proxy.CheckInterval
-	backend.RewriteInterval = proxy.RewriteInterval
-	backend.rewriteTicker = time.NewTicker(time.Duration(proxy.RewriteInterval) * time.Second)
-	backend.client = NewClient(proxy.ConnPoolSize, strings.HasPrefix(backend.Url, "https"), proxy.WriteTimeout)
-	backend.transport = NewTransport(proxy.ConnPoolSize, strings.HasPrefix(backend.Url, "https"))
+	backend.authSecure = pxcfg.AuthSecure
+	backend.flushSize = pxcfg.FlushSize
+	backend.flushTime = pxcfg.FlushTime
+	backend.checkInterval = pxcfg.CheckInterval
+	backend.rewriteInterval = pxcfg.RewriteInterval
+	backend.rewriteTicker = time.NewTicker(time.Duration(pxcfg.RewriteInterval) * time.Second)
+	backend.client = NewClient(strings.HasPrefix(backend.Url, "https"), pxcfg.WriteTimeout)
+	backend.transport = NewTransport(strings.HasPrefix(backend.Url, "https"))
 	backend.Active = true
 	backend.chWrite = make(chan *LinePoint, 16)
 	backend.bufferMap = make(map[string]*CacheBuffer)
-	backend.OpenFile(proxy.DataDir)
-	backend.pool, err = ants.NewPool(proxy.ConnPoolSize)
+	backend.OpenFile(pxcfg.DataDir)
+
+	var err error
+	backend.pool, err = ants.NewPool(pxcfg.ConnPoolSize)
 	if err != nil {
 		panic(err)
 	}
 
 	go backend.CheckActive()
 	go backend.Worker()
+	return
+}
+
+func NewSimpleBackend(cfg *BackendConfig, authSecure bool) *Backend {
+	return &Backend{
+		Name:       cfg.Name,
+		Url:        cfg.Url,
+		Username:   cfg.Username,
+		Password:   cfg.Password,
+		authSecure: authSecure,
+		transport:  NewTransport(strings.HasPrefix(cfg.Url, "https")),
+		Active:     true,
+	}
 }
 
 // handle file
@@ -348,13 +355,13 @@ func (backend *Backend) WriteBuffer(point *LinePoint) (err error) {
 	}
 
 	switch {
-	case cb.Counter >= backend.FlushSize:
+	case cb.Counter >= backend.flushSize:
 		err = backend.FlushBuffer(db)
 		if err != nil {
 			return
 		}
 	case backend.chTimer == nil:
-		backend.chTimer = time.After(time.Duration(backend.FlushTime) * time.Second)
+		backend.chTimer = time.After(time.Duration(backend.flushTime) * time.Second)
 	}
 	return
 }
@@ -422,8 +429,8 @@ func (backend *Backend) Flush() {
 }
 
 func (backend *Backend) RewriteIdle() {
-	if !backend.RewriteRunning && backend.IsData() {
-		backend.RewriteRunning = true
+	if !backend.rewriteRunning && backend.IsData() {
+		backend.rewriteRunning = true
 		go backend.RewriteLoop()
 	}
 }
@@ -431,16 +438,16 @@ func (backend *Backend) RewriteIdle() {
 func (backend *Backend) RewriteLoop() {
 	for backend.IsData() {
 		if !backend.Active {
-			time.Sleep(time.Duration(backend.RewriteInterval) * time.Second)
+			time.Sleep(time.Duration(backend.rewriteInterval) * time.Second)
 			continue
 		}
 		err := backend.Rewrite()
 		if err != nil {
-			time.Sleep(time.Duration(backend.RewriteInterval) * time.Second)
+			time.Sleep(time.Duration(backend.rewriteInterval) * time.Second)
 			continue
 		}
 	}
-	backend.RewriteRunning = false
+	backend.rewriteRunning = false
 }
 
 func (backend *Backend) Rewrite() (err error) {
@@ -490,21 +497,25 @@ func (backend *Backend) Rewrite() (err error) {
 	return
 }
 
-// handle http
-
-func NewClient(connSize int, tlsSkip bool, timeout int) *http.Client {
-	return &http.Client{Transport: NewTransport(connSize, tlsSkip), Timeout: time.Duration(timeout) * time.Second}
+func (backend *Backend) RewriteRunning() bool {
+	return backend.rewriteRunning
 }
 
-func NewTransport(connSize int, tlsSkip bool) (transport *http.Transport) {
+// handle http
+
+func NewClient(tlsSkip bool, timeout int) *http.Client {
+	return &http.Client{Transport: NewTransport(tlsSkip), Timeout: time.Duration(timeout) * time.Second}
+}
+
+func NewTransport(tlsSkip bool) (transport *http.Transport) {
 	return &http.Transport{
 		DialContext: (&net.Dialer{
 			Timeout:   time.Second * 30,
 			KeepAlive: time.Second * 30,
 		}).DialContext,
-		MaxIdleConns:          connSize * 2,
-		MaxIdleConnsPerHost:   connSize * 2,
-		IdleConnTimeout:       time.Second * 60,
+		MaxIdleConns:          100,
+		MaxIdleConnsPerHost:   100,
+		IdleConnTimeout:       time.Second * 90,
 		TLSHandshakeTimeout:   time.Second * 10,
 		ExpectContinueTimeout: time.Second * 1,
 		TLSClientConfig:       &tls.Config{InsecureSkipVerify: tlsSkip},
@@ -550,13 +561,13 @@ func SetBasicAuth(req *http.Request, username string, password string, authSecur
 }
 
 func (backend *Backend) SetBasicAuth(req *http.Request) {
-	SetBasicAuth(req, backend.Username, backend.Password, backend.AuthSecure)
+	SetBasicAuth(req, backend.Username, backend.Password, backend.authSecure)
 }
 
 func (backend *Backend) CheckActive() {
 	for {
 		backend.Active = backend.Ping()
-		time.Sleep(time.Duration(backend.CheckInterval) * time.Second)
+		time.Sleep(time.Duration(backend.checkInterval) * time.Second)
 	}
 }
 

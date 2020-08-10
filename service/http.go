@@ -85,7 +85,7 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
 			hs.write(w, "database not found")
 			return
 		}
-		if len(hs.DbList) > 0 && !hs.DbSet.Contains(db) {
+		if hs.CheckForbiddenDB(db) {
 			w.WriteHeader(400)
 			hs.write(w, fmt.Sprintf("database forbidden: %s", db))
 			return
@@ -120,7 +120,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
 		hs.write(w, "database not found")
 		return
 	}
-	if len(hs.DbList) > 0 && !hs.DbSet.Contains(db) {
+	if hs.CheckForbiddenDB(db) {
 		w.WriteHeader(400)
 		hs.write(w, fmt.Sprintf("database forbidden: %s", db))
 		return
@@ -342,7 +342,7 @@ func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request
 	var backends []*backend.Backend
 	if operation == "rm" {
 		var body struct {
-			Backends []*backend.Backend `json:"backends"`
+			Backends []*backend.BackendConfig `json:"backends"`
 		}
 		decoder := json.NewDecoder(req.Body)
 		err := decoder.Decode(&body)
@@ -351,10 +351,10 @@ func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request
 			w.Write([]byte("invalid backends from body\n"))
 			return
 		}
-		for _, b := range body.Backends {
-			backends = append(backends, backend.NewSimpleBackend(b.Name, b.Url, b.Username, b.Password, hs.AuthSecure, hs.ConnPoolSize))
-			hs.MigrateStats[circleId][b.Url] = &backend.MigrateInfo{}
-			hs.Circles[circleId].BackendWgMap[b.Url] = &sync.WaitGroup{}
+		for _, bkcfg := range body.Backends {
+			backends = append(backends, backend.NewSimpleBackend(bkcfg, hs.AuthSecure))
+			hs.MigrateStats[circleId][bkcfg.Url] = &backend.MigrateInfo{}
+			hs.Circles[circleId].BackendWgMap[bkcfg.Url] = &sync.WaitGroup{}
 		}
 	}
 	for _, backend := range hs.Circles[circleId].Backends {

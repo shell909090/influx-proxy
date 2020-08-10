@@ -10,8 +10,8 @@ import (
 )
 
 type LinePoint struct {
-	Db   string `json:"db"`
-	Line []byte `json:"line"`
+	Db   string
+	Line []byte
 }
 
 func ScanKey(pointbuf []byte) (key string, err error) {

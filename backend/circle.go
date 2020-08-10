@@ -18,39 +18,44 @@ import (
 var FieldDataTypes = []string{"float", "integer", "string", "boolean"}
 
 type Circle struct {
-	Name         string                     `json:"name"`
-	CircleId     int                        `json:"circle_id"`
-	Backends     []*Backend                 `json:"backends"`
-	BackendWgMap map[string]*sync.WaitGroup `json:"backend_wg_map"`
-	IsMigrating  bool                       `json:"is_migrating"`
-	MigrateWg    *sync.WaitGroup            `json:"migrate_wg"`
-
+	CircleId     int
+	Name         string
+	Backends     []*Backend
 	router       *consistent.Consistent
 	routerCaches map[string]*Backend
 	mapToBackend map[string]*Backend
+	BackendWgMap map[string]*sync.WaitGroup
+	IsMigrating  bool
+	MigrateWg    *sync.WaitGroup
 }
 
-func (circle *Circle) InitCircle(proxy *Proxy, circleId int) {
-	circle.CircleId = circleId
-	circle.router = consistent.New()
-	circle.router.NumberOfReplicas = proxy.VNodeSize
-	circle.routerCaches = make(map[string]*Backend)
-	circle.mapToBackend = make(map[string]*Backend)
-	circle.BackendWgMap = make(map[string]*sync.WaitGroup)
-	circle.IsMigrating = false
-	circle.MigrateWg = &sync.WaitGroup{}
-	for idx, backend := range circle.Backends {
-		circle.BackendWgMap[backend.Url] = &sync.WaitGroup{}
-		circle.addRouter(proxy, backend, idx)
-		backend.InitBackend(proxy)
+func NewCircle(cfg *CircleConfig, pxcfg *ProxyConfig, circleId int) (circle *Circle) {
+	circle = &Circle{
+		CircleId:     circleId,
+		Name:         cfg.Name,
+		Backends:     make([]*Backend, len(cfg.Backends)),
+		router:       consistent.New(),
+		routerCaches: make(map[string]*Backend),
+		mapToBackend: make(map[string]*Backend),
+		BackendWgMap: make(map[string]*sync.WaitGroup),
+		IsMigrating:  false,
+		MigrateWg:    &sync.WaitGroup{},
 	}
+	circle.router.NumberOfReplicas = pxcfg.VNodeSize
+	for idx, bkcfg := range cfg.Backends {
+		backend := NewBackend(bkcfg, pxcfg)
+		circle.Backends[idx] = backend
+		circle.BackendWgMap[bkcfg.Url] = &sync.WaitGroup{}
+		circle.addRouter(backend, idx, pxcfg.HashKey)
+	}
+	return
 }
 
-func (circle *Circle) addRouter(proxy *Proxy, backend *Backend, idx int) {
-	if proxy.HashKey == "name" {
+func (circle *Circle) addRouter(backend *Backend, idx int, hashKey string) {
+	if hashKey == "name" {
 		circle.router.Add(backend.Name)
 		circle.mapToBackend[backend.Name] = backend
-	} else if proxy.HashKey == "url" {
+	} else if hashKey == "url" {
 		circle.router.Add(backend.Url)
 		circle.mapToBackend[backend.Url] = backend
 	} else {
@@ -78,7 +83,7 @@ func (circle *Circle) GetHealth() []map[string]interface{} {
 			"url":     b.Url,
 			"active":  b.Active,
 			"backlog": b.IsData(),
-			"rewrite": b.RewriteRunning,
+			"rewrite": b.RewriteRunning(),
 			"load":    circle.GetBackendLoad(b),
 		}
 	}

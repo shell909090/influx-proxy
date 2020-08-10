@@ -2,7 +2,6 @@ package backend
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/chengshiwen/influx-proxy/util"
@@ -12,7 +11,6 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -20,34 +18,21 @@ import (
 )
 
 type Proxy struct {
-	Circles         []*Circle                 `json:"circles"`
-	ListenAddr      string                    `json:"listen_addr"`
-	DbList          []string                  `json:"db_list"`
-	DbSet           mapset.Set                `json:"db_set"`
-	DataDir         string                    `json:"data_dir"`
-	MlogDir         string                    `json:"mlog_dir"`
-	HashKey         string                    `json:"hash_key"`
-	VNodeSize       int                       `json:"vnode_size"`
-	FlushSize       int                       `json:"flush_size"`
-	FlushTime       int                       `json:"flush_time"`
-	CheckInterval   int                       `json:"check_interval"`
-	RewriteInterval int                       `json:"rewrite_interval"`
-	WriteTimeout    int                       `json:"write_timeout"`
-	IdleTimeout     int                       `json:"idle_timeout"`
-	ConnPoolSize    int                       `json:"conn_pool_size"`
-	LogEnabled      bool                      `json:"log_enabled"`
-	Username        string                    `json:"username"`
-	Password        string                    `json:"password"`
-	AuthSecure      bool                      `json:"auth_secure"`
-	HTTPSEnabled    bool                      `json:"https_enabled"`
-	HTTPSCert       string                    `json:"https_cert"`
-	HTTPSKey        string                    `json:"https_key"`
-	HaAddrs         []string                  `json:"ha_addrs"`
-	IsResyncing     bool                      `json:"is_resyncing"`
-	MigrateCpus     int                       `json:"migrate_cpus"`
-	MigrateBatch    int                       `json:"migrate_batch"`
-	MigrateStats    []map[string]*MigrateInfo `json:"migrate_stats"`
-	lock            sync.RWMutex
+	Circles      []*Circle
+	dbList       []string
+	dbSet        mapset.Set
+	MlogDir      string
+	LogEnabled   bool
+	Username     string
+	Password     string
+	AuthSecure   bool
+	HTTPSEnabled bool
+	HaAddrs      []string
+	IsResyncing  bool
+	MigrateCpus  int
+	MigrateBatch int
+	MigrateStats []map[string]*MigrateInfo
+	lock         sync.RWMutex
 }
 
 type MigrateInfo struct {
@@ -59,121 +44,31 @@ type MigrateInfo struct {
 	InPlaceCount     int32 `json:"inplace_count"`
 }
 
-func NewProxy(file string) (proxy *Proxy, err error) {
-	proxy, err = LoadConfig(file)
-	if err != nil {
-		return
+func NewProxy(cfg *ProxyConfig) (proxy *Proxy) {
+	proxy = &Proxy{
+		Circles:      make([]*Circle, len(cfg.Circles)),
+		dbList:       cfg.DbList,
+		dbSet:        util.NewSetFromStrSlice(cfg.DbList),
+		MlogDir:      cfg.MlogDir,
+		LogEnabled:   cfg.LogEnabled,
+		Username:     cfg.Username,
+		Password:     cfg.Password,
+		AuthSecure:   cfg.AuthSecure,
+		HTTPSEnabled: cfg.HTTPSEnabled,
 	}
-	err = util.MakeDir(proxy.DataDir)
-	if err != nil {
-		return
-	}
-	proxy.DbSet = util.NewSetFromStrSlice(proxy.DbList)
-	proxy.MigrateStats = make([]map[string]*MigrateInfo, len(proxy.Circles))
-	for circleId, circle := range proxy.Circles {
-		circle.InitCircle(proxy, circleId)
+	proxy.MigrateStats = make([]map[string]*MigrateInfo, len(cfg.Circles))
+	for circleId, circfg := range cfg.Circles {
+		proxy.Circles[circleId] = NewCircle(circfg, cfg, circleId)
 		proxy.MigrateStats[circleId] = make(map[string]*MigrateInfo)
-		for _, backend := range circle.Backends {
-			proxy.MigrateStats[circleId][backend.Url] = &MigrateInfo{}
+		for _, bkcfg := range circfg.Backends {
+			proxy.MigrateStats[circleId][bkcfg.Url] = &MigrateInfo{}
 		}
-	}
-	return
-}
-
-func LoadConfig(file string) (proxy *Proxy, err error) {
-	proxy = &Proxy{}
-	f, err := os.Open(file)
-	defer f.Close()
-	if err != nil {
-		return
-	}
-	dec := json.NewDecoder(f)
-	err = dec.Decode(proxy)
-	if err != nil {
-		return
-	}
-	proxy.SetDefaultConfig()
-	err = proxy.CheckConfig()
-	if err != nil {
-		return
-	}
-	log.Printf("%d circles loaded from file", len(proxy.Circles))
-	for id, circle := range proxy.Circles {
-		log.Printf("circle %d: %d backends loaded", id, len(circle.Backends))
-	}
-	log.Printf("hash key: %s", proxy.HashKey)
-	if len(proxy.DbList) > 0 {
-		log.Printf("db list: %v", proxy.DbList)
-	}
-	return
-}
-
-func (proxy *Proxy) SetDefaultConfig() {
-	if proxy.ListenAddr == "" {
-		proxy.ListenAddr = ":7076"
-	}
-	if proxy.DataDir == "" {
-		proxy.DataDir = "data"
-	}
-	if proxy.MlogDir == "" {
-		proxy.MlogDir = "log"
-	}
-	if proxy.HashKey == "" {
-		proxy.HashKey = "idx"
-	}
-	if proxy.VNodeSize <= 0 {
-		proxy.VNodeSize = 256
-	}
-	if proxy.FlushSize <= 0 {
-		proxy.FlushSize = 10000
-	}
-	if proxy.FlushTime <= 0 {
-		proxy.FlushTime = 1
-	}
-	if proxy.CheckInterval <= 0 {
-		proxy.CheckInterval = 1
-	}
-	if proxy.RewriteInterval <= 0 {
-		proxy.RewriteInterval = 10
-	}
-	if proxy.WriteTimeout <= 0 {
-		proxy.WriteTimeout = 10
-	}
-	if proxy.IdleTimeout <= 0 {
-		proxy.IdleTimeout = 10
-	}
-	if proxy.ConnPoolSize <= 0 {
-		proxy.ConnPoolSize = 20
 	}
 	if proxy.MigrateCpus <= 0 {
 		proxy.MigrateCpus = 1
 	}
 	if proxy.MigrateBatch <= 0 {
 		proxy.MigrateBatch = 25000
-	}
-}
-
-func (proxy *Proxy) CheckConfig() (err error) {
-	if len(proxy.Circles) == 0 {
-		return errors.New("circles cannot be empty")
-	}
-	rec := mapset.NewSet()
-	for _, circle := range proxy.Circles {
-		if len(circle.Backends) == 0 {
-			return errors.New("backends cannot be empty")
-		}
-		for _, backend := range circle.Backends {
-			if backend.Name == "" {
-				return errors.New("backend name cannot be empty")
-			}
-			if rec.Contains(backend.Name) {
-				return errors.New("backend name exists: " + backend.Name)
-			}
-			rec.Add(backend.Name)
-		}
-	}
-	if proxy.HashKey != "idx" && proxy.HashKey != "name" && proxy.HashKey != "url" {
-		return errors.New("invalid hash_key, should be idx, name or url")
 	}
 	return
 }
@@ -315,6 +210,10 @@ func (proxy *Proxy) WriteRow(line []byte, db, precision string) {
 			log.Printf("write data to buffer error: %s, %s, %s, %s, %s", err, backend.Url, db, precision, string(line))
 		}
 	}
+}
+
+func (proxy *Proxy) CheckForbiddenDB(db string) bool {
+	return len(proxy.dbList) > 0 && !proxy.dbSet.Contains(db)
 }
 
 func (proxy *Proxy) Logf(format string, v ...interface{}) {
@@ -632,7 +531,7 @@ func (proxy *Proxy) SetMigrating(circle *Circle, migrating bool) {
 
 func (proxy *Proxy) SetResyncingAndBroadcast(resyncing bool) {
 	proxy.SetResyncing(resyncing)
-	client := NewClient(proxy.ConnPoolSize, proxy.HTTPSEnabled, 10)
+	client := NewClient(proxy.HTTPSEnabled, 10)
 	for _, addr := range proxy.HaAddrs {
 		url := fmt.Sprintf("http://%s/migrate/state?resyncing=%t", addr, resyncing)
 		proxy.PostBroadcast(client, url)
@@ -641,7 +540,7 @@ func (proxy *Proxy) SetResyncingAndBroadcast(resyncing bool) {
 
 func (proxy *Proxy) SetMigratingAndBroadcast(circle *Circle, migrating bool) {
 	proxy.SetMigrating(circle, migrating)
-	client := NewClient(proxy.ConnPoolSize, proxy.HTTPSEnabled, 10)
+	client := NewClient(proxy.HTTPSEnabled, 10)
 	for _, addr := range proxy.HaAddrs {
 		url := fmt.Sprintf("http://%s/migrate/state?circle_id=%d&migrating=%t", addr, circle.CircleId, migrating)
 		proxy.PostBroadcast(client, url)

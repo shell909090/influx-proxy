@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/chengshiwen/influx-proxy/backend"
 	"github.com/chengshiwen/influx-proxy/service"
+	"github.com/chengshiwen/influx-proxy/util"
 	"log"
 	"net/http"
 	"runtime"
@@ -18,10 +19,13 @@ var (
 	BuildTime  string
 )
 
-func main() {
+func init() {
 	flag.StringVar(&ConfigFile, "config", "proxy.json", "proxy config file")
 	flag.BoolVar(&Version, "version", false, "proxy version")
 	flag.Parse()
+}
+
+func main() {
 	if Version {
 		fmt.Printf("Version:    %s\n", backend.VERSION)
 		fmt.Printf("Git commit: %s\n", GitCommit)
@@ -30,29 +34,38 @@ func main() {
 		fmt.Printf("OS/Arch:    %s/%s\n", runtime.GOOS, runtime.GOARCH)
 		return
 	}
+
+	cfg, err := backend.NewFileConfig(ConfigFile)
+	if err != nil {
+		fmt.Printf("illegal config file: %s\n", err)
+		return
+	}
 	if GitCommit == "" {
 		log.Printf("version: %s", backend.VERSION)
 	} else {
 		log.Printf("version: %s, commit: %s, build: %s", backend.VERSION, GitCommit, BuildTime)
 	}
+	cfg.PrintSummary()
 
-	proxy, err := backend.NewProxy(ConfigFile)
+	err = util.MakeDir(cfg.DataDir)
 	if err != nil {
-		log.Printf("illegal config file: %s", err)
+		log.Fatalln("create data dir error")
 		return
 	}
+
+	proxy := backend.NewProxy(cfg)
 	hs := service.HttpService{Proxy: proxy}
 	mux := http.NewServeMux()
 	hs.Register(mux)
 
 	server := &http.Server{
-		Addr:        proxy.ListenAddr,
+		Addr:        cfg.ListenAddr,
 		Handler:     mux,
-		IdleTimeout: time.Duration(proxy.IdleTimeout) * time.Second,
+		IdleTimeout: time.Duration(cfg.IdleTimeout) * time.Second,
 	}
-	if proxy.HTTPSEnabled {
+	if cfg.HTTPSEnabled {
 		log.Printf("https service start, listen on %s", server.Addr)
-		err = server.ListenAndServeTLS(proxy.HTTPSCert, proxy.HTTPSKey)
+		err = server.ListenAndServeTLS(cfg.HTTPSCert, cfg.HTTPSKey)
 	} else {
 		log.Printf("http service start, listen on %s", server.Addr)
 		err = server.ListenAndServe()
