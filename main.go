@@ -53,10 +53,9 @@ func main() {
 		return
 	}
 
-	proxy := backend.NewProxy(cfg)
-	hs := service.HttpService{Proxy: proxy}
+	ip := backend.NewProxy(cfg)
 	mux := http.NewServeMux()
-	hs.Register(mux)
+	service.NewHttpService(ip).Register(mux)
 
 	server := &http.Server{
 		Addr:        cfg.ListenAddr,

@@ -29,8 +29,8 @@ type Circle struct {
 	MigrateWg    *sync.WaitGroup
 }
 
-func NewCircle(cfg *CircleConfig, pxcfg *ProxyConfig, circleId int) (circle *Circle) {
-	circle = &Circle{
+func NewCircle(cfg *CircleConfig, pxcfg *ProxyConfig, circleId int) (ic *Circle) {
+	ic = &Circle{
 		CircleId:     circleId,
 		Name:         cfg.Name,
 		Backends:     make([]*Backend, len(cfg.Backends)),
@@ -41,50 +41,50 @@ func NewCircle(cfg *CircleConfig, pxcfg *ProxyConfig, circleId int) (circle *Cir
 		IsMigrating:  false,
 		MigrateWg:    &sync.WaitGroup{},
 	}
-	circle.router.NumberOfReplicas = pxcfg.VNodeSize
+	ic.router.NumberOfReplicas = pxcfg.VNodeSize
 	for idx, bkcfg := range cfg.Backends {
 		backend := NewBackend(bkcfg, pxcfg)
-		circle.Backends[idx] = backend
-		circle.BackendWgMap[bkcfg.Url] = &sync.WaitGroup{}
-		circle.addRouter(backend, idx, pxcfg.HashKey)
+		ic.Backends[idx] = backend
+		ic.BackendWgMap[bkcfg.Url] = &sync.WaitGroup{}
+		ic.addRouter(backend, idx, pxcfg.HashKey)
 	}
 	return
 }
 
-func (circle *Circle) addRouter(backend *Backend, idx int, hashKey string) {
+func (ic *Circle) addRouter(ib *Backend, idx int, hashKey string) {
 	if hashKey == "name" {
-		circle.router.Add(backend.Name)
-		circle.mapToBackend[backend.Name] = backend
+		ic.router.Add(ib.Name)
+		ic.mapToBackend[ib.Name] = ib
 	} else if hashKey == "url" {
-		circle.router.Add(backend.Url)
-		circle.mapToBackend[backend.Url] = backend
+		ic.router.Add(ib.Url)
+		ic.mapToBackend[ib.Url] = ib
 	} else {
-		circle.router.Add(strconv.Itoa(idx))
-		circle.mapToBackend[strconv.Itoa(idx)] = backend
+		ic.router.Add(strconv.Itoa(idx))
+		ic.mapToBackend[strconv.Itoa(idx)] = ib
 	}
 }
 
-func (circle *Circle) GetBackend(key string) *Backend {
-	if backend, ok := circle.routerCaches[key]; ok {
+func (ic *Circle) GetBackend(key string) *Backend {
+	if backend, ok := ic.routerCaches[key]; ok {
 		return backend
 	} else {
-		value, _ := circle.router.Get(key)
-		backend := circle.mapToBackend[value]
-		circle.routerCaches[key] = backend
+		value, _ := ic.router.Get(key)
+		backend := ic.mapToBackend[value]
+		ic.routerCaches[key] = backend
 		return backend
 	}
 }
 
-func (circle *Circle) GetHealth() []map[string]interface{} {
-	stats := make([]map[string]interface{}, len(circle.Backends))
-	for i, b := range circle.Backends {
-		stats[i] = b.GetHealth(circle)
+func (ic *Circle) GetHealth() []map[string]interface{} {
+	stats := make([]map[string]interface{}, len(ic.Backends))
+	for i, b := range ic.Backends {
+		stats[i] = b.GetHealth(ic)
 	}
 	return stats
 }
 
-func (circle *Circle) CheckStatus() bool {
-	for _, backend := range circle.Backends {
+func (ic *Circle) CheckStatus() bool {
+	for _, backend := range ic.Backends {
 		if !backend.Active {
 			return false
 		}
@@ -92,7 +92,7 @@ func (circle *Circle) CheckStatus() bool {
 	return true
 }
 
-func (circle *Circle) Query(w http.ResponseWriter, req *http.Request, tokens []string) ([]byte, error) {
+func (ic *Circle) Query(w http.ResponseWriter, req *http.Request, tokens []string) ([]byte, error) {
 	// remove support of query parameter `chunked`
 	req.Form.Del("chunked")
 	var reqBodyBytes []byte
@@ -101,7 +101,7 @@ func (circle *Circle) Query(w http.ResponseWriter, req *http.Request, tokens []s
 	}
 	bodies := make([][]byte, 0)
 
-	for _, backend := range circle.Backends {
+	for _, backend := range ic.Backends {
 		req.Body = ioutil.NopCloser(bytes.NewBuffer(reqBodyBytes))
 		body, err := backend.Query(req, w, true)
 		if err != nil {
@@ -117,13 +117,13 @@ func (circle *Circle) Query(w http.ResponseWriter, req *http.Request, tokens []s
 	stmt2 := GetHeadStmtFromTokens(tokens, 2)
 	stmt3 := GetHeadStmtFromTokens(tokens, 3)
 	if stmt2 == "show measurements" || stmt2 == "show series" || stmt2 == "show databases" {
-		rsp, err = circle.reduceByValues(bodies)
+		rsp, err = ic.reduceByValues(bodies)
 	} else if stmt3 == "show field keys" || stmt3 == "show tag keys" || stmt3 == "show tag values" {
-		rsp, err = circle.reduceBySeries(bodies)
+		rsp, err = ic.reduceBySeries(bodies)
 	} else if stmt3 == "show retention policies" {
-		rsp, err = circle.concatByValues(bodies)
+		rsp, err = ic.concatByValues(bodies)
 	} else if stmt2 == "show stats" {
-		rsp, err = circle.concatByResults(bodies)
+		rsp, err = ic.concatByResults(bodies)
 	}
 	if err != nil {
 		return nil, err
@@ -140,7 +140,7 @@ func (circle *Circle) Query(w http.ResponseWriter, req *http.Request, tokens []s
 	}
 }
 
-func (circle *Circle) reduceByValues(bodies [][]byte) (rsp *Response, err error) {
+func (ic *Circle) reduceByValues(bodies [][]byte) (rsp *Response, err error) {
 	valuesMap := make(map[string]*models.Row)
 	for _, b := range bodies {
 		_series, err := SeriesFromResponseBytes(b)
@@ -172,7 +172,7 @@ func (circle *Circle) reduceByValues(bodies [][]byte) (rsp *Response, err error)
 	return
 }
 
-func (circle *Circle) reduceBySeries(bodies [][]byte) (rsp *Response, err error) {
+func (ic *Circle) reduceBySeries(bodies [][]byte) (rsp *Response, err error) {
 	seriesMap := make(map[string]*models.Row)
 	for _, b := range bodies {
 		_series, err := SeriesFromResponseBytes(b)
@@ -191,7 +191,7 @@ func (circle *Circle) reduceBySeries(bodies [][]byte) (rsp *Response, err error)
 	return ResponseFromSeries(series), nil
 }
 
-func (circle *Circle) concatByValues(bodies [][]byte) (rsp *Response, err error) {
+func (ic *Circle) concatByValues(bodies [][]byte) (rsp *Response, err error) {
 	var series []*models.Row
 	var values [][]interface{}
 	for _, b := range bodies {
@@ -212,7 +212,7 @@ func (circle *Circle) concatByValues(bodies [][]byte) (rsp *Response, err error)
 	return ResponseFromSeries(series), nil
 }
 
-func (circle *Circle) concatByResults(bodies [][]byte) (rsp *Response, err error) {
+func (ic *Circle) concatByResults(bodies [][]byte) (rsp *Response, err error) {
 	var results []*Result
 	for _, b := range bodies {
 		_results, err := ResultsFromResponseBytes(b)
@@ -226,7 +226,7 @@ func (circle *Circle) concatByResults(bodies [][]byte) (rsp *Response, err error
 	return ResponseFromResults(results), nil
 }
 
-func (circle *Circle) Migrate(srcBackend *Backend, dstBackends []*Backend, db, meas string, seconds int, batch int) error {
+func (ic *Circle) Migrate(srcBackend *Backend, dstBackends []*Backend, db, meas string, seconds int, batch int) error {
 	timeClause := ""
 	if seconds > 0 {
 		timeClause = fmt.Sprintf(" where time >= %ds", time.Now().Unix()-int64(seconds))

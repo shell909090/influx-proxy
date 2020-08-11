@@ -31,8 +31,8 @@ type Backend struct {
 	wg              sync.WaitGroup
 }
 
-func NewBackend(cfg *BackendConfig, pxcfg *ProxyConfig) (backend *Backend) {
-	backend = &Backend{
+func NewBackend(cfg *BackendConfig, pxcfg *ProxyConfig) (ib *Backend) {
+	ib = &Backend{
 		HttpBackend:     NewHttpBackend(cfg, pxcfg),
 		flushSize:       pxcfg.FlushSize,
 		flushTime:       pxcfg.FlushTime,
@@ -44,16 +44,16 @@ func NewBackend(cfg *BackendConfig, pxcfg *ProxyConfig) (backend *Backend) {
 	}
 
 	var err error
-	backend.fb, err = NewFileBackend(cfg.Name, pxcfg.DataDir)
+	ib.fb, err = NewFileBackend(cfg.Name, pxcfg.DataDir)
 	if err != nil {
 		panic(err)
 	}
-	backend.pool, err = ants.NewPool(pxcfg.ConnPoolSize)
+	ib.pool, err = ants.NewPool(pxcfg.ConnPoolSize)
 	if err != nil {
 		panic(err)
 	}
 
-	go backend.worker()
+	go ib.worker()
 	return
 }
 
@@ -61,40 +61,40 @@ func NewSimpleBackend(cfg *BackendConfig) *Backend {
 	return &Backend{HttpBackend: NewSimpleHttpBackend(cfg)}
 }
 
-func (backend *Backend) worker() {
+func (ib *Backend) worker() {
 	for {
 		select {
-		case p, ok := <-backend.chWrite:
+		case p, ok := <-ib.chWrite:
 			if !ok {
 				// closed
-				backend.Flush()
-				backend.wg.Wait()
-				backend.HttpBackend.Close()
-				backend.fb.Close()
+				ib.Flush()
+				ib.wg.Wait()
+				ib.HttpBackend.Close()
+				ib.fb.Close()
 				return
 			}
-			backend.WriteBuffer(p)
+			ib.WriteBuffer(p)
 
-		case <-backend.chTimer:
-			backend.Flush()
+		case <-ib.chTimer:
+			ib.Flush()
 
-		case <-backend.rewriteTicker.C:
-			backend.RewriteIdle()
+		case <-ib.rewriteTicker.C:
+			ib.RewriteIdle()
 		}
 	}
 }
 
-func (backend *Backend) WritePoint(point *LinePoint) (err error) {
-	backend.chWrite <- point
+func (ib *Backend) WritePoint(point *LinePoint) (err error) {
+	ib.chWrite <- point
 	return
 }
 
-func (backend *Backend) WriteBuffer(point *LinePoint) (err error) {
+func (ib *Backend) WriteBuffer(point *LinePoint) (err error) {
 	db, line := point.Db, point.Line
-	cb, ok := backend.buffers[db]
+	cb, ok := ib.buffers[db]
 	if !ok {
-		backend.buffers[db] = &CacheBuffer{Buffer: &bytes.Buffer{}}
-		cb = backend.buffers[db]
+		ib.buffers[db] = &CacheBuffer{Buffer: &bytes.Buffer{}}
+		cb = ib.buffers[db]
 	}
 	cb.Counter++
 	if cb.Buffer == nil {
@@ -119,19 +119,19 @@ func (backend *Backend) WriteBuffer(point *LinePoint) (err error) {
 	}
 
 	switch {
-	case cb.Counter >= backend.flushSize:
-		err = backend.FlushBuffer(db)
+	case cb.Counter >= ib.flushSize:
+		err = ib.FlushBuffer(db)
 		if err != nil {
 			return
 		}
-	case backend.chTimer == nil:
-		backend.chTimer = time.After(time.Duration(backend.flushTime) * time.Second)
+	case ib.chTimer == nil:
+		ib.chTimer = time.After(time.Duration(ib.flushTime) * time.Second)
 	}
 	return
 }
 
-func (backend *Backend) FlushBuffer(db string) (err error) {
-	cb := backend.buffers[db]
+func (ib *Backend) FlushBuffer(db string) (err error) {
+	cb := ib.buffers[db]
 	if cb.Buffer == nil {
 		return
 	}
@@ -142,9 +142,9 @@ func (backend *Backend) FlushBuffer(db string) (err error) {
 		return
 	}
 
-	backend.wg.Add(1)
-	backend.pool.Submit(func() {
-		defer backend.wg.Done()
+	ib.wg.Add(1)
+	ib.pool.Submit(func() {
+		defer ib.wg.Done()
 		var buf bytes.Buffer
 		err = Compress(&buf, p)
 		if err != nil {
@@ -154,8 +154,8 @@ func (backend *Backend) FlushBuffer(db string) (err error) {
 
 		p = buf.Bytes()
 
-		if backend.Active {
-			err = backend.WriteCompressed(db, p)
+		if ib.Active {
+			err = ib.WriteCompressed(db, p)
 			switch err {
 			case nil:
 				return
@@ -166,12 +166,12 @@ func (backend *Backend) FlushBuffer(db string) (err error) {
 				log.Printf("bad backend, drop all data")
 				return
 			default:
-				log.Printf("write http error: %s %s, length: %d", backend.Url, db, len(p))
+				log.Printf("write http error: %s %s, length: %d", ib.Url, db, len(p))
 			}
 		}
 
 		b := bytes.Join([][]byte{[]byte(url.QueryEscape(db)), p}, []byte{' '})
-		err = backend.fb.Write(b)
+		err = ib.fb.Write(b)
 		if err != nil {
 			log.Printf("write db and data to file error with db: %s, length: %d error: %s", db, len(p), err)
 			return
@@ -180,42 +180,42 @@ func (backend *Backend) FlushBuffer(db string) (err error) {
 	return
 }
 
-func (backend *Backend) Flush() {
-	backend.chTimer = nil
-	for db := range backend.buffers {
-		if backend.buffers[db].Counter > 0 {
-			err := backend.FlushBuffer(db)
+func (ib *Backend) Flush() {
+	ib.chTimer = nil
+	for db := range ib.buffers {
+		if ib.buffers[db].Counter > 0 {
+			err := ib.FlushBuffer(db)
 			if err != nil {
-				log.Printf("flush buffer background error: %s %s", backend.Url, err)
+				log.Printf("flush buffer background error: %s %s", ib.Url, err)
 			}
 		}
 	}
 }
 
-func (backend *Backend) RewriteIdle() {
-	if !backend.rewriteRunning && backend.fb.IsData() {
-		backend.rewriteRunning = true
-		go backend.RewriteLoop()
+func (ib *Backend) RewriteIdle() {
+	if !ib.rewriteRunning && ib.fb.IsData() {
+		ib.rewriteRunning = true
+		go ib.RewriteLoop()
 	}
 }
 
-func (backend *Backend) RewriteLoop() {
-	for backend.fb.IsData() {
-		if !backend.Active {
-			time.Sleep(time.Duration(backend.rewriteInterval) * time.Second)
+func (ib *Backend) RewriteLoop() {
+	for ib.fb.IsData() {
+		if !ib.Active {
+			time.Sleep(time.Duration(ib.rewriteInterval) * time.Second)
 			continue
 		}
-		err := backend.Rewrite()
+		err := ib.Rewrite()
 		if err != nil {
-			time.Sleep(time.Duration(backend.rewriteInterval) * time.Second)
+			time.Sleep(time.Duration(ib.rewriteInterval) * time.Second)
 			continue
 		}
 	}
-	backend.rewriteRunning = false
+	ib.rewriteRunning = false
 }
 
-func (backend *Backend) Rewrite() (err error) {
-	b, err := backend.fb.Read()
+func (ib *Backend) Rewrite() (err error) {
+	b, err := ib.fb.Read()
 	if err != nil {
 		log.Print("rewrite read file error: ", err)
 		return
@@ -234,7 +234,7 @@ func (backend *Backend) Rewrite() (err error) {
 		log.Print("rewrite db unescape error: ", err)
 		return
 	}
-	err = backend.WriteCompressed(db, p[1])
+	err = ib.WriteCompressed(db, p[1])
 
 	switch err {
 	case nil:
@@ -245,48 +245,48 @@ func (backend *Backend) Rewrite() (err error) {
 		log.Printf("bad backend, drop all data")
 		err = nil
 	default:
-		log.Printf("rewrite http error: %s %s, length: %d", backend.Url, db, len(p[1]))
+		log.Printf("rewrite http error: %s %s, length: %d", ib.Url, db, len(p[1]))
 
-		err = backend.fb.RollbackMeta()
+		err = ib.fb.RollbackMeta()
 		if err != nil {
 			log.Printf("rollback meta error: %s", err)
 		}
 		return
 	}
 
-	err = backend.fb.UpdateMeta()
+	err = ib.fb.UpdateMeta()
 	if err != nil {
 		log.Printf("update meta error: %s", err)
 	}
 	return
 }
 
-func (backend *Backend) Close() {
-	backend.pool.Release()
-	close(backend.chWrite)
+func (ib *Backend) Close() {
+	ib.pool.Release()
+	close(ib.chWrite)
 }
 
-func (backend *Backend) GetHealth(circle *Circle) map[string]interface{} {
+func (ib *Backend) GetHealth(ic *Circle) map[string]interface{} {
 	return map[string]interface{}{
-		"name":    backend.Name,
-		"url":     backend.Url,
-		"active":  backend.Active,
-		"backlog": backend.fb.IsData(),
-		"rewrite": backend.rewriteRunning,
-		"stats":   backend.GetStats(circle),
+		"name":    ib.Name,
+		"url":     ib.Url,
+		"active":  ib.Active,
+		"backlog": ib.fb.IsData(),
+		"rewrite": ib.rewriteRunning,
+		"stats":   ib.GetStats(ic),
 	}
 }
 
-func (backend *Backend) GetStats(circle *Circle) map[string]map[string]int {
+func (ib *Backend) GetStats(ic *Circle) map[string]map[string]int {
 	load := make(map[string]map[string]int)
-	dbs := backend.GetDatabases()
+	dbs := ib.GetDatabases()
 	for _, db := range dbs {
 		inplace, incorrect := 0, 0
-		measurements := backend.GetMeasurements(db)
+		measurements := ib.GetMeasurements(db)
 		for _, meas := range measurements {
 			key := GetKey(db, meas)
-			nb := circle.GetBackend(key)
-			if nb.Url == backend.Url {
+			nb := ic.GetBackend(key)
+			if nb.Url == ib.Url {
 				inplace++
 			} else {
 				incorrect++

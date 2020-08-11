@@ -22,6 +22,13 @@ type HttpService struct {
 	*backend.Proxy
 }
 
+func NewHttpService(ip *backend.Proxy) (hs *HttpService) {
+	hs = &HttpService{
+		Proxy: ip,
+	}
+	return
+}
+
 func (hs *HttpService) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/ping", hs.HandlerPing)
 	mux.HandleFunc("/query", hs.HandlerQuery)
