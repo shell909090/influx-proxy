@@ -3,6 +3,7 @@ package backend
 import (
 	"bytes"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"github.com/chengshiwen/influx-proxy/util"
 	gzip "github.com/klauspost/pgzip"
@@ -14,6 +15,14 @@ import (
 	"net/url"
 	"strings"
 	"time"
+)
+
+var (
+	ErrBadRequest   = errors.New("bad request")
+	ErrUnauthorized = errors.New("unauthorized")
+	ErrNotFound     = errors.New("not found")
+	ErrInternal     = errors.New("internal error")
+	ErrUnknown      = errors.New("unknown error")
 )
 
 type HttpBackend struct {

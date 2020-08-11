@@ -78,36 +78,9 @@ func (circle *Circle) GetBackend(key string) *Backend {
 func (circle *Circle) GetHealth() []map[string]interface{} {
 	stats := make([]map[string]interface{}, len(circle.Backends))
 	for i, b := range circle.Backends {
-		stats[i] = map[string]interface{}{
-			"name":    b.Name,
-			"url":     b.Url,
-			"active":  b.Active,
-			"backlog": b.fb.IsData(),
-			"rewrite": b.RewriteRunning(),
-			"load":    circle.GetBackendLoad(b),
-		}
+		stats[i] = b.GetHealth(circle)
 	}
 	return stats
-}
-
-func (circle *Circle) GetBackendLoad(b *Backend) map[string]map[string]int {
-	load := make(map[string]map[string]int)
-	dbs := b.GetDatabases()
-	for _, db := range dbs {
-		inplace, incorrect := 0, 0
-		measurements := b.GetMeasurements(db)
-		for _, meas := range measurements {
-			key := GetKey(db, meas)
-			nb := circle.GetBackend(key)
-			if nb.Url == b.Url {
-				inplace++
-			} else {
-				incorrect++
-			}
-		}
-		load[db] = map[string]int{"measurements": len(measurements), "inplace": inplace, "incorrect": incorrect}
-	}
-	return load
 }
 
 func (circle *Circle) CheckStatus() bool {

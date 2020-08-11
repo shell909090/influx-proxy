@@ -50,7 +50,7 @@ func NewFileBackend(filename string, datadir string) (fb *FileBackend, err error
 	return
 }
 
-func (fb *FileBackend) WriteFile(p []byte) (err error) {
+func (fb *FileBackend) Write(p []byte) (err error) {
 	fb.lock.Lock()
 	defer fb.lock.Unlock()
 
@@ -86,7 +86,7 @@ func (fb *FileBackend) IsData() bool {
 	return fb.dataflag
 }
 
-func (fb *FileBackend) ReadFile() (p []byte, err error) {
+func (fb *FileBackend) Read() (p []byte, err error) {
 	if !fb.IsData() {
 		return nil, nil
 	}

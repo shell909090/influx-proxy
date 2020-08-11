@@ -2,21 +2,12 @@ package backend
 
 import (
 	"bytes"
-	"errors"
 	"github.com/panjf2000/ants/v2"
 	"io"
 	"log"
 	"net/url"
 	"sync"
 	"time"
-)
-
-var (
-	ErrBadRequest   = errors.New("bad request")
-	ErrUnauthorized = errors.New("unauthorized")
-	ErrNotFound     = errors.New("not found")
-	ErrInternal     = errors.New("internal error")
-	ErrUnknown      = errors.New("unknown error")
 )
 
 type CacheBuffer struct {
@@ -34,11 +25,10 @@ type Backend struct {
 	rewriteInterval int
 	rewriteTicker   *time.Ticker
 	rewriteRunning  bool
-
-	chWrite   chan *LinePoint
-	chTimer   <-chan time.Time
-	bufferMap map[string]*CacheBuffer
-	wg        sync.WaitGroup
+	chWrite         chan *LinePoint
+	chTimer         <-chan time.Time
+	buffers         map[string]*CacheBuffer
+	wg              sync.WaitGroup
 }
 
 func NewBackend(cfg *BackendConfig, pxcfg *ProxyConfig) (backend *Backend) {
@@ -50,7 +40,7 @@ func NewBackend(cfg *BackendConfig, pxcfg *ProxyConfig) (backend *Backend) {
 		rewriteTicker:   time.NewTicker(time.Duration(pxcfg.RewriteInterval) * time.Second),
 		rewriteRunning:  false,
 		chWrite:         make(chan *LinePoint, 16),
-		bufferMap:       make(map[string]*CacheBuffer),
+		buffers:         make(map[string]*CacheBuffer),
 	}
 
 	var err error
@@ -101,10 +91,10 @@ func (backend *Backend) WritePoint(point *LinePoint) (err error) {
 
 func (backend *Backend) WriteBuffer(point *LinePoint) (err error) {
 	db, line := point.Db, point.Line
-	cb, ok := backend.bufferMap[db]
+	cb, ok := backend.buffers[db]
 	if !ok {
-		backend.bufferMap[db] = &CacheBuffer{Buffer: &bytes.Buffer{}}
-		cb = backend.bufferMap[db]
+		backend.buffers[db] = &CacheBuffer{Buffer: &bytes.Buffer{}}
+		cb = backend.buffers[db]
 	}
 	cb.Counter++
 	if cb.Buffer == nil {
@@ -141,7 +131,7 @@ func (backend *Backend) WriteBuffer(point *LinePoint) (err error) {
 }
 
 func (backend *Backend) FlushBuffer(db string) (err error) {
-	cb := backend.bufferMap[db]
+	cb := backend.buffers[db]
 	if cb.Buffer == nil {
 		return
 	}
@@ -181,7 +171,7 @@ func (backend *Backend) FlushBuffer(db string) (err error) {
 		}
 
 		b := bytes.Join([][]byte{[]byte(url.QueryEscape(db)), p}, []byte{' '})
-		err = backend.fb.WriteFile(b)
+		err = backend.fb.Write(b)
 		if err != nil {
 			log.Printf("write db and data to file error with db: %s, length: %d error: %s", db, len(p), err)
 			return
@@ -192,8 +182,8 @@ func (backend *Backend) FlushBuffer(db string) (err error) {
 
 func (backend *Backend) Flush() {
 	backend.chTimer = nil
-	for db := range backend.bufferMap {
-		if backend.bufferMap[db].Counter > 0 {
+	for db := range backend.buffers {
+		if backend.buffers[db].Counter > 0 {
 			err := backend.FlushBuffer(db)
 			if err != nil {
 				log.Printf("flush buffer background error: %s %s", backend.Url, err)
@@ -225,7 +215,7 @@ func (backend *Backend) RewriteLoop() {
 }
 
 func (backend *Backend) Rewrite() (err error) {
-	b, err := backend.fb.ReadFile()
+	b, err := backend.fb.Read()
 	if err != nil {
 		log.Print("rewrite read file error: ", err)
 		return
@@ -271,11 +261,38 @@ func (backend *Backend) Rewrite() (err error) {
 	return
 }
 
-func (backend *Backend) RewriteRunning() bool {
-	return backend.rewriteRunning
-}
-
 func (backend *Backend) Close() {
 	backend.pool.Release()
 	close(backend.chWrite)
+}
+
+func (backend *Backend) GetHealth(circle *Circle) map[string]interface{} {
+	return map[string]interface{}{
+		"name":    backend.Name,
+		"url":     backend.Url,
+		"active":  backend.Active,
+		"backlog": backend.fb.IsData(),
+		"rewrite": backend.rewriteRunning,
+		"stats":   backend.GetStats(circle),
+	}
+}
+
+func (backend *Backend) GetStats(circle *Circle) map[string]map[string]int {
+	load := make(map[string]map[string]int)
+	dbs := backend.GetDatabases()
+	for _, db := range dbs {
+		inplace, incorrect := 0, 0
+		measurements := backend.GetMeasurements(db)
+		for _, meas := range measurements {
+			key := GetKey(db, meas)
+			nb := circle.GetBackend(key)
+			if nb.Url == backend.Url {
+				inplace++
+			} else {
+				incorrect++
+			}
+		}
+		load[db] = map[string]int{"measurements": len(measurements), "inplace": inplace, "incorrect": incorrect}
+	}
+	return load
 }
