@@ -82,7 +82,7 @@ func (circle *Circle) GetHealth() []map[string]interface{} {
 			"name":    b.Name,
 			"url":     b.Url,
 			"active":  b.Active,
-			"backlog": b.IsData(),
+			"backlog": b.fb.IsData(),
 			"rewrite": b.RewriteRunning(),
 			"load":    circle.GetBackendLoad(b),
 		}
