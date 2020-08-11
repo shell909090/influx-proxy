@@ -24,26 +24,26 @@ type HttpBackend struct {
 	Url        string
 	Username   string
 	Password   string
-	authSecure bool
+	AuthSecure bool
 	Active     bool
 }
 
 func NewHttpBackend(cfg *BackendConfig, pxcfg *ProxyConfig) (hb *HttpBackend) {
-	hb = NewSimpleHttpBackend(cfg, pxcfg.AuthSecure)
+	hb = NewSimpleHttpBackend(cfg)
 	hb.client = NewClient(strings.HasPrefix(cfg.Url, "https"), pxcfg.WriteTimeout)
 	hb.interval = pxcfg.CheckInterval
 	go hb.CheckActive()
 	return
 }
 
-func NewSimpleHttpBackend(cfg *BackendConfig, authSecure bool) (hb *HttpBackend) {
+func NewSimpleHttpBackend(cfg *BackendConfig) (hb *HttpBackend) {
 	hb = &HttpBackend{
 		transport:  NewTransport(strings.HasPrefix(cfg.Url, "https")),
 		Name:       cfg.Name,
 		Url:        cfg.Url,
 		Username:   cfg.Username,
 		Password:   cfg.Password,
-		authSecure: authSecure,
+		AuthSecure: cfg.AuthSecure,
 		Active:     true,
 	}
 	return
@@ -107,7 +107,7 @@ func SetBasicAuth(req *http.Request, username string, password string, authSecur
 }
 
 func (hb *HttpBackend) SetBasicAuth(req *http.Request) {
-	SetBasicAuth(req, hb.Username, hb.Password, hb.authSecure)
+	SetBasicAuth(req, hb.Username, hb.Password, hb.AuthSecure)
 }
 
 func (hb *HttpBackend) CheckActive() {

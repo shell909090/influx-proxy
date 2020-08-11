@@ -67,8 +67,8 @@ func NewBackend(cfg *BackendConfig, pxcfg *ProxyConfig) (backend *Backend) {
 	return
 }
 
-func NewSimpleBackend(cfg *BackendConfig, authSecure bool) *Backend {
-	return &Backend{HttpBackend: NewSimpleHttpBackend(cfg, authSecure)}
+func NewSimpleBackend(cfg *BackendConfig) *Backend {
+	return &Backend{HttpBackend: NewSimpleHttpBackend(cfg)}
 }
 
 func (backend *Backend) worker() {

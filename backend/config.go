@@ -21,10 +21,11 @@ var (
 )
 
 type BackendConfig struct {
-	Name     string `json:"name"`
-	Url      string `json:"url"`
-	Username string `json:"username"`
-	Password string `json:"password"`
+	Name       string `json:"name"`
+	Url        string `json:"url"`
+	Username   string `json:"username"`
+	Password   string `json:"password"`
+	AuthSecure bool   `json:"auth_secure"`
 }
 
 type CircleConfig struct {

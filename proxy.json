@@ -7,13 +7,15 @@
                     "name": "influxdb-1-1",
                     "url": "http://127.0.0.1:8086",
                     "username": "",
-                    "password": ""
+                    "password": "",
+                    "auth_secure": false
                 },
                 {
                     "name": "influxdb-1-2",
                     "url": "http://127.0.0.1:8087",
                     "username": "",
-                    "password": ""
+                    "password": "",
+                    "auth_secure": false
                 }
             ]
         },
@@ -24,13 +26,15 @@
                     "name": "influxdb-2-1",
                     "url": "http://127.0.0.1:8088",
                     "username": "",
-                    "password": ""
+                    "password": "",
+                    "auth_secure": false
                 },
                 {
                     "name": "influxdb-2-2",
                     "url": "http://127.0.0.1:8089",
                     "username": "",
-                    "password": ""
+                    "password": "",
+                    "auth_secure": false
                 }
             ]
         }
