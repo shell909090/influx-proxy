@@ -46,12 +46,12 @@ func (hs *HttpService) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/replica", hs.HandlerReplica)
 	mux.HandleFunc("/encrypt", hs.HandlerEncrypt)
 	mux.HandleFunc("/decrypt", hs.HandlerDencrypt)
-	mux.HandleFunc("/transfer/state", hs.HandlerTransferState)
-	mux.HandleFunc("/transfer/stats", hs.HandlerTransferStats)
 	mux.HandleFunc("/rebalance", hs.HandlerRebalance)
 	mux.HandleFunc("/recovery", hs.HandlerRecovery)
 	mux.HandleFunc("/resync", hs.HandlerResync)
 	mux.HandleFunc("/cleanup", hs.HandlerCleanup)
+	mux.HandleFunc("/transfer/state", hs.HandlerTransferState)
+	mux.HandleFunc("/transfer/stats", hs.HandlerTransferStats)
 	mux.HandleFunc("/debug/pprof/", pprof.Index)
 	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
 	return
@@ -239,100 +239,6 @@ func (hs *HttpService) HandlerDencrypt(w http.ResponseWriter, req *http.Request)
 	}
 	decrypt := util.AesDecrypt(msg)
 	w.Write([]byte(decrypt + "\n"))
-}
-
-func (hs *HttpService) HandlerTransferState(w http.ResponseWriter, req *http.Request) {
-	defer req.Body.Close()
-	hs.addVerHeader(w)
-	if !hs.checkMethodAndAuth(w, req, []string{"GET", "POST"}) {
-		return
-	}
-
-	pretty := req.URL.Query().Get("pretty") == "true"
-	if req.Method == "GET" {
-		hs.addJsonHeader(w)
-		data := make([]map[string]interface{}, len(hs.Circles))
-		for k, circle := range hs.CircleStates {
-			data[k] = map[string]interface{}{
-				"circle_id":    circle.CircleId,
-				"name":         circle.Name,
-				"transferring": circle.Transferring,
-			}
-		}
-		state := map[string]interface{}{"resyncing": hs.Resyncing, "circles": data}
-		res := util.MarshalJson(state, pretty, true)
-		w.Write(res)
-		return
-	} else if req.Method == "POST" {
-		state := make(map[string]interface{})
-		if req.FormValue("resyncing") != "" {
-			resyncing, err := hs.formBool(req, "resyncing")
-			if err != nil {
-				w.WriteHeader(400)
-				w.Write([]byte("illegal resyncing\n"))
-				return
-			}
-			hs.SetResyncing(resyncing)
-			state["resyncing"] = hs.Resyncing
-		}
-		if req.FormValue("circle_id") != "" || req.FormValue("transferring") != "" {
-			circleId, err := hs.formCircleId(req, "circle_id")
-			if err != nil {
-				w.WriteHeader(400)
-				w.Write([]byte(err.Error() + "\n"))
-				return
-			}
-			transferring, err := hs.formBool(req, "transferring")
-			if err != nil {
-				w.WriteHeader(400)
-				w.Write([]byte("illegal transferring\n"))
-				return
-			}
-			circle := hs.CircleStates[circleId]
-			hs.SetTransferring(circle, transferring)
-			state["circle"] = map[string]interface{}{
-				"circle_id":    circle.CircleId,
-				"name":         circle.Name,
-				"transferring": circle.Transferring,
-			}
-		}
-		if len(state) == 0 {
-			w.WriteHeader(400)
-			w.Write([]byte("missing query parameter\n"))
-			return
-		}
-		hs.addJsonHeader(w)
-		res := util.MarshalJson(state, pretty, true)
-		w.Write(res)
-		return
-	}
-}
-
-func (hs *HttpService) HandlerTransferStats(w http.ResponseWriter, req *http.Request) {
-	defer req.Body.Close()
-	hs.addVerHeader(w)
-	if !hs.checkMethodAndAuth(w, req, []string{"GET"}) {
-		return
-	}
-
-	circleId, err := hs.formCircleId(req, "circle_id")
-	if err != nil {
-		w.WriteHeader(400)
-		w.Write([]byte(err.Error() + "\n"))
-		return
-	}
-
-	statsType := req.FormValue("type")
-	if statsType == "rebalance" || statsType == "recovery" || statsType == "resync" || statsType == "clear" {
-		hs.addJsonHeader(w)
-		pretty := req.URL.Query().Get("pretty") == "true"
-		res := util.MarshalJson(hs.CircleStates[circleId].Stats, pretty, true)
-		w.Write(res)
-	} else {
-		w.WriteHeader(400)
-		w.Write([]byte("invalid stats type\n"))
-	}
-	return
 }
 
 func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request) {
@@ -556,6 +462,100 @@ func (hs *HttpService) HandlerCleanup(w http.ResponseWriter, req *http.Request) 
 	go hs.Cleanup(circleId)
 	w.WriteHeader(202)
 	w.Write([]byte("accepted\n"))
+	return
+}
+
+func (hs *HttpService) HandlerTransferState(w http.ResponseWriter, req *http.Request) {
+	defer req.Body.Close()
+	hs.addVerHeader(w)
+	if !hs.checkMethodAndAuth(w, req, []string{"GET", "POST"}) {
+		return
+	}
+
+	pretty := req.URL.Query().Get("pretty") == "true"
+	if req.Method == "GET" {
+		hs.addJsonHeader(w)
+		data := make([]map[string]interface{}, len(hs.Circles))
+		for k, circle := range hs.CircleStates {
+			data[k] = map[string]interface{}{
+				"circle_id":    circle.CircleId,
+				"name":         circle.Name,
+				"transferring": circle.Transferring,
+			}
+		}
+		state := map[string]interface{}{"resyncing": hs.Resyncing, "circles": data}
+		res := util.MarshalJson(state, pretty, true)
+		w.Write(res)
+		return
+	} else if req.Method == "POST" {
+		state := make(map[string]interface{})
+		if req.FormValue("resyncing") != "" {
+			resyncing, err := hs.formBool(req, "resyncing")
+			if err != nil {
+				w.WriteHeader(400)
+				w.Write([]byte("illegal resyncing\n"))
+				return
+			}
+			hs.SetResyncing(resyncing)
+			state["resyncing"] = hs.Resyncing
+		}
+		if req.FormValue("circle_id") != "" || req.FormValue("transferring") != "" {
+			circleId, err := hs.formCircleId(req, "circle_id")
+			if err != nil {
+				w.WriteHeader(400)
+				w.Write([]byte(err.Error() + "\n"))
+				return
+			}
+			transferring, err := hs.formBool(req, "transferring")
+			if err != nil {
+				w.WriteHeader(400)
+				w.Write([]byte("illegal transferring\n"))
+				return
+			}
+			circle := hs.CircleStates[circleId]
+			hs.SetTransferring(circle, transferring)
+			state["circle"] = map[string]interface{}{
+				"circle_id":    circle.CircleId,
+				"name":         circle.Name,
+				"transferring": circle.Transferring,
+			}
+		}
+		if len(state) == 0 {
+			w.WriteHeader(400)
+			w.Write([]byte("missing query parameter\n"))
+			return
+		}
+		hs.addJsonHeader(w)
+		res := util.MarshalJson(state, pretty, true)
+		w.Write(res)
+		return
+	}
+}
+
+func (hs *HttpService) HandlerTransferStats(w http.ResponseWriter, req *http.Request) {
+	defer req.Body.Close()
+	hs.addVerHeader(w)
+	if !hs.checkMethodAndAuth(w, req, []string{"GET"}) {
+		return
+	}
+
+	circleId, err := hs.formCircleId(req, "circle_id")
+	if err != nil {
+		w.WriteHeader(400)
+		w.Write([]byte(err.Error() + "\n"))
+		return
+	}
+
+	statsType := req.FormValue("type")
+	if statsType == "rebalance" || statsType == "recovery" || statsType == "resync" || statsType == "cleanup" {
+		hs.addJsonHeader(w)
+		pretty := req.URL.Query().Get("pretty") == "true"
+		res := util.MarshalJson(hs.CircleStates[circleId].Stats, pretty, true)
+		w.Write(res)
+	} else {
+		w.WriteHeader(400)
+		w.Write([]byte("invalid stats type\n"))
+	}
 	return
 }
 

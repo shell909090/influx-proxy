@@ -274,12 +274,12 @@ func (hb *HttpBackend) GetMeasurements(db string) []string {
 }
 
 func (hb *HttpBackend) GetTagKeys(db, meas string) []string {
-	return hb.GetSeriesValues(db, fmt.Sprintf("show tag keys from \"%s\"", meas))
+	return hb.GetSeriesValues(db, fmt.Sprintf("show tag keys from \"%s\"", util.EscapeIdentifier(meas)))
 }
 
 func (hb *HttpBackend) GetFieldKeys(db, meas string) map[string][]string {
 	fieldKeys := make(map[string][]string)
-	query := fmt.Sprintf("show field keys from \"%s\"", meas)
+	query := fmt.Sprintf("show field keys from \"%s\"", util.EscapeIdentifier(meas))
 	p, err := hb.Query(NewRequest(db, query), nil, true)
 	if err != nil {
 		return fieldKeys
@@ -295,7 +295,7 @@ func (hb *HttpBackend) GetFieldKeys(db, meas string) map[string][]string {
 }
 
 func (hb *HttpBackend) DropMeasurement(db, meas string) ([]byte, error) {
-	query := fmt.Sprintf("drop measurement \"%s\"", meas)
+	query := fmt.Sprintf("drop measurement \"%s\"", util.EscapeIdentifier(meas))
 	return hb.Query(NewRequest(db, query), nil, true)
 }
 

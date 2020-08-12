@@ -41,7 +41,7 @@ type Transfer struct {
 
 func NewTransfer(cfg *backend.ProxyConfig, circles []*backend.Circle) (tx *Transfer) {
 	tx = &Transfer{
-		tlogDir:      cfg.MlogDir,
+		tlogDir:      cfg.TLogDir,
 		CircleStates: make([]*CircleState, len(cfg.Circles)),
 		Worker:       1,
 		Batch:        25000,
@@ -122,7 +122,7 @@ func (tx *Transfer) transfer(src *backend.Backend, dsts []*backend.Backend, db, 
 		timeClause = fmt.Sprintf(" where time >= %ds", time.Now().Unix()-int64(secs))
 	}
 
-	rsp, err := src.QueryIQL(db, fmt.Sprintf("select * from \"%s\"%s", meas, timeClause))
+	rsp, err := src.QueryIQL(db, fmt.Sprintf("select * from \"%s\"%s", util.EscapeIdentifier(meas), timeClause))
 	if err != nil {
 		return err
 	}
@@ -191,9 +191,9 @@ func (tx *Transfer) submitTransfer(cs *CircleState, src *backend.Backend, dsts [
 		defer cs.wg.Done()
 		err := tx.transfer(src, dsts, db, meas, secs)
 		if err == nil {
-			tlog.Printf("transfer done, circle:%d src:%s dst:%v db:%s meas:%s secs:%d", cs.CircleId, src.Url, getBackendUrls(dsts), db, meas, secs)
+			tlog.Printf("transfer done, src:%s dst:%v db:%s meas:%s secs:%d", src.Url, getBackendUrls(dsts), db, meas, secs)
 		} else {
-			tlog.Printf("transfer error: %s, circle:%d src:%s dst:%v db:%s meas:%s secs:%d", err, cs.CircleId, src.Url, getBackendUrls(dsts), db, meas, secs)
+			tlog.Printf("transfer error: %s, src:%s dst:%v db:%s meas:%s secs:%d", err, src.Url, getBackendUrls(dsts), db, meas, secs)
 		}
 	})
 }
@@ -204,14 +204,15 @@ func (tx *Transfer) submitCleanup(cs *CircleState, be *backend.Backend, db, meas
 		defer cs.wg.Done()
 		_, err := be.DropMeasurement(db, meas)
 		if err == nil {
-			tlog.Printf("cleanup done, circle:%d backend:%s db:%s meas:%s", cs.CircleId, be.Url, db, meas)
+			tlog.Printf("cleanup done, backend:%s db:%s meas:%s", be.Url, db, meas)
 		} else {
-			tlog.Printf("cleanup error: %s, circle:%d backend:%s db:%s meas:%s", err, cs.CircleId, be.Url, db, meas)
+			tlog.Printf("cleanup error: %s, backend:%s db:%s meas:%s", err, be.Url, db, meas)
 		}
 	})
 }
 
-func (tx *Transfer) runTransfer(cs *CircleState, be *backend.Backend, dbs []string, f func(*CircleState, *backend.Backend, string, string, ...interface{}) bool, args ...interface{}) {
+func (tx *Transfer) runTransfer(cs *CircleState, be *backend.Backend, dbs []string, f func(*CircleState, *backend.Backend, string, string, []interface{}) bool, args ...interface{}) {
+	defer cs.wg.Done()
 	if !be.Active {
 		tlog.Printf("backend not active: %s", be.Url)
 		return
@@ -227,8 +228,6 @@ func (tx *Transfer) runTransfer(cs *CircleState, be *backend.Backend, dbs []stri
 
 	for _, db := range dbs {
 		for _, meas := range measures[db] {
-			// db := db
-			// meas := meas
 			require := f(cs, be, db, meas, args)
 			if require {
 				atomic.AddInt32(&stats.TransferCount, 1)
@@ -243,7 +242,7 @@ func (tx *Transfer) runTransfer(cs *CircleState, be *backend.Backend, dbs []stri
 
 func (tx *Transfer) Rebalance(circleId int, backends []*backend.Backend, dbs []string) {
 	tx.setLogOutput("rebalance.log")
-	tlog.Printf("rebalance start")
+	tlog.Printf("rebalance start: circle %d", circleId)
 	cs := tx.CircleStates[circleId]
 	tx.resetCircleStates()
 	tx.SetTransferringAndBroadcast(cs, true)
@@ -255,13 +254,14 @@ func (tx *Transfer) Rebalance(circleId int, backends []*backend.Backend, dbs []s
 	tx.pool, _ = ants.NewPool(tx.Worker)
 	defer tx.pool.Release()
 	for _, be := range backends {
+		cs.wg.Add(1)
 		go tx.runTransfer(cs, be, dbs, tx.runRebalance)
 	}
 	cs.wg.Wait()
-	tlog.Printf("rebalance done")
+	tlog.Printf("rebalance done: circle %d", circleId)
 }
 
-func (tx *Transfer) runRebalance(cs *CircleState, be *backend.Backend, db string, meas string, args ...interface{}) (require bool) {
+func (tx *Transfer) runRebalance(cs *CircleState, be *backend.Backend, db string, meas string, args []interface{}) (require bool) {
 	key := backend.GetKey(db, meas)
 	dst := cs.GetBackend(key)
 	require = dst.Url != be.Url
@@ -273,7 +273,7 @@ func (tx *Transfer) runRebalance(cs *CircleState, be *backend.Backend, db string
 
 func (tx *Transfer) Recovery(fromCircleId, toCircleId int, recoveryUrls []string, dbs []string) {
 	tx.setLogOutput("recovery.log")
-	tlog.Printf("recovery start")
+	tlog.Printf("recovery start: circle from %d to %d", fromCircleId, toCircleId)
 	fcs := tx.CircleStates[fromCircleId]
 	tcs := tx.CircleStates[toCircleId]
 	tx.resetCircleStates()
@@ -296,13 +296,14 @@ func (tx *Transfer) Recovery(fromCircleId, toCircleId int, recoveryUrls []string
 		}
 	}
 	for _, be := range fcs.Backends {
+		fcs.wg.Add(1)
 		go tx.runTransfer(fcs, be, dbs, tx.runRecovery, tcs, recoveryUrlSet)
 	}
 	fcs.wg.Wait()
-	tlog.Printf("recovery done")
+	tlog.Printf("recovery done: circle from %d to %d", fromCircleId, toCircleId)
 }
 
-func (tx *Transfer) runRecovery(fcs *CircleState, be *backend.Backend, db string, meas string, args ...interface{}) (require bool) {
+func (tx *Transfer) runRecovery(fcs *CircleState, be *backend.Backend, db string, meas string, args []interface{}) (require bool) {
 	tcs := args[0].(*CircleState)
 	recoveryUrlSet := args[1].(mapset.Set)
 	key := backend.GetKey(db, meas)
@@ -327,16 +328,18 @@ func (tx *Transfer) Resync(dbs []string, secs int) {
 	tx.pool, _ = ants.NewPool(tx.Worker)
 	defer tx.pool.Release()
 	for _, cs := range tx.CircleStates {
+		tlog.Printf("resync start: circle %d", cs.CircleId)
 		for _, be := range cs.Backends {
+			cs.wg.Add(1)
 			go tx.runTransfer(cs, be, dbs, tx.runResync, secs)
 		}
 		cs.wg.Wait()
-		tlog.Printf("circle %d resync done", cs.CircleId)
+		tlog.Printf("resync done: circle %d", cs.CircleId)
 	}
 	tlog.Printf("resync done")
 }
 
-func (tx *Transfer) runResync(cs *CircleState, be *backend.Backend, db string, meas string, args ...interface{}) (require bool) {
+func (tx *Transfer) runResync(cs *CircleState, be *backend.Backend, db string, meas string, args []interface{}) (require bool) {
 	secs := args[0].(int)
 	key := backend.GetKey(db, meas)
 	dsts := make([]*backend.Backend, 0)
@@ -355,7 +358,7 @@ func (tx *Transfer) runResync(cs *CircleState, be *backend.Backend, db string, m
 
 func (tx *Transfer) Cleanup(circleId int) {
 	tx.setLogOutput("cleanup.log")
-	tlog.Printf("cleanup start")
+	tlog.Printf("cleanup start: circle %d", circleId)
 	cs := tx.CircleStates[circleId]
 	tx.resetCircleStates()
 	tx.SetTransferringAndBroadcast(cs, true)
@@ -364,21 +367,23 @@ func (tx *Transfer) Cleanup(circleId int) {
 	tx.pool, _ = ants.NewPool(tx.Worker)
 	defer tx.pool.Release()
 	for _, be := range cs.Backends {
+		cs.wg.Add(1)
 		dbs := be.GetDatabases()
 		go tx.runTransfer(cs, be, dbs, tx.runCleanup)
 	}
 	cs.wg.Wait()
-	tlog.Printf("cleanup done")
+	tlog.Printf("cleanup done: circle %d", circleId)
 }
 
-func (tx *Transfer) runCleanup(cs *CircleState, be *backend.Backend, db string, meas string, args ...interface{}) (require bool) {
-	tlog.Printf("check circle:%d backend:%s db:%s meas:%s", cs.CircleId, be.Url, db, meas)
+func (tx *Transfer) runCleanup(cs *CircleState, be *backend.Backend, db string, meas string, args []interface{}) (require bool) {
 	key := backend.GetKey(db, meas)
 	dst := cs.GetBackend(key)
 	require = dst.Url != be.Url
 	if require {
-		tlog.Printf("cleanup circle:%d backend:%s db:%s meas:%s should transfer to %s", cs.CircleId, be.Url, db, meas, dst.Url)
+		tlog.Printf("backend:%s db:%s meas:%s require to cleanup", be.Url, db, meas)
 		tx.submitCleanup(cs, be, db, meas)
+	} else {
+		tlog.Printf("backend:%s db:%s meas:%s checked", be.Url, db, meas)
 	}
 	return
 }

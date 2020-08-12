@@ -38,7 +38,7 @@ type ProxyConfig struct {
 	ListenAddr      string          `json:"listen_addr"`
 	DbList          []string        `json:"db_list"`
 	DataDir         string          `json:"data_dir"`
-	MlogDir         string          `json:"mlog_dir"`
+	TLogDir         string          `json:"tlog_dir"`
 	HashKey         string          `json:"hash_key"`
 	VNodeSize       int             `json:"vnode_size"`
 	FlushSize       int             `json:"flush_size"`
@@ -84,8 +84,8 @@ func (cfg *ProxyConfig) setDefault() {
 	if cfg.DataDir == "" {
 		cfg.DataDir = "data"
 	}
-	if cfg.MlogDir == "" {
-		cfg.MlogDir = "log"
+	if cfg.TLogDir == "" {
+		cfg.TLogDir = "log"
 	}
 	if cfg.HashKey == "" {
 		cfg.HashKey = "idx"
