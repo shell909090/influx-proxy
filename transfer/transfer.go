@@ -13,7 +13,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -36,7 +35,6 @@ type Transfer struct {
 	Batch        int
 	Resyncing    bool
 	HaAddrs      []string
-	lock         sync.RWMutex
 }
 
 func NewTransfer(cfg *backend.ProxyConfig, circles []*backend.Circle) (tx *Transfer) {
@@ -245,8 +243,8 @@ func (tx *Transfer) Rebalance(circleId int, backends []*backend.Backend, dbs []s
 	tlog.Printf("rebalance start: circle %d", circleId)
 	cs := tx.CircleStates[circleId]
 	tx.resetCircleStates()
-	tx.SetTransferringAndBroadcast(cs, true)
-	defer tx.SetTransferringAndBroadcast(cs, false)
+	tx.broadcastTransferring(cs, true)
+	defer tx.broadcastTransferring(cs, false)
 	if len(dbs) == 0 {
 		dbs = tx.getDatabases()
 	}
@@ -277,8 +275,8 @@ func (tx *Transfer) Recovery(fromCircleId, toCircleId int, recoveryUrls []string
 	fcs := tx.CircleStates[fromCircleId]
 	tcs := tx.CircleStates[toCircleId]
 	tx.resetCircleStates()
-	tx.SetTransferringAndBroadcast(tcs, true)
-	defer tx.SetTransferringAndBroadcast(tcs, false)
+	tx.broadcastTransferring(tcs, true)
+	defer tx.broadcastTransferring(tcs, false)
 	if len(dbs) == 0 {
 		dbs = tx.getDatabases()
 	}
@@ -319,8 +317,8 @@ func (tx *Transfer) Resync(dbs []string, secs int) {
 	tx.setLogOutput("resync.log")
 	tlog.Printf("resync start")
 	tx.resetCircleStates()
-	tx.SetResyncingAndBroadcast(true)
-	defer tx.SetResyncingAndBroadcast(false)
+	tx.broadcastResyncing(true)
+	defer tx.broadcastResyncing(false)
 	if len(dbs) == 0 {
 		dbs = tx.getDatabases()
 	}
@@ -361,8 +359,8 @@ func (tx *Transfer) Cleanup(circleId int) {
 	tlog.Printf("cleanup start: circle %d", circleId)
 	cs := tx.CircleStates[circleId]
 	tx.resetCircleStates()
-	tx.SetTransferringAndBroadcast(cs, true)
-	defer tx.SetTransferringAndBroadcast(cs, false)
+	tx.broadcastTransferring(cs, true)
+	defer tx.broadcastTransferring(cs, false)
 
 	tx.pool, _ = ants.NewPool(tx.Worker)
 	defer tx.pool.Release()
@@ -388,37 +386,25 @@ func (tx *Transfer) runCleanup(cs *CircleState, be *backend.Backend, db string, 
 	return
 }
 
-func (tx *Transfer) SetResyncing(resyncing bool) {
-	tx.lock.Lock()
-	defer tx.lock.Unlock()
+func (tx *Transfer) broadcastResyncing(resyncing bool) {
 	tx.Resyncing = resyncing
-}
-
-func (tx *Transfer) SetTransferring(cs *CircleState, transferring bool) {
-	tx.lock.Lock()
-	defer tx.lock.Unlock()
-	cs.Transferring = transferring
-}
-
-func (tx *Transfer) SetResyncingAndBroadcast(resyncing bool) {
-	tx.SetResyncing(resyncing)
 	client := backend.NewClient(tx.httpsEnabled, 10)
 	for _, addr := range tx.HaAddrs {
 		url := fmt.Sprintf("http://%s/transfer/state?resyncing=%t", addr, resyncing)
-		tx.PostBroadcast(client, url)
+		tx.postBroadcast(client, url)
 	}
 }
 
-func (tx *Transfer) SetTransferringAndBroadcast(cs *CircleState, transferring bool) {
-	tx.SetTransferring(cs, transferring)
+func (tx *Transfer) broadcastTransferring(cs *CircleState, transferring bool) {
+	cs.Transferring = transferring
 	client := backend.NewClient(tx.httpsEnabled, 10)
 	for _, addr := range tx.HaAddrs {
 		url := fmt.Sprintf("http://%s/transfer/state?circle_id=%d&transferring=%t", addr, cs.CircleId, transferring)
-		tx.PostBroadcast(client, url)
+		tx.postBroadcast(client, url)
 	}
 }
 
-func (tx *Transfer) PostBroadcast(client *http.Client, url string) {
+func (tx *Transfer) postBroadcast(client *http.Client, url string) {
 	if tx.httpsEnabled {
 		url = strings.Replace(url, "http", "https", 1)
 	}

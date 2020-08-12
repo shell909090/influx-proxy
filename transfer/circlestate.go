@@ -16,16 +16,16 @@ type Stats struct {
 
 type CircleState struct {
 	*backend.Circle
-	Transferring bool
 	Stats        map[string]*Stats
+	Transferring bool
 	wg           sync.WaitGroup
 }
 
 func NewCircleState(cfg *backend.CircleConfig, circle *backend.Circle) (cs *CircleState) {
 	cs = &CircleState{
 		Circle:       circle,
-		Transferring: false,
 		Stats:        make(map[string]*Stats),
+		Transferring: false,
 	}
 	for _, bkcfg := range cfg.Backends {
 		cs.Stats[bkcfg.Url] = &Stats{}

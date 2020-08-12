@@ -278,8 +278,8 @@ func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request
 			hs.CircleStates[circleId].Stats[bkcfg.Url] = &transfer.Stats{}
 		}
 	}
-	for _, backend := range hs.Circles[circleId].Backends {
-		backends = append(backends, backend)
+	for _, b := range hs.Circles[circleId].Backends {
+		backends = append(backends, b)
 	}
 
 	if hs.CircleStates[circleId].Transferring {
@@ -386,10 +386,10 @@ func (hs *HttpService) HandlerResync(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	for _, circle := range hs.CircleStates {
-		if circle.Transferring {
+	for _, cs := range hs.CircleStates {
+		if cs.Transferring {
 			w.WriteHeader(202)
-			w.Write([]byte(fmt.Sprintf("circle %d is transferring\n", circle.CircleId)))
+			w.Write([]byte(fmt.Sprintf("circle %d is transferring\n", cs.CircleId)))
 			return
 		}
 	}
@@ -475,12 +475,12 @@ func (hs *HttpService) HandlerTransferState(w http.ResponseWriter, req *http.Req
 	pretty := req.URL.Query().Get("pretty") == "true"
 	if req.Method == "GET" {
 		hs.addJsonHeader(w)
-		data := make([]map[string]interface{}, len(hs.Circles))
-		for k, circle := range hs.CircleStates {
+		data := make([]map[string]interface{}, len(hs.CircleStates))
+		for k, cs := range hs.CircleStates {
 			data[k] = map[string]interface{}{
-				"circle_id":    circle.CircleId,
-				"name":         circle.Name,
-				"transferring": circle.Transferring,
+				"circle_id":    cs.CircleId,
+				"name":         cs.Name,
+				"transferring": cs.Transferring,
 			}
 		}
 		state := map[string]interface{}{"resyncing": hs.Resyncing, "circles": data}
@@ -496,7 +496,7 @@ func (hs *HttpService) HandlerTransferState(w http.ResponseWriter, req *http.Req
 				w.Write([]byte("illegal resyncing\n"))
 				return
 			}
-			hs.SetResyncing(resyncing)
+			hs.Resyncing = resyncing
 			state["resyncing"] = hs.Resyncing
 		}
 		if req.FormValue("circle_id") != "" || req.FormValue("transferring") != "" {
@@ -512,12 +512,12 @@ func (hs *HttpService) HandlerTransferState(w http.ResponseWriter, req *http.Req
 				w.Write([]byte("illegal transferring\n"))
 				return
 			}
-			circle := hs.CircleStates[circleId]
-			hs.SetTransferring(circle, transferring)
+			cs := hs.CircleStates[circleId]
+			cs.Transferring = transferring
 			state["circle"] = map[string]interface{}{
-				"circle_id":    circle.CircleId,
-				"name":         circle.Name,
-				"transferring": circle.Transferring,
+				"circle_id":    cs.CircleId,
+				"name":         cs.Name,
+				"transferring": cs.Transferring,
 			}
 		}
 		if len(state) == 0 {
