@@ -180,7 +180,10 @@ func (hs *HttpService) HandlerHealth(w http.ResponseWriter, req *http.Request) {
 	hs.addJsonHeader(w)
 	data := make([]map[string]interface{}, len(hs.Circles))
 	for i, c := range hs.Circles {
-		data[i] = map[string]interface{}{"circle": c.Name, "backends": c.GetHealth()}
+		data[i] = map[string]interface{}{
+			"circle":   map[string]interface{}{"id": c.CircleId, "name": c.Name, "write_only": c.WriteOnly},
+			"backends": c.GetHealth(),
+		}
 	}
 	pretty := req.URL.Query().Get("pretty") == "true"
 	res := util.MarshalJson(data, pretty, true)
@@ -201,9 +204,13 @@ func (hs *HttpService) HandlerReplica(w http.ResponseWriter, req *http.Request) 
 		hs.addJsonHeader(w)
 		key := backend.GetKey(db, meas)
 		backends := hs.GetBackends(key)
-		data := make([]map[string]string, len(backends))
+		data := make([]map[string]interface{}, len(backends))
 		for i, b := range backends {
-			data[i] = map[string]string{"circle": hs.Circles[i].Name, "name": b.Name, "url": b.Url}
+			c := hs.Circles[i]
+			data[i] = map[string]interface{}{
+				"backend": map[string]string{"name": b.Name, "url": b.Url},
+				"circle":  map[string]interface{}{"id": c.CircleId, "name": c.Name},
+			}
 		}
 		pretty := req.URL.Query().Get("pretty") == "true"
 		res := util.MarshalJson(data, pretty, true)
@@ -478,7 +485,7 @@ func (hs *HttpService) HandlerTransferState(w http.ResponseWriter, req *http.Req
 		data := make([]map[string]interface{}, len(hs.CircleStates))
 		for k, cs := range hs.CircleStates {
 			data[k] = map[string]interface{}{
-				"circle_id":    cs.CircleId,
+				"id":           cs.CircleId,
 				"name":         cs.Name,
 				"transferring": cs.Transferring,
 			}
@@ -516,7 +523,7 @@ func (hs *HttpService) HandlerTransferState(w http.ResponseWriter, req *http.Req
 			cs.Transferring = transferring
 			cs.WriteOnly = transferring
 			state["circle"] = map[string]interface{}{
-				"circle_id":    cs.CircleId,
+				"id":           cs.CircleId,
 				"name":         cs.Name,
 				"transferring": cs.Transferring,
 			}
