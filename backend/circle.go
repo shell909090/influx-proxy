@@ -14,6 +14,7 @@ type Circle struct {
 	CircleId     int
 	Name         string
 	Backends     []*Backend
+	WriteOnly    bool
 	router       *consistent.Consistent
 	routerCaches map[string]*Backend
 	mapToBackend map[string]*Backend
@@ -24,6 +25,7 @@ func NewCircle(cfg *CircleConfig, pxcfg *ProxyConfig, circleId int) (ic *Circle)
 		CircleId:     circleId,
 		Name:         cfg.Name,
 		Backends:     make([]*Backend, len(cfg.Backends)),
+		WriteOnly:    false,
 		router:       consistent.New(),
 		routerCaches: make(map[string]*Backend),
 		mapToBackend: make(map[string]*Backend),
@@ -68,7 +70,7 @@ func (ic *Circle) GetHealth() []map[string]interface{} {
 	return stats
 }
 
-func (ic *Circle) CheckStatus() bool {
+func (ic *Circle) CheckActive() bool {
 	for _, be := range ic.Backends {
 		if !be.Active {
 			return false

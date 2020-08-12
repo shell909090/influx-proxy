@@ -62,12 +62,11 @@ func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request, tokens []string
 				continue
 			}
 			circle = ip.Circles[id]
-			// FIXME
-			// if circle.Transferring {
-			// 	badIds.Add(id)
-			// 	continue
-			// }
-			if circle.CheckStatus() {
+			if circle.WriteOnly {
+				badIds.Add(id)
+				continue
+			}
+			if circle.CheckActive() {
 				break
 			}
 			badIds.Add(id)
@@ -111,7 +110,7 @@ func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request, tokens []string
 	} else if alterDb {
 		// all circles -> all backends -> create or drop database
 		for _, circle := range ip.Circles {
-			if !circle.CheckStatus() {
+			if !circle.CheckActive() {
 				return nil, errors.New(fmt.Sprintf("circle %d not health", circle.CircleId))
 			}
 		}

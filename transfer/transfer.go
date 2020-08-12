@@ -397,6 +397,7 @@ func (tx *Transfer) broadcastResyncing(resyncing bool) {
 
 func (tx *Transfer) broadcastTransferring(cs *CircleState, transferring bool) {
 	cs.Transferring = transferring
+	cs.WriteOnly = transferring
 	client := backend.NewClient(tx.httpsEnabled, 10)
 	for _, addr := range tx.HaAddrs {
 		url := fmt.Sprintf("http://%s/transfer/state?circle_id=%d&transferring=%t", addr, cs.CircleId, transferring)
