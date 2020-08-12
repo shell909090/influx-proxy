@@ -16,7 +16,7 @@ Therefore, we made [InfluxDB Proxy](https://github.com/shell909090/influx-proxy)
 
 Forked from the above InfluxDB Proxy, after many improvements and optimizations, [InfluxDB Proxy v1](https://github.com/chengshiwen/influx-proxy/tree/branch-1.x) has released, which no longer depends on python and redis, and supports more features.
 
-Since the InfluxDB Proxy v1 version is limited by the `KEYMAPS` configuration, we refactored [InfluxDB Proxy v2](https://github.com/chengshiwen/influx-proxy) with high availability and consistent hash, which supports tools to rebalance, recovery, resync and clear.
+Since the InfluxDB Proxy v1 version is limited by the only `ONE` database and the `KEYMAPS` configuration, we refactored [InfluxDB Proxy v2](https://github.com/chengshiwen/influx-proxy) with high availability and consistent hash, which supports multiple databases and tools to rebalance, recovery, resync and clear.
 
 Features
 --------
@@ -27,6 +27,7 @@ Features
 * Filter some dangerous influxql.
 * Transparent for client, like cluster for client.
 * Cache data to file when write failed, then rewrite.
+* Support multiple databases to create and store.
 * Support database sharding with consistent hash.
 * Support tools to rebalance, recovery, resync and clear.
 * Load config file and no longer depend on python and redis.
@@ -117,12 +118,13 @@ The configurations in `proxy.json` are the following:
   * `backends`: backend list belong to the circle, `required`
     * `name`: backend name, `required`
     * `url`: influxdb addr or other http backend which supports influxdb line protocol, `required`
-    * `username`: influxdb username, with encryption if proxy auth_secure is enabled, default is `empty` which means no auth
-    * `password`: influxdb password, with encryption if proxy auth_secure is enabled, default is `empty` which means no auth
+    * `username`: influxdb username, with encryption if auth_secure is enabled, default is `empty` which means no auth
+    * `password`: influxdb password, with encryption if auth_secure is enabled, default is `empty` which means no auth
+    * `auth_secure`: secure auth with encryption, default is `false`
 * `listen_addr`: proxy listen addr, default is `:7076`
 * `db_list`: database list permitted to access, default is `[]`
 * `data_dir`: data dir to save .dat .rec, default is `data`
-* `mlog_dir`: log dir to save rebalance, recovery, resync or clear operation, default is `log`
+* `tlog_dir`: transfer log dir to rebalance, recovery, resync or clear, default is `log`
 * `hash_key`: backend key for consistent hash, including "idx", "name" or "url", default is `idx`, once changed rebalance operation is necessary
 * `vnode_size`: the size of virtual nodes for consistent hash, default is `256`
 * `flush_size`: default is `10000`, wait 10000 points write
@@ -131,14 +133,14 @@ The configurations in `proxy.json` are the following:
 * `rewrite_interval`: default is `10`, rewrite every 10 seconds
 * `write_timeout`: default is `10`, write timeout until 10 seconds
 * `idle_timeout`: default is `10`, keep-alives wait time until 10 seconds
-* `conn_pool_size`: default is 20, create a connection pool which size is 20
+* `conn_pool_size`: default is `20`, create a connection pool which size is 20
 * `log_enabled`: enable the logging of debug messages for troubleshooting, default is `false`
 * `username`: proxy username, with encryption if auth_secure is enabled, default is `empty` which means no auth
 * `password`: proxy password, with encryption if auth_secure is enabled, default is `empty` which means no auth
 * `auth_secure`: secure auth with encryption, default is `false`
 * `https_enabled`: enable https, default is `false`
-* `https_cert`: the ssl certificate to use when https is enabled
-* `https_key`: use a separate private key location
+* `https_cert`: the ssl certificate to use when https is enabled, default is `empty`
+* `https_key`: use a separate private key location, default is `empty`
 
 Query Commands
 --------
