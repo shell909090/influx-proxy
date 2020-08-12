@@ -47,8 +47,7 @@ func GetKey(db, meas string) string {
 func (ip *Proxy) GetBackends(key string) []*Backend {
 	backends := make([]*Backend, len(ip.Circles))
 	for i, circle := range ip.Circles {
-		backend := circle.GetBackend(key)
-		backends[i] = backend
+		backends[i] = circle.GetBackend(key)
 	}
 	return backends
 }
@@ -81,9 +80,9 @@ func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request, tokens []string
 		if err == nil {
 			// available circle -> key(db,meas) -> backend -> select or show
 			key := GetKey(db, meas)
-			backend := circle.GetBackend(key)
-			ip.Logf("query circle: %d backend: %s", circle.CircleId, backend.Url)
-			return backend.Query(req, w, false)
+			be := circle.GetBackend(key)
+			ip.Logf("query circle: %d backend: %s", circle.CircleId, be.Url)
+			return be.Query(req, w, false)
 		} else {
 			// available circle -> all backends -> show
 			ip.Logf("query circle: %d", circle.CircleId)
@@ -101,10 +100,10 @@ func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request, tokens []string
 		}
 		key := GetKey(db, meas)
 		backends := ip.GetBackends(key)
-		for _, backend := range backends {
-			ip.Logf("query backend: %s", backend.Url)
+		for _, be := range backends {
+			ip.Logf("query backend: %s", be.Url)
 			req.Body = ioutil.NopCloser(bytes.NewBuffer(reqBodyBytes))
-			body, err = backend.Query(req, w, false)
+			body, err = be.Query(req, w, false)
 			if err != nil {
 				return nil, err
 			}
@@ -167,10 +166,10 @@ func (ip *Proxy) WriteRow(line []byte, db, precision string) {
 	}
 
 	point := &LinePoint{db, nanoLine}
-	for _, backend := range backends {
-		err := backend.WritePoint(point)
+	for _, be := range backends {
+		err := be.WritePoint(point)
 		if err != nil {
-			log.Printf("write data to buffer error: %s, %s, %s, %s, %s", err, backend.Url, db, precision, string(line))
+			log.Printf("write data to buffer error: %s, %s, %s, %s, %s", err, be.Url, db, precision, string(line))
 		}
 	}
 }

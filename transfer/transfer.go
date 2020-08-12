@@ -72,10 +72,10 @@ func (tx *Transfer) setLogOutput(name string) {
 }
 
 func (tx *Transfer) getDatabases() []string {
-	for _, c := range tx.CircleStates {
-		for _, b := range c.Backends {
-			if b.Active {
-				return b.GetDatabases()
+	for _, cs := range tx.CircleStates {
+		for _, be := range cs.Backends {
+			if be.Active {
+				return be.GetDatabases()
 			}
 		}
 	}
@@ -84,8 +84,8 @@ func (tx *Transfer) getDatabases() []string {
 
 func getBackendUrls(backends []*backend.Backend) []string {
 	backendUrls := make([]string, len(backends))
-	for k, b := range backends {
-		backendUrls[k] = b.Url
+	for k, be := range backends {
+		backendUrls[k] = be.Url
 	}
 	return backendUrls
 }

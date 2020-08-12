@@ -36,41 +36,41 @@ func NewCircle(cfg *CircleConfig, pxcfg *ProxyConfig, circleId int) (ic *Circle)
 	return
 }
 
-func (ic *Circle) addRouter(ib *Backend, idx int, hashKey string) {
+func (ic *Circle) addRouter(be *Backend, idx int, hashKey string) {
 	if hashKey == "name" {
-		ic.router.Add(ib.Name)
-		ic.mapToBackend[ib.Name] = ib
+		ic.router.Add(be.Name)
+		ic.mapToBackend[be.Name] = be
 	} else if hashKey == "url" {
-		ic.router.Add(ib.Url)
-		ic.mapToBackend[ib.Url] = ib
+		ic.router.Add(be.Url)
+		ic.mapToBackend[be.Url] = be
 	} else {
 		ic.router.Add(strconv.Itoa(idx))
-		ic.mapToBackend[strconv.Itoa(idx)] = ib
+		ic.mapToBackend[strconv.Itoa(idx)] = be
 	}
 }
 
 func (ic *Circle) GetBackend(key string) *Backend {
-	if backend, ok := ic.routerCaches[key]; ok {
-		return backend
+	if be, ok := ic.routerCaches[key]; ok {
+		return be
 	} else {
 		value, _ := ic.router.Get(key)
-		backend := ic.mapToBackend[value]
-		ic.routerCaches[key] = backend
-		return backend
+		be := ic.mapToBackend[value]
+		ic.routerCaches[key] = be
+		return be
 	}
 }
 
 func (ic *Circle) GetHealth() []map[string]interface{} {
 	stats := make([]map[string]interface{}, len(ic.Backends))
-	for i, b := range ic.Backends {
-		stats[i] = b.GetHealth(ic)
+	for i, be := range ic.Backends {
+		stats[i] = be.GetHealth(ic)
 	}
 	return stats
 }
 
 func (ic *Circle) CheckStatus() bool {
-	for _, backend := range ic.Backends {
-		if !backend.Active {
+	for _, be := range ic.Backends {
+		if !be.Active {
 			return false
 		}
 	}
@@ -86,9 +86,9 @@ func (ic *Circle) Query(w http.ResponseWriter, req *http.Request, tokens []strin
 	}
 	bodies := make([][]byte, 0)
 
-	for _, backend := range ic.Backends {
+	for _, be := range ic.Backends {
 		req.Body = ioutil.NopCloser(bytes.NewBuffer(reqBodyBytes))
-		body, err := backend.Query(req, w, true)
+		body, err := be.Query(req, w, true)
 		if err != nil {
 			return nil, err
 		}
