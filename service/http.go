@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/chengshiwen/influx-proxy/backend"
+	"github.com/chengshiwen/influx-proxy/transfer"
 	"github.com/chengshiwen/influx-proxy/util"
 	gzip "github.com/klauspost/pgzip"
 	"io/ioutil"
@@ -15,16 +16,24 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 )
 
 type HttpService struct {
 	*backend.Proxy
+	*transfer.Transfer
+	Username   string
+	Password   string
+	AuthSecure bool
 }
 
-func NewHttpService(ip *backend.Proxy) (hs *HttpService) {
+func NewHttpService(cfg *backend.ProxyConfig) (hs *HttpService) {
+	ip := backend.NewProxy(cfg)
 	hs = &HttpService{
-		Proxy: ip,
+		Proxy:      ip,
+		Transfer:   transfer.NewTransfer(cfg, ip.Circles),
+		Username:   cfg.Username,
+		Password:   cfg.Password,
+		AuthSecure: cfg.AuthSecure,
 	}
 	return
 }
@@ -37,12 +46,12 @@ func (hs *HttpService) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/replica", hs.HandlerReplica)
 	mux.HandleFunc("/encrypt", hs.HandlerEncrypt)
 	mux.HandleFunc("/decrypt", hs.HandlerDencrypt)
-	mux.HandleFunc("/migrate/state", hs.HandlerMigrateState)
-	mux.HandleFunc("/migrate/stats", hs.HandlerMigrateStats)
+	mux.HandleFunc("/transfer/state", hs.HandlerTransferState)
+	mux.HandleFunc("/transfer/stats", hs.HandlerTransferStats)
 	mux.HandleFunc("/rebalance", hs.HandlerRebalance)
 	mux.HandleFunc("/recovery", hs.HandlerRecovery)
 	mux.HandleFunc("/resync", hs.HandlerResync)
-	mux.HandleFunc("/clear", hs.HandlerClear)
+	mux.HandleFunc("/cleanup", hs.HandlerCleanup)
 	mux.HandleFunc("/debug/pprof/", pprof.Index)
 	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
 	return
@@ -232,7 +241,7 @@ func (hs *HttpService) HandlerDencrypt(w http.ResponseWriter, req *http.Request)
 	w.Write([]byte(decrypt + "\n"))
 }
 
-func (hs *HttpService) HandlerMigrateState(w http.ResponseWriter, req *http.Request) {
+func (hs *HttpService) HandlerTransferState(w http.ResponseWriter, req *http.Request) {
 	defer req.Body.Close()
 	hs.addVerHeader(w)
 	if !hs.checkMethodAndAuth(w, req, []string{"GET", "POST"}) {
@@ -243,14 +252,14 @@ func (hs *HttpService) HandlerMigrateState(w http.ResponseWriter, req *http.Requ
 	if req.Method == "GET" {
 		hs.addJsonHeader(w)
 		data := make([]map[string]interface{}, len(hs.Circles))
-		for k, circle := range hs.Circles {
+		for k, circle := range hs.CircleStates {
 			data[k] = map[string]interface{}{
 				"circle_id":    circle.CircleId,
-				"circle_name":  circle.Name,
-				"is_migrating": circle.IsMigrating,
+				"name":         circle.Name,
+				"transferring": circle.Transferring,
 			}
 		}
-		state := map[string]interface{}{"is_resyncing": hs.IsResyncing, "circles": data}
+		state := map[string]interface{}{"resyncing": hs.Resyncing, "circles": data}
 		res := util.MarshalJson(state, pretty, true)
 		w.Write(res)
 		return
@@ -264,27 +273,27 @@ func (hs *HttpService) HandlerMigrateState(w http.ResponseWriter, req *http.Requ
 				return
 			}
 			hs.SetResyncing(resyncing)
-			state["resyncing"] = hs.IsResyncing
+			state["resyncing"] = hs.Resyncing
 		}
-		if req.FormValue("circle_id") != "" || req.FormValue("migrating") != "" {
+		if req.FormValue("circle_id") != "" || req.FormValue("transferring") != "" {
 			circleId, err := hs.formCircleId(req, "circle_id")
 			if err != nil {
 				w.WriteHeader(400)
 				w.Write([]byte(err.Error() + "\n"))
 				return
 			}
-			migrating, err := hs.formBool(req, "migrating")
+			transferring, err := hs.formBool(req, "transferring")
 			if err != nil {
 				w.WriteHeader(400)
-				w.Write([]byte("illegal migrating\n"))
+				w.Write([]byte("illegal transferring\n"))
 				return
 			}
-			circle := hs.Circles[circleId]
-			hs.SetMigrating(circle, migrating)
+			circle := hs.CircleStates[circleId]
+			hs.SetTransferring(circle, transferring)
 			state["circle"] = map[string]interface{}{
 				"circle_id":    circle.CircleId,
-				"circle_name":  circle.Name,
-				"is_migrating": circle.IsMigrating,
+				"name":         circle.Name,
+				"transferring": circle.Transferring,
 			}
 		}
 		if len(state) == 0 {
@@ -299,7 +308,7 @@ func (hs *HttpService) HandlerMigrateState(w http.ResponseWriter, req *http.Requ
 	}
 }
 
-func (hs *HttpService) HandlerMigrateStats(w http.ResponseWriter, req *http.Request) {
+func (hs *HttpService) HandlerTransferStats(w http.ResponseWriter, req *http.Request) {
 	defer req.Body.Close()
 	hs.addVerHeader(w)
 	if !hs.checkMethodAndAuth(w, req, []string{"GET"}) {
@@ -317,7 +326,7 @@ func (hs *HttpService) HandlerMigrateStats(w http.ResponseWriter, req *http.Requ
 	if statsType == "rebalance" || statsType == "recovery" || statsType == "resync" || statsType == "clear" {
 		hs.addJsonHeader(w)
 		pretty := req.URL.Query().Get("pretty") == "true"
-		res := util.MarshalJson(hs.MigrateStats[circleId], pretty, true)
+		res := util.MarshalJson(hs.CircleStates[circleId].Stats, pretty, true)
 		w.Write(res)
 	} else {
 		w.WriteHeader(400)
@@ -360,26 +369,25 @@ func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request
 		}
 		for _, bkcfg := range body.Backends {
 			backends = append(backends, backend.NewSimpleBackend(bkcfg))
-			hs.MigrateStats[circleId][bkcfg.Url] = &backend.MigrateInfo{}
-			hs.Circles[circleId].BackendWgMap[bkcfg.Url] = &sync.WaitGroup{}
+			hs.CircleStates[circleId].Stats[bkcfg.Url] = &transfer.Stats{}
 		}
 	}
 	for _, backend := range hs.Circles[circleId].Backends {
 		backends = append(backends, backend)
 	}
 
-	if hs.Circles[circleId].IsMigrating {
+	if hs.CircleStates[circleId].Transferring {
 		w.WriteHeader(202)
-		w.Write([]byte(fmt.Sprintf("circle %d is migrating\n", circleId)))
+		w.Write([]byte(fmt.Sprintf("circle %d is transferring\n", circleId)))
 		return
 	}
-	if hs.IsResyncing {
+	if hs.Resyncing {
 		w.WriteHeader(202)
 		w.Write([]byte("proxy is resyncing\n"))
 		return
 	}
 
-	err = hs.setCpus(req)
+	err = hs.setWorker(req)
 	if err != nil {
 		w.WriteHeader(400)
 		w.Write([]byte(err.Error() + "\n"))
@@ -425,18 +433,18 @@ func (hs *HttpService) HandlerRecovery(w http.ResponseWriter, req *http.Request)
 		return
 	}
 
-	if hs.Circles[fromCircleId].IsMigrating || hs.Circles[toCircleId].IsMigrating {
+	if hs.CircleStates[fromCircleId].Transferring || hs.CircleStates[toCircleId].Transferring {
 		w.WriteHeader(202)
-		w.Write([]byte(fmt.Sprintf("circle %d or %d is migrating\n", fromCircleId, toCircleId)))
+		w.Write([]byte(fmt.Sprintf("circle %d or %d is transferring\n", fromCircleId, toCircleId)))
 		return
 	}
-	if hs.IsResyncing {
+	if hs.Resyncing {
 		w.WriteHeader(202)
 		w.Write([]byte("proxy is resyncing\n"))
 		return
 	}
 
-	err = hs.setCpus(req)
+	err = hs.setWorker(req)
 	if err != nil {
 		w.WriteHeader(400)
 		w.Write([]byte(err.Error() + "\n"))
@@ -472,20 +480,20 @@ func (hs *HttpService) HandlerResync(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	for _, circle := range hs.Circles {
-		if circle.IsMigrating {
+	for _, circle := range hs.CircleStates {
+		if circle.Transferring {
 			w.WriteHeader(202)
-			w.Write([]byte(fmt.Sprintf("circle %d is migrating\n", circle.CircleId)))
+			w.Write([]byte(fmt.Sprintf("circle %d is transferring\n", circle.CircleId)))
 			return
 		}
 	}
-	if hs.IsResyncing {
+	if hs.Resyncing {
 		w.WriteHeader(202)
 		w.Write([]byte("proxy is resyncing\n"))
 		return
 	}
 
-	err = hs.setCpus(req)
+	err = hs.setWorker(req)
 	if err != nil {
 		w.WriteHeader(400)
 		w.Write([]byte(err.Error() + "\n"))
@@ -506,7 +514,7 @@ func (hs *HttpService) HandlerResync(w http.ResponseWriter, req *http.Request) {
 	return
 }
 
-func (hs *HttpService) HandlerClear(w http.ResponseWriter, req *http.Request) {
+func (hs *HttpService) HandlerCleanup(w http.ResponseWriter, req *http.Request) {
 	defer req.Body.Close()
 	hs.addVerHeader(w)
 	if !hs.checkMethodAndAuth(w, req, []string{"POST"}) {
@@ -520,18 +528,18 @@ func (hs *HttpService) HandlerClear(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if hs.Circles[circleId].IsMigrating {
+	if hs.CircleStates[circleId].Transferring {
 		w.WriteHeader(202)
-		w.Write([]byte(fmt.Sprintf("circle %d is migrating\n", circleId)))
+		w.Write([]byte(fmt.Sprintf("circle %d is transferring\n", circleId)))
 		return
 	}
-	if hs.IsResyncing {
+	if hs.Resyncing {
 		w.WriteHeader(202)
 		w.Write([]byte("proxy is resyncing\n"))
 		return
 	}
 
-	err = hs.setCpus(req)
+	err = hs.setWorker(req)
 	if err != nil {
 		w.WriteHeader(400)
 		w.Write([]byte(err.Error() + "\n"))
@@ -545,7 +553,7 @@ func (hs *HttpService) HandlerClear(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	go hs.Clear(circleId)
+	go hs.Cleanup(circleId)
 	w.WriteHeader(202)
 	w.Write([]byte("accepted\n"))
 	return
@@ -661,16 +669,16 @@ func (hs *HttpService) formBool(req *http.Request, key string) (bool, error) {
 	return strconv.ParseBool(req.FormValue(key))
 }
 
-func (hs *HttpService) setCpus(req *http.Request) error {
-	str := strings.TrimSpace(req.FormValue("cpus"))
+func (hs *HttpService) setWorker(req *http.Request) error {
+	str := strings.TrimSpace(req.FormValue("worker"))
 	if str != "" {
-		cpus, err := strconv.Atoi(str)
-		if err != nil || cpus <= 0 || cpus > runtime.NumCPU() {
-			return errors.New("invalid cpus")
+		worker, err := strconv.Atoi(str)
+		if err != nil || worker <= 0 || worker > 4*runtime.NumCPU() {
+			return errors.New("invalid worker, not more than 4*cpus")
 		}
-		hs.MigrateCpus = cpus
+		hs.Worker = worker
 	} else {
-		hs.MigrateCpus = 1
+		hs.Worker = 1
 	}
 	return nil
 }

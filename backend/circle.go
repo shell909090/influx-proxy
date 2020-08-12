@@ -2,20 +2,13 @@ package backend
 
 import (
 	"bytes"
-	"fmt"
 	"github.com/chengshiwen/influx-proxy/util"
-	"github.com/deckarep/golang-set"
 	"github.com/influxdata/influxdb1-client/models"
 	"io/ioutil"
 	"net/http"
 	"stathat.com/c/consistent"
 	"strconv"
-	"strings"
-	"sync"
-	"time"
 )
-
-var FieldDataTypes = []string{"float", "integer", "string", "boolean"}
 
 type Circle struct {
 	CircleId     int
@@ -24,9 +17,6 @@ type Circle struct {
 	router       *consistent.Consistent
 	routerCaches map[string]*Backend
 	mapToBackend map[string]*Backend
-	BackendWgMap map[string]*sync.WaitGroup
-	IsMigrating  bool
-	MigrateWg    *sync.WaitGroup
 }
 
 func NewCircle(cfg *CircleConfig, pxcfg *ProxyConfig, circleId int) (ic *Circle) {
@@ -37,16 +27,11 @@ func NewCircle(cfg *CircleConfig, pxcfg *ProxyConfig, circleId int) (ic *Circle)
 		router:       consistent.New(),
 		routerCaches: make(map[string]*Backend),
 		mapToBackend: make(map[string]*Backend),
-		BackendWgMap: make(map[string]*sync.WaitGroup),
-		IsMigrating:  false,
-		MigrateWg:    &sync.WaitGroup{},
 	}
 	ic.router.NumberOfReplicas = pxcfg.VNodeSize
 	for idx, bkcfg := range cfg.Backends {
-		backend := NewBackend(bkcfg, pxcfg)
-		ic.Backends[idx] = backend
-		ic.BackendWgMap[bkcfg.Url] = &sync.WaitGroup{}
-		ic.addRouter(backend, idx, pxcfg.HashKey)
+		ic.Backends[idx] = NewBackend(bkcfg, pxcfg)
+		ic.addRouter(ic.Backends[idx], idx, pxcfg.HashKey)
 	}
 	return
 }
@@ -224,97 +209,4 @@ func (ic *Circle) concatByResults(bodies [][]byte) (rsp *Response, err error) {
 		}
 	}
 	return ResponseFromResults(results), nil
-}
-
-func (ic *Circle) Migrate(srcBackend *Backend, dstBackends []*Backend, db, meas string, seconds int, batch int) error {
-	timeClause := ""
-	if seconds > 0 {
-		timeClause = fmt.Sprintf(" where time >= %ds", time.Now().Unix()-int64(seconds))
-	}
-
-	rsp, err := srcBackend.QueryIQL(db, fmt.Sprintf("select * from \"%s\"%s", meas, timeClause))
-	if err != nil {
-		return err
-	}
-	series, err := SeriesFromResponseBytes(rsp)
-	if err != nil {
-		return err
-	}
-	if len(series) < 1 {
-		return nil
-	}
-	columns := series[0].Columns
-
-	tagKeys := srcBackend.GetTagKeys(db, meas)
-	tagMap := util.NewSetFromStrSlice(tagKeys)
-	fieldKeys := srcBackend.GetFieldKeys(db, meas)
-	fieldMap := reformFieldKeys(fieldKeys)
-
-	valen := len(series[0].Values)
-	lines := make([]string, 0, util.MinInt(valen, batch))
-	for idx, value := range series[0].Values {
-		mtagSet := []string{util.EscapeMeasurement(meas)}
-		fieldSet := make([]string, 0)
-		for i := 1; i < len(value); i++ {
-			k := columns[i]
-			v := value[i]
-			if tagMap.Contains(k) {
-				if v != nil {
-					mtagSet = append(mtagSet, fmt.Sprintf("%s=%s", util.EscapeTag(k), util.EscapeTag(v.(string))))
-				}
-			} else if vtype, ok := fieldMap[k]; ok {
-				if v != nil {
-					if vtype == "float" || vtype == "boolean" {
-						fieldSet = append(fieldSet, fmt.Sprintf("%s=%v", util.EscapeTag(k), v))
-					} else if vtype == "integer" {
-						fieldSet = append(fieldSet, fmt.Sprintf("%s=%vi", util.EscapeTag(k), v))
-					} else if vtype == "string" {
-						fieldSet = append(fieldSet, fmt.Sprintf("%s=\"%s\"", util.EscapeTag(k), models.EscapeStringField(v.(string))))
-					}
-				}
-			}
-		}
-		mtagStr := strings.Join(mtagSet, ",")
-		fieldStr := strings.Join(fieldSet, ",")
-		ts, _ := time.Parse(time.RFC3339Nano, value[0].(string))
-		line := fmt.Sprintf("%s %s %d", mtagStr, fieldStr, ts.UnixNano())
-		lines = append(lines, line)
-		if (idx+1)%batch == 0 || idx+1 == valen {
-			if len(lines) != 0 {
-				lineData := strings.Join(lines, "\n")
-				for _, dstBackend := range dstBackends {
-					err = dstBackend.Write(db, []byte(lineData))
-					if err != nil {
-						return err
-					}
-				}
-				lines = lines[:0]
-			}
-		}
-	}
-	return nil
-}
-
-func reformFieldKeys(fieldKeys map[string][]string) map[string]string {
-	// The SELECT statement returns all field values if all values have the same type.
-	// If field value types differ across shards, InfluxDB first performs any applicable cast operations and
-	// then returns all values with the type that occurs first in the following list: float, integer, string, boolean.
-	fieldSet := make(map[string]mapset.Set, len(fieldKeys))
-	for field, types := range fieldKeys {
-		fieldSet[field] = util.NewSetFromStrSlice(types)
-	}
-	fieldMap := make(map[string]string, len(fieldKeys))
-	for field, types := range fieldKeys {
-		if len(types) == 1 {
-			fieldMap[field] = types[0]
-		} else {
-			for _, dt := range FieldDataTypes {
-				if fieldSet[field].Contains(dt) {
-					fieldMap[field] = dt
-					break
-				}
-			}
-		}
-	}
-	return fieldMap
 }
