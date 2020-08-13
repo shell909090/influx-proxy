@@ -31,7 +31,7 @@ func NewCircle(cfg *CircleConfig, pxcfg *ProxyConfig, circleId int) (ic *Circle)
 		routerCaches: make(map[string]*Backend),
 		mapToBackend: make(map[string]*Backend),
 	}
-	ic.router.NumberOfReplicas = pxcfg.VNodeSize
+	ic.router.NumberOfReplicas = 256
 	for idx, bkcfg := range cfg.Backends {
 		ic.Backends[idx] = NewBackend(bkcfg, pxcfg)
 		ic.addRouter(ic.Backends[idx], idx, pxcfg.HashKey)
@@ -47,6 +47,7 @@ func (ic *Circle) addRouter(be *Backend, idx int, hashKey string) {
 		ic.router.Add(be.Url)
 		ic.mapToBackend[be.Url] = be
 	} else {
+		// each additional backend causes 10% hash collision from 11th backend
 		ic.router.Add(strconv.Itoa(idx))
 		ic.mapToBackend[strconv.Itoa(idx)] = be
 	}

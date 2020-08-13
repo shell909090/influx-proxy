@@ -126,7 +126,6 @@ The configurations in `proxy.json` are the following:
 * `data_dir`: data dir to save .dat .rec, default is `data`
 * `tlog_dir`: transfer log dir to rebalance, recovery, resync or clear, default is `log`
 * `hash_key`: backend key for consistent hash, including "idx", "name" or "url", default is `idx`, once changed rebalance operation is necessary
-* `vnode_size`: the size of virtual nodes for consistent hash, default is `256`
 * `flush_size`: default is `10000`, wait 10000 points write
 * `flush_time`: default is `1`, wait 1 second write whether point count has bigger than flush_size config
 * `check_interval`: default is `1`, check backend active every 1 second

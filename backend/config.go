@@ -41,7 +41,6 @@ type ProxyConfig struct {
 	DataDir         string          `json:"data_dir"`
 	TLogDir         string          `json:"tlog_dir"`
 	HashKey         string          `json:"hash_key"`
-	VNodeSize       int             `json:"vnode_size"`
 	FlushSize       int             `json:"flush_size"`
 	FlushTime       int             `json:"flush_time"`
 	CheckInterval   int             `json:"check_interval"`
@@ -90,9 +89,6 @@ func (cfg *ProxyConfig) setDefault() {
 	}
 	if cfg.HashKey == "" {
 		cfg.HashKey = "idx"
-	}
-	if cfg.VNodeSize <= 0 {
-		cfg.VNodeSize = 256
 	}
 	if cfg.FlushSize <= 0 {
 		cfg.FlushSize = 10000

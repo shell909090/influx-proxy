@@ -44,7 +44,6 @@
     "data_dir": "data",
     "tlog_dir": "log",
     "hash_key": "idx",
-    "vnode_size": 256,
     "flush_size": 10000,
     "flush_time": 1,
     "check_interval": 1,
