@@ -3,9 +3,10 @@ package backend
 import (
 	"encoding/json"
 	"errors"
-	"github.com/deckarep/golang-set"
 	"log"
 	"os"
+
+	mapset "github.com/deckarep/golang-set"
 )
 
 const (
@@ -20,9 +21,9 @@ var (
 	ErrInvalidHashKey        = errors.New("invalid hash_key, should be idx, name or url")
 )
 
-type BackendConfig struct {
+type BackendConfig struct { // nolint:golint
 	Name       string `json:"name"`
-	Url        string `json:"url"`
+	Url        string `json:"url"` // nolint:golint
 	Username   string `json:"username"`
 	Password   string `json:"password"`
 	AuthSecure bool   `json:"auth_secure"`

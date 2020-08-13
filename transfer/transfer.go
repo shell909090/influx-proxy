@@ -2,12 +2,6 @@ package transfer
 
 import (
 	"fmt"
-	"github.com/chengshiwen/influx-proxy/backend"
-	"github.com/chengshiwen/influx-proxy/util"
-	"github.com/deckarep/golang-set"
-	"github.com/influxdata/influxdb1-client/models"
-	"github.com/panjf2000/ants/v2"
-	"gopkg.in/natefinch/lumberjack.v2"
 	"log"
 	"net/http"
 	"os"
@@ -15,6 +9,13 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/chengshiwen/influx-proxy/backend"
+	"github.com/chengshiwen/influx-proxy/util"
+	mapset "github.com/deckarep/golang-set"
+	"github.com/influxdata/influxdb1-client/models"
+	"github.com/panjf2000/ants/v2"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 var (
@@ -238,7 +239,7 @@ func (tx *Transfer) runTransfer(cs *CircleState, be *backend.Backend, dbs []stri
 	}
 }
 
-func (tx *Transfer) Rebalance(circleId int, backends []*backend.Backend, dbs []string) {
+func (tx *Transfer) Rebalance(circleId int, backends []*backend.Backend, dbs []string) { // nolint:golint
 	tx.setLogOutput("rebalance.log")
 	tlog.Printf("rebalance start: circle %d", circleId)
 	cs := tx.CircleStates[circleId]
@@ -269,7 +270,7 @@ func (tx *Transfer) runRebalance(cs *CircleState, be *backend.Backend, db string
 	return
 }
 
-func (tx *Transfer) Recovery(fromCircleId, toCircleId int, recoveryUrls []string, dbs []string) {
+func (tx *Transfer) Recovery(fromCircleId, toCircleId int, backendUrls []string, dbs []string) { // nolint:golint
 	tx.setLogOutput("recovery.log")
 	tlog.Printf("recovery start: circle from %d to %d", fromCircleId, toCircleId)
 	fcs := tx.CircleStates[fromCircleId]
@@ -283,19 +284,19 @@ func (tx *Transfer) Recovery(fromCircleId, toCircleId int, recoveryUrls []string
 
 	tx.pool, _ = ants.NewPool(tx.Worker)
 	defer tx.pool.Release()
-	recoveryUrlSet := mapset.NewSet()
-	if len(recoveryUrls) != 0 {
-		for _, u := range recoveryUrls {
-			recoveryUrlSet.Add(u)
+	backendUrlSet := mapset.NewSet() // nolint:golint
+	if len(backendUrls) != 0 {
+		for _, u := range backendUrls {
+			backendUrlSet.Add(u)
 		}
 	} else {
 		for _, b := range tcs.Backends {
-			recoveryUrlSet.Add(b.Url)
+			backendUrlSet.Add(b.Url)
 		}
 	}
 	for _, be := range fcs.Backends {
 		fcs.wg.Add(1)
-		go tx.runTransfer(fcs, be, dbs, tx.runRecovery, tcs, recoveryUrlSet)
+		go tx.runTransfer(fcs, be, dbs, tx.runRecovery, tcs, backendUrlSet)
 	}
 	fcs.wg.Wait()
 	tlog.Printf("recovery done: circle from %d to %d", fromCircleId, toCircleId)
@@ -303,10 +304,10 @@ func (tx *Transfer) Recovery(fromCircleId, toCircleId int, recoveryUrls []string
 
 func (tx *Transfer) runRecovery(fcs *CircleState, be *backend.Backend, db string, meas string, args []interface{}) (require bool) {
 	tcs := args[0].(*CircleState)
-	recoveryUrlSet := args[1].(mapset.Set)
+	backendUrlSet := args[1].(mapset.Set) // nolint:golint
 	key := backend.GetKey(db, meas)
 	dst := tcs.GetBackend(key)
-	require = recoveryUrlSet.Contains(dst.Url)
+	require = backendUrlSet.Contains(dst.Url)
 	if require {
 		tx.submitTransfer(fcs, be, []*backend.Backend{dst}, db, meas, 0)
 	}
@@ -354,7 +355,7 @@ func (tx *Transfer) runResync(cs *CircleState, be *backend.Backend, db string, m
 	return
 }
 
-func (tx *Transfer) Cleanup(circleId int) {
+func (tx *Transfer) Cleanup(circleId int) { // nolint:golint
 	tx.setLogOutput("cleanup.log")
 	tlog.Printf("cleanup start: circle %d", circleId)
 	cs := tx.CircleStates[circleId]

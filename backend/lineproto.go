@@ -2,11 +2,12 @@ package backend
 
 import (
 	"bytes"
-	"github.com/influxdata/influxdb1-client/models"
 	"io"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/influxdata/influxdb1-client/models"
 )
 
 type LinePoint struct {

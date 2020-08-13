@@ -3,14 +3,15 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/chengshiwen/influx-proxy/backend"
-	"github.com/chengshiwen/influx-proxy/service"
-	"github.com/chengshiwen/influx-proxy/util"
 	"log"
 	"net/http"
 	"os"
 	"runtime"
 	"time"
+
+	"github.com/chengshiwen/influx-proxy/backend"
+	"github.com/chengshiwen/influx-proxy/service"
+	"github.com/chengshiwen/influx-proxy/util"
 )
 
 var (

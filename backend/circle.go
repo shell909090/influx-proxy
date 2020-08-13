@@ -2,16 +2,17 @@ package backend
 
 import (
 	"bytes"
-	"github.com/chengshiwen/influx-proxy/util"
-	"github.com/influxdata/influxdb1-client/models"
 	"io/ioutil"
 	"net/http"
-	"stathat.com/c/consistent"
 	"strconv"
+
+	"github.com/chengshiwen/influx-proxy/util"
+	"github.com/influxdata/influxdb1-client/models"
+	"stathat.com/c/consistent"
 )
 
 type Circle struct {
-	CircleId     int
+	CircleId     int // nolint:golint
 	Name         string
 	Backends     []*Backend
 	WriteOnly    bool
@@ -20,7 +21,7 @@ type Circle struct {
 	mapToBackend map[string]*Backend
 }
 
-func NewCircle(cfg *CircleConfig, pxcfg *ProxyConfig, circleId int) (ic *Circle) {
+func NewCircle(cfg *CircleConfig, pxcfg *ProxyConfig, circleId int) (ic *Circle) { // nolint:golint
 	ic = &Circle{
 		CircleId:     circleId,
 		Name:         cfg.Name,
@@ -54,12 +55,11 @@ func (ic *Circle) addRouter(be *Backend, idx int, hashKey string) {
 func (ic *Circle) GetBackend(key string) *Backend {
 	if be, ok := ic.routerCaches[key]; ok {
 		return be
-	} else {
-		value, _ := ic.router.Get(key)
-		be := ic.mapToBackend[value]
-		ic.routerCaches[key] = be
-		return be
 	}
+	value, _ := ic.router.Get(key)
+	be := ic.mapToBackend[value]
+	ic.routerCaches[key] = be
+	return be
 }
 
 func (ic *Circle) GetHealth() []map[string]interface{} {
@@ -119,12 +119,11 @@ func (ic *Circle) Query(w http.ResponseWriter, req *http.Request, tokens []strin
 		rsp = ResponseFromSeries(nil)
 	}
 	pretty := req.FormValue("pretty") == "true"
-	body := util.MarshalJson(rsp, pretty, true)
+	body := util.MarshalJSON(rsp, pretty, true)
 	if w.Header().Get("Content-Encoding") == "gzip" {
 		return util.GzipCompress(body)
-	} else {
-		return body, nil
 	}
+	return body, nil
 }
 
 func (ic *Circle) reduceByValues(bodies [][]byte) (rsp *Response, err error) {
@@ -188,9 +187,7 @@ func (ic *Circle) concatByValues(bodies [][]byte) (rsp *Response, err error) {
 		}
 		if len(_series) == 1 {
 			series = _series
-			for _, value := range _series[0].Values {
-				values = append(values, value)
-			}
+			values = append(values, _series[0].Values...)
 		}
 	}
 	if len(series) == 1 {

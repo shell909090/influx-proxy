@@ -2,7 +2,7 @@ package backend
 
 import (
 	"github.com/influxdata/influxdb1-client/models"
-	"github.com/json-iterator/go"
+	jsoniter "github.com/json-iterator/go"
 )
 
 // Message represents a user-facing message to be included with the result.

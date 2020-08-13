@@ -2,12 +2,13 @@ package backend
 
 import (
 	"bytes"
-	"github.com/panjf2000/ants/v2"
 	"io"
 	"log"
 	"net/url"
 	"sync"
 	"time"
+
+	"github.com/panjf2000/ants/v2"
 )
 
 type CacheBuffer struct {

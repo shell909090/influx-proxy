@@ -3,10 +3,11 @@ package util
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/deckarep/golang-set"
-	gzip "github.com/klauspost/pgzip"
 	"io"
 	"os"
+
+	mapset "github.com/deckarep/golang-set"
+	gzip "github.com/klauspost/pgzip"
 )
 
 func MinInt(a, b int) int {
@@ -65,7 +66,7 @@ func GzipCompress(b []byte) (cb []byte, err error) {
 	return
 }
 
-func MarshalJson(v interface{}, pretty bool, newline bool) []byte {
+func MarshalJSON(v interface{}, pretty bool, newline bool) []byte {
 	var res []byte
 	if pretty {
 		res, _ = json.MarshalIndent(v, "", "    ")

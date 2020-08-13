@@ -5,8 +5,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"github.com/chengshiwen/influx-proxy/util"
-	gzip "github.com/klauspost/pgzip"
 	"io"
 	"io/ioutil"
 	"log"
@@ -15,6 +13,9 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/chengshiwen/influx-proxy/util"
+	gzip "github.com/klauspost/pgzip"
 )
 
 var (
@@ -25,19 +26,19 @@ var (
 	ErrUnknown      = errors.New("unknown error")
 )
 
-type HttpBackend struct {
+type HttpBackend struct { // nolint:golint
 	client     *http.Client
 	transport  *http.Transport
 	interval   int
 	Name       string
-	Url        string
+	Url        string // nolint:golint
 	Username   string
 	Password   string
 	AuthSecure bool
 	Active     bool
 }
 
-func NewHttpBackend(cfg *BackendConfig, pxcfg *ProxyConfig) (hb *HttpBackend) {
+func NewHttpBackend(cfg *BackendConfig, pxcfg *ProxyConfig) (hb *HttpBackend) { // nolint:golint
 	hb = NewSimpleHttpBackend(cfg)
 	hb.client = NewClient(strings.HasPrefix(cfg.Url, "https"), pxcfg.WriteTimeout)
 	hb.interval = pxcfg.CheckInterval
@@ -45,7 +46,7 @@ func NewHttpBackend(cfg *BackendConfig, pxcfg *ProxyConfig) (hb *HttpBackend) {
 	return
 }
 
-func NewSimpleHttpBackend(cfg *BackendConfig) (hb *HttpBackend) {
+func NewSimpleHttpBackend(cfg *BackendConfig) (hb *HttpBackend) { // nolint:golint
 	hb = &HttpBackend{
 		transport:  NewTransport(strings.HasPrefix(cfg.Url, "https")),
 		Name:       cfg.Name,
@@ -62,7 +63,7 @@ func NewClient(tlsSkip bool, timeout int) *http.Client {
 	return &http.Client{Transport: NewTransport(tlsSkip), Timeout: time.Duration(timeout) * time.Second}
 }
 
-func NewTransport(tlsSkip bool) (transport *http.Transport) {
+func NewTransport(tlsSkip bool) *http.Transport {
 	return &http.Transport{
 		DialContext: (&net.Dialer{
 			Timeout:   time.Second * 30,
@@ -150,12 +151,12 @@ func (hb *HttpBackend) Write(db string, p []byte) (err error) {
 	return hb.WriteStream(db, &buf, true)
 }
 
-func (hb *HttpBackend) WriteCompressed(db string, p []byte) error {
+func (hb *HttpBackend) WriteCompressed(db string, p []byte) (err error) {
 	buf := bytes.NewBuffer(p)
 	return hb.WriteStream(db, buf, true)
 }
 
-func (hb *HttpBackend) WriteStream(db string, stream io.Reader, compressed bool) error {
+func (hb *HttpBackend) WriteStream(db string, stream io.Reader, compressed bool) (err error) {
 	q := url.Values{}
 	q.Set("db", db)
 	req, err := http.NewRequest("POST", hb.Url+"/write?"+q.Encode(), stream)
@@ -170,34 +171,35 @@ func (hb *HttpBackend) WriteStream(db string, stream io.Reader, compressed bool)
 	if err != nil {
 		log.Print("http error: ", err)
 		hb.Active = false
-		return err
+		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 204 {
-		return nil
+		return
 	}
 	log.Printf("write status code: %d, from: %s", resp.StatusCode, hb.Url)
 
 	respbuf, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Print("readall error: ", err)
-		return err
+		return
 	}
 	log.Printf("error response: %s", respbuf)
 
 	switch resp.StatusCode {
 	case 400:
-		return ErrBadRequest
+		err = ErrBadRequest
 	case 401:
-		return ErrUnauthorized
+		err = ErrUnauthorized
 	case 404:
-		return ErrNotFound
+		err = ErrNotFound
 	case 500:
-		return ErrInternal
+		err = ErrInternal
 	default: // mostly tcp connection timeout, or request entity too large
-		return ErrUnknown
+		err = ErrUnknown
 	}
+	return
 }
 
 func (hb *HttpBackend) Query(req *http.Request, w http.ResponseWriter, decompressed bool) ([]byte, error) {
@@ -232,11 +234,11 @@ func (hb *HttpBackend) Query(req *http.Request, w http.ResponseWriter, decompres
 	body := resp.Body
 	if decompressed && resp.Header.Get("Content-Encoding") == "gzip" {
 		b, err := gzip.NewReader(resp.Body)
-		defer b.Close()
 		if err != nil {
 			log.Printf("unable to decode gzip body")
 			return nil, err
 		}
+		defer b.Close()
 		body = b
 	}
 
@@ -300,6 +302,5 @@ func (hb *HttpBackend) DropMeasurement(db, meas string) ([]byte, error) {
 }
 
 func (hb *HttpBackend) Close() {
-	hb.client.CloseIdleConnections()
 	hb.transport.CloseIdleConnections()
 }

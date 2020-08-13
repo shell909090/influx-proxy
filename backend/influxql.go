@@ -4,9 +4,10 @@ import (
 	"bufio"
 	"bytes"
 	"errors"
-	"github.com/deckarep/golang-set"
 	"log"
 	"strings"
+
+	mapset "github.com/deckarep/golang-set"
 )
 
 var SupportCmds = mapset.NewSet(

@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/chengshiwen/influx-proxy/util"
-	"github.com/deckarep/golang-set"
 	"io"
 	"io/ioutil"
 	"log"
@@ -13,6 +11,9 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/chengshiwen/influx-proxy/util"
+	mapset "github.com/deckarep/golang-set"
 )
 
 type Proxy struct {
@@ -82,11 +83,10 @@ func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request, tokens []string
 			be := circle.GetBackend(key)
 			ip.Logf("query circle: %d backend: %s", circle.CircleId, be.Url)
 			return be.Query(req, w, false)
-		} else {
-			// available circle -> all backends -> show
-			ip.Logf("query circle: %d", circle.CircleId)
-			return circle.Query(w, req, tokens)
 		}
+		// available circle -> all backends -> show
+		ip.Logf("query circle: %d", circle.CircleId)
+		return circle.Query(w, req, tokens)
 	} else if CheckDeleteOrDropMeasurementFromTokens(tokens) {
 		// all circles -> key(db,meas) -> backend -> delete or drop
 		meas, err := GetMeasurementFromTokens(tokens)
@@ -111,7 +111,7 @@ func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request, tokens []string
 		// all circles -> all backends -> create or drop database
 		for _, circle := range ip.Circles {
 			if !circle.CheckActive() {
-				return nil, errors.New(fmt.Sprintf("circle %d not health", circle.CircleId))
+				return nil, fmt.Errorf("circle %d not health", circle.CircleId)
 			}
 		}
 		for _, circle := range ip.Circles {
