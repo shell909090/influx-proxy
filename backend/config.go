@@ -5,8 +5,6 @@ import (
 	"errors"
 	"log"
 	"os"
-
-	mapset "github.com/deckarep/golang-set"
 )
 
 const (
@@ -37,7 +35,7 @@ type CircleConfig struct {
 type ProxyConfig struct {
 	Circles         []*CircleConfig `json:"circles"`
 	ListenAddr      string          `json:"listen_addr"`
-	DbList          []string        `json:"db_list"`
+	DBList          []string        `json:"db_list"`
 	DataDir         string          `json:"data_dir"`
 	TLogDir         string          `json:"tlog_dir"`
 	HashKey         string          `json:"hash_key"`
@@ -117,7 +115,7 @@ func (cfg *ProxyConfig) checkConfig() (err error) {
 	if len(cfg.Circles) == 0 {
 		return ErrEmptyCircles
 	}
-	rec := mapset.NewSet()
+	set := make(map[string]bool)
 	for _, circle := range cfg.Circles {
 		if len(circle.Backends) == 0 {
 			return ErrEmptyBackends
@@ -126,10 +124,10 @@ func (cfg *ProxyConfig) checkConfig() (err error) {
 			if backend.Name == "" {
 				return ErrEmptyBackendName
 			}
-			if rec.Contains(backend.Name) {
+			if set[backend.Name] {
 				return ErrDuplicatedBackendName
 			}
-			rec.Add(backend.Name)
+			set[backend.Name] = true
 		}
 	}
 	if cfg.HashKey != "idx" && cfg.HashKey != "name" && cfg.HashKey != "url" {
@@ -144,7 +142,7 @@ func (cfg *ProxyConfig) PrintSummary() {
 		log.Printf("circle %d: %d backends loaded", id, len(circle.Backends))
 	}
 	log.Printf("hash key: %s", cfg.HashKey)
-	if len(cfg.DbList) > 0 {
-		log.Printf("db list: %v", cfg.DbList)
+	if len(cfg.DBList) > 0 {
+		log.Printf("db list: %v", cfg.DBList)
 	}
 }

@@ -22,6 +22,7 @@ import (
 type HttpService struct { // nolint:golint
 	*backend.Proxy
 	*transfer.Transfer
+	DBSet      map[string]bool
 	Username   string
 	Password   string
 	AuthSecure bool
@@ -32,9 +33,13 @@ func NewHttpService(cfg *backend.ProxyConfig) (hs *HttpService) { // nolint:goli
 	hs = &HttpService{
 		Proxy:      ip,
 		Transfer:   transfer.NewTransfer(cfg, ip.Circles),
+		DBSet:      make(map[string]bool),
 		Username:   cfg.Username,
 		Password:   cfg.Password,
 		AuthSecure: cfg.AuthSecure,
+	}
+	for _, db := range cfg.DBList {
+		hs.DBSet[db] = true
 	}
 	return
 }
@@ -100,7 +105,7 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
 			hs.write(w, "database not found")
 			return
 		}
-		if hs.CheckForbiddenDB(db) {
+		if len(hs.DBSet) > 0 && !hs.DBSet[db] {
 			w.WriteHeader(400)
 			hs.write(w, fmt.Sprintf("database forbidden: %s", db))
 			return
@@ -134,7 +139,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
 		hs.write(w, "database not found")
 		return
 	}
-	if hs.CheckForbiddenDB(db) {
+	if len(hs.DBSet) > 0 && !hs.DBSet[db] {
 		w.WriteHeader(400)
 		hs.write(w, fmt.Sprintf("database forbidden: %s", db))
 		return

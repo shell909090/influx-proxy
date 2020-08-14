@@ -11,23 +11,16 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	"github.com/chengshiwen/influx-proxy/util"
-	mapset "github.com/deckarep/golang-set"
 )
 
 type Proxy struct {
 	Circles    []*Circle
-	dbList     []string
-	dbSet      mapset.Set
 	LogEnabled bool
 }
 
 func NewProxy(cfg *ProxyConfig) (ip *Proxy) {
 	ip = &Proxy{
 		Circles:    make([]*Circle, len(cfg.Circles)),
-		dbList:     cfg.DbList,
-		dbSet:      util.NewSetFromStrSlice(cfg.DbList),
 		LogEnabled: cfg.LogEnabled,
 	}
 	for idx, circfg := range cfg.Circles {
@@ -56,22 +49,22 @@ func (ip *Proxy) GetBackends(key string) []*Backend {
 func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request, tokens []string, db string, alterDb bool) (body []byte, err error) {
 	if CheckSelectOrShowFromTokens(tokens) {
 		var circle *Circle
-		badIds := mapset.NewSet()
+		badSet := make(map[int]bool)
 		for {
 			id := rand.Intn(len(ip.Circles))
-			if badIds.Contains(id) {
+			if badSet[id] {
 				continue
 			}
 			circle = ip.Circles[id]
 			if circle.WriteOnly {
-				badIds.Add(id)
+				badSet[id] = true
 				continue
 			}
 			if circle.CheckActive() {
 				break
 			}
-			badIds.Add(id)
-			if badIds.Cardinality() == len(ip.Circles) {
+			badSet[id] = true
+			if len(badSet) == len(ip.Circles) {
 				return nil, errors.New("circles unavailable")
 			}
 			time.Sleep(time.Microsecond)
@@ -171,10 +164,6 @@ func (ip *Proxy) WriteRow(line []byte, db, precision string) {
 			log.Printf("write data to buffer error: %s, %s, %s, %s, %s", err, be.Url, db, precision, string(line))
 		}
 	}
-}
-
-func (ip *Proxy) CheckForbiddenDB(db string) bool {
-	return len(ip.dbList) > 0 && !ip.dbSet.Contains(db)
 }
 
 func (ip *Proxy) Logf(format string, v ...interface{}) {

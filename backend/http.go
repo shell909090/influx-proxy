@@ -202,7 +202,7 @@ func (hb *HttpBackend) WriteStream(db string, stream io.Reader, compressed bool)
 	return
 }
 
-func (hb *HttpBackend) Query(req *http.Request, w http.ResponseWriter, decompressed bool) ([]byte, error) {
+func (hb *HttpBackend) Query(req *http.Request, w http.ResponseWriter, decompress bool) ([]byte, error) {
 	var err error
 	if len(req.Form) == 0 {
 		req.Form = url.Values{}
@@ -232,7 +232,7 @@ func (hb *HttpBackend) Query(req *http.Request, w http.ResponseWriter, decompres
 	}
 
 	body := resp.Body
-	if decompressed && resp.Header.Get("Content-Encoding") == "gzip" {
+	if decompress && resp.Header.Get("Content-Encoding") == "gzip" {
 		b, err := gzip.NewReader(resp.Body)
 		if err != nil {
 			log.Printf("unable to decode gzip body")
