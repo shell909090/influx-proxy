@@ -76,6 +76,8 @@ curl -X POST 'http://127.0.0.1:7076/query?db=db1' --data-urlencode 'q=delete fro
 curl -X POST 'http://127.0.0.1:7076/query?db=db1' --data-urlencode 'q=drop series from cpu2'
 curl -X POST 'http://127.0.0.1:7076/query?db=db2' --data-urlencode 'q=drop measurement cpu3'
 curl -X POST 'http://127.0.0.1:7076/query?db=db2' --data-urlencode 'q=drop series from cpu4'
+curl -X POST 'http://127.0.0.1:7076/query?db=db2' --data-urlencode 'q=drop measurement "measurement with spaces, commas and \"quotes\""'
+curl -X POST 'http://127.0.0.1:7076/query?db=db1' --data-urlencode 'q=delete from "\"measurement with spaces, commas and \"quotes\"\""'
 curl -G 'http://127.0.0.1:7076/query?db=db1' --data-urlencode 'q=select * from cpu1;'
 curl -G 'http://127.0.0.1:7076/query?db=db1' --data-urlencode 'q=select * from cpu2'
 curl -G 'http://127.0.0.1:7076/query?db=db2' --data-urlencode 'q=select * from cpu3;'

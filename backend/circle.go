@@ -128,38 +128,37 @@ func (ic *Circle) Query(w http.ResponseWriter, req *http.Request, tokens []strin
 }
 
 func (ic *Circle) reduceByValues(bodies [][]byte) (rsp *Response, err error) {
-	valuesMap := make(map[string]*models.Row)
+	var series models.Rows
+	var values [][]interface{}
+	valuesMap := make(map[string][]interface{})
 	for _, b := range bodies {
 		_series, err := SeriesFromResponseBytes(b)
 		if err != nil {
 			return nil, err
 		}
-		for _, s := range _series {
-			for _, value := range s.Values {
-				if len(value) < 1 {
-					continue
-				}
+		if len(_series) == 1 {
+			series = _series
+			for _, value := range _series[0].Values {
 				key := value[0].(string)
-				valuesMap[key] = s
+				valuesMap[key] = value
 			}
 		}
 	}
-	serie := &models.Row{}
-	var values [][]interface{}
-	for v, s := range valuesMap {
-		values = append(values, []interface{}{v})
-		serie = s
+	if len(series) == 1 {
+		for _, value := range valuesMap {
+			values = append(values, value)
+		}
+		if len(values) > 0 {
+			series[0].Values = values
+		} else {
+			series = nil
+		}
 	}
-	if len(values) > 0 {
-		serie.Values = values
-		rsp = ResponseFromSeries(models.Rows{serie})
-	} else {
-		rsp = ResponseFromSeries(nil)
-	}
-	return
+	return ResponseFromSeries(series), nil
 }
 
 func (ic *Circle) reduceBySeries(bodies [][]byte) (rsp *Response, err error) {
+	var series models.Rows
 	seriesMap := make(map[string]*models.Row)
 	for _, b := range bodies {
 		_series, err := SeriesFromResponseBytes(b)
@@ -170,8 +169,6 @@ func (ic *Circle) reduceBySeries(bodies [][]byte) (rsp *Response, err error) {
 			seriesMap[s.Name] = s
 		}
 	}
-
-	var series models.Rows
 	for _, item := range seriesMap {
 		series = append(series, item)
 	}

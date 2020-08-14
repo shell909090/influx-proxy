@@ -267,6 +267,7 @@ func (hb *HttpBackend) GetSeriesValues(db, query string) []string {
 	return values
 }
 
+// _internal has filtered
 func (hb *HttpBackend) GetDatabases() []string {
 	return hb.GetSeriesValues("", "show databases")
 }
