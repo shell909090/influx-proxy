@@ -130,13 +130,15 @@ The configurations in `proxy.json` are the following:
 * `flush_time`: default is `1`, wait 1 second write whether point count has bigger than flush_size config
 * `check_interval`: default is `1`, check backend active every 1 second
 * `rewrite_interval`: default is `10`, rewrite every 10 seconds
+* `conn_pool_size`: default is `20`, create a connection pool which size is 20
 * `write_timeout`: default is `10`, write timeout until 10 seconds
 * `idle_timeout`: default is `10`, keep-alives wait time until 10 seconds
-* `conn_pool_size`: default is `20`, create a connection pool which size is 20
-* `log_enabled`: enable the logging of debug messages for troubleshooting, default is `false`
 * `username`: proxy username, with encryption if auth_secure is enabled, default is `empty` which means no auth
 * `password`: proxy password, with encryption if auth_secure is enabled, default is `empty` which means no auth
 * `auth_secure`: secure auth with encryption, default is `false`
+* `log_enabled`: enable the logging of debug messages for troubleshooting, default is `false`
+* `write_tracing`: enable logging for the write, default is `false`
+* `query_tracing`: enable logging for the query, default is `false`
 * `https_enabled`: enable https, default is `false`
 * `https_cert`: the ssl certificate to use when https is enabled, default is `empty`
 * `https_key`: use a separate private key location, default is `empty`

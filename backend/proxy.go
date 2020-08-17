@@ -14,14 +14,12 @@ import (
 )
 
 type Proxy struct {
-	Circles    []*Circle
-	LogEnabled bool
+	Circles []*Circle
 }
 
 func NewProxy(cfg *ProxyConfig) (ip *Proxy) {
 	ip = &Proxy{
-		Circles:    make([]*Circle, len(cfg.Circles)),
-		LogEnabled: cfg.LogEnabled,
+		Circles: make([]*Circle, len(cfg.Circles)),
 	}
 	for idx, circfg := range cfg.Circles {
 		ip.Circles[idx] = NewCircle(circfg, cfg, idx)
@@ -74,11 +72,11 @@ func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request, tokens []string
 			// available circle -> key(db,meas) -> backend -> select or show
 			key := GetKey(db, meas)
 			be := circle.GetBackend(key)
-			ip.Logf("query circle: %d backend: %s", circle.CircleId, be.Url)
+			// log.Printf("query circle: %d backend: %s", circle.CircleId, be.Url)
 			return be.Query(req, w, false)
 		}
 		// available circle -> all backends -> show
-		ip.Logf("query circle: %d", circle.CircleId)
+		// log.Printf("query circle: %d", circle.CircleId)
 		return circle.Query(w, req, tokens)
 	} else if CheckDeleteOrDropMeasurementFromTokens(tokens) {
 		// all circles -> key(db,meas) -> backend -> delete or drop
@@ -93,7 +91,7 @@ func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request, tokens []string
 		key := GetKey(db, meas)
 		backends := ip.GetBackends(key)
 		for _, be := range backends {
-			ip.Logf("query backend: %s", be.Url)
+			// log.Printf("query backend: %s", be.Url)
 			req.Body = ioutil.NopCloser(bytes.NewBuffer(reqBodyBytes))
 			body, err = be.Query(req, w, false)
 			if err != nil {
@@ -108,7 +106,7 @@ func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request, tokens []string
 			}
 		}
 		for _, circle := range ip.Circles {
-			ip.Logf("query circle: %d", circle.CircleId)
+			// log.Printf("query circle: %d", circle.CircleId)
 			body, err = circle.Query(w, req, tokens)
 			if err != nil {
 				return
@@ -163,11 +161,5 @@ func (ip *Proxy) WriteRow(line []byte, db, precision string) {
 		if err != nil {
 			log.Printf("write data to buffer error: %s, %s, %s, %s, %s", err, be.Url, db, precision, string(line))
 		}
-	}
-}
-
-func (ip *Proxy) Logf(format string, v ...interface{}) {
-	if ip.LogEnabled {
-		log.Printf(format, v...)
 	}
 }

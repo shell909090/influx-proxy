@@ -43,13 +43,15 @@ type ProxyConfig struct {
 	FlushTime       int             `json:"flush_time"`
 	CheckInterval   int             `json:"check_interval"`
 	RewriteInterval int             `json:"rewrite_interval"`
+	ConnPoolSize    int             `json:"conn_pool_size"`
 	WriteTimeout    int             `json:"write_timeout"`
 	IdleTimeout     int             `json:"idle_timeout"`
-	ConnPoolSize    int             `json:"conn_pool_size"`
-	LogEnabled      bool            `json:"log_enabled"`
 	Username        string          `json:"username"`
 	Password        string          `json:"password"`
 	AuthSecure      bool            `json:"auth_secure"`
+	LogEnabled      bool            `json:"log_enabled"`
+	WriteTracing    bool            `json:"write_tracing"`
+	QueryTracing    bool            `json:"query_tracing"`
 	HTTPSEnabled    bool            `json:"https_enabled"`
 	HTTPSCert       string          `json:"https_cert"`
 	HTTPSKey        string          `json:"https_key"`
@@ -100,14 +102,14 @@ func (cfg *ProxyConfig) setDefault() {
 	if cfg.RewriteInterval <= 0 {
 		cfg.RewriteInterval = 10
 	}
+	if cfg.ConnPoolSize <= 0 {
+		cfg.ConnPoolSize = 20
+	}
 	if cfg.WriteTimeout <= 0 {
 		cfg.WriteTimeout = 10
 	}
 	if cfg.IdleTimeout <= 0 {
 		cfg.IdleTimeout = 10
-	}
-	if cfg.ConnPoolSize <= 0 {
-		cfg.ConnPoolSize = 20
 	}
 }
 

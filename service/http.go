@@ -20,23 +20,29 @@ import (
 )
 
 type HttpService struct { // nolint:golint
-	*backend.Proxy
-	*transfer.Transfer
-	DBSet      map[string]bool
-	Username   string
-	Password   string
-	AuthSecure bool
+	ip           *backend.Proxy
+	tx           *transfer.Transfer
+	DBSet        map[string]bool
+	Username     string
+	Password     string
+	AuthSecure   bool
+	LogEnabled   bool
+	WriteTracing bool
+	QueryTracing bool
 }
 
 func NewHttpService(cfg *backend.ProxyConfig) (hs *HttpService) { // nolint:golint
 	ip := backend.NewProxy(cfg)
 	hs = &HttpService{
-		Proxy:      ip,
-		Transfer:   transfer.NewTransfer(cfg, ip.Circles),
-		DBSet:      make(map[string]bool),
-		Username:   cfg.Username,
-		Password:   cfg.Password,
-		AuthSecure: cfg.AuthSecure,
+		ip:           ip,
+		tx:           transfer.NewTransfer(cfg, ip.Circles),
+		DBSet:        make(map[string]bool),
+		Username:     cfg.Username,
+		Password:     cfg.Password,
+		AuthSecure:   cfg.AuthSecure,
+		LogEnabled:   cfg.LogEnabled,
+		WriteTracing: cfg.WriteTracing,
+		QueryTracing: cfg.QueryTracing,
 	}
 	for _, db := range cfg.DBList {
 		hs.DBSet[db] = true
@@ -77,18 +83,16 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
 
 	q := strings.TrimSpace(req.FormValue("q"))
 	if q == "" {
-		w.WriteHeader(400)
-		hs.write(w, "query not found")
+		hs.Write(w, 400, "query not found")
 		return
 	}
-	if hs.LogEnabled {
+	if hs.QueryTracing {
 		log.Printf("query: %s %s %s, client: %s", req.Method, req.FormValue("db"), q, req.RemoteAddr)
 	}
 
 	tokens, check := backend.CheckQuery(q)
 	if !check {
-		w.WriteHeader(400)
-		hs.write(w, "query forbidden")
+		hs.Write(w, 400, "query forbidden")
 		return
 	}
 
@@ -101,22 +105,19 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
 	}
 	if !showDb {
 		if db == "" {
-			w.WriteHeader(400)
-			hs.write(w, "database not found")
+			hs.Write(w, 400, "database not found")
 			return
 		}
 		if len(hs.DBSet) > 0 && !hs.DBSet[db] {
-			w.WriteHeader(400)
-			hs.write(w, fmt.Sprintf("database forbidden: %s", db))
+			hs.Write(w, 400, fmt.Sprintf("database forbidden: %s", db))
 			return
 		}
 	}
 
-	body, err := hs.Query(w, req, tokens, db, alterDb)
+	body, err := hs.ip.Query(w, req, tokens, db, alterDb)
 	if err != nil {
 		log.Printf("query error: %s, the query is %s, db is %s", err, q, db)
-		w.WriteHeader(400)
-		hs.writeResp(w, fmt.Sprintf("query error: %s", err))
+		hs.Write(w, 400, fmt.Sprintf("query error: %s", err))
 		return
 	}
 	w.Write(body)
@@ -135,13 +136,11 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
 	}
 	db := req.URL.Query().Get("db")
 	if db == "" {
-		w.WriteHeader(400)
-		hs.write(w, "database not found")
+		hs.Write(w, 400, "database not found")
 		return
 	}
 	if len(hs.DBSet) > 0 && !hs.DBSet[db] {
-		w.WriteHeader(400)
-		hs.write(w, fmt.Sprintf("database forbidden: %s", db))
+		hs.Write(w, 400, fmt.Sprintf("database forbidden: %s", db))
 		return
 	}
 
@@ -149,8 +148,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
 	if req.Header.Get("Content-Encoding") == "gzip" {
 		b, err := gzip.NewReader(body)
 		if err != nil {
-			w.WriteHeader(400)
-			hs.write(w, "unable to decode gzip body")
+			hs.Write(w, 400, "unable to decode gzip body")
 			return
 		}
 		defer b.Close()
@@ -158,16 +156,15 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
 	}
 	p, err := ioutil.ReadAll(body)
 	if err != nil {
-		w.WriteHeader(400)
-		hs.write(w, err.Error())
+		hs.Write(w, 400, err.Error())
 		return
 	}
 
-	err = hs.Write(p, db, precision)
+	err = hs.ip.Write(p, db, precision)
 	if err == nil {
 		w.WriteHeader(204)
 	}
-	if hs.LogEnabled {
+	if hs.WriteTracing {
 		log.Printf("write: %s %s %s, client: %s", db, precision, p, req.RemoteAddr)
 	}
 }
@@ -180,8 +177,8 @@ func (hs *HttpService) HandlerHealth(w http.ResponseWriter, req *http.Request) {
 	}
 
 	hs.addJSONHeader(w)
-	data := make([]map[string]interface{}, len(hs.Circles))
-	for i, c := range hs.Circles {
+	data := make([]map[string]interface{}, len(hs.ip.Circles))
+	for i, c := range hs.ip.Circles {
 		data[i] = map[string]interface{}{
 			"circle":   map[string]interface{}{"id": c.CircleId, "name": c.Name, "write_only": c.WriteOnly},
 			"backends": c.GetHealth(),
@@ -204,10 +201,10 @@ func (hs *HttpService) HandlerReplica(w http.ResponseWriter, req *http.Request) 
 	if db != "" && meas != "" {
 		hs.addJSONHeader(w)
 		key := backend.GetKey(db, meas)
-		backends := hs.GetBackends(key)
+		backends := hs.ip.GetBackends(key)
 		data := make([]map[string]interface{}, len(backends))
 		for i, b := range backends {
-			c := hs.Circles[i]
+			c := hs.ip.Circles[i]
 			data[i] = map[string]interface{}{
 				"backend": map[string]string{"name": b.Name, "url": b.Url},
 				"circle":  map[string]interface{}{"id": c.CircleId, "name": c.Name},
@@ -217,8 +214,7 @@ func (hs *HttpService) HandlerReplica(w http.ResponseWriter, req *http.Request) 
 		res := util.MarshalJSON(data, pretty, true)
 		w.Write(res)
 	} else {
-		w.WriteHeader(400)
-		w.Write([]byte("invalid db or meas\n"))
+		hs.Write(w, 400, "invalid db or meas")
 	}
 }
 
@@ -240,8 +236,7 @@ func (hs *HttpService) HandlerDencrypt(w http.ResponseWriter, req *http.Request)
 	key := req.URL.Query().Get("key")
 	msg := req.URL.Query().Get("msg")
 	if !util.CheckCipherKey(key) {
-		w.WriteHeader(400)
-		w.Write([]byte("invalid key\n"))
+		hs.Write(w, 400, "invalid key")
 		return
 	}
 	decrypt := util.AesDecrypt(msg)
@@ -257,14 +252,12 @@ func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request
 
 	circleId, err := hs.formCircleId(req, "circle_id") // nolint:golint
 	if err != nil {
-		w.WriteHeader(400)
-		w.Write([]byte(err.Error() + "\n"))
+		hs.Write(w, 400, err.Error())
 		return
 	}
 	operation := req.FormValue("operation")
 	if operation != "add" && operation != "rm" {
-		w.WriteHeader(400)
-		w.Write([]byte("invalid operation\n"))
+		hs.Write(w, 400, "invalid operation")
 		return
 	}
 
@@ -276,46 +269,40 @@ func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request
 		decoder := json.NewDecoder(req.Body)
 		err := decoder.Decode(&body)
 		if err != nil {
-			w.WriteHeader(400)
-			w.Write([]byte("invalid backends from body\n"))
+			hs.Write(w, 400, "invalid backends from body")
 			return
 		}
 		for _, bkcfg := range body.Backends {
 			backends = append(backends, backend.NewSimpleBackend(bkcfg))
-			hs.CircleStates[circleId].Stats[bkcfg.Url] = &transfer.Stats{}
+			hs.tx.CircleStates[circleId].Stats[bkcfg.Url] = &transfer.Stats{}
 		}
 	}
-	backends = append(backends, hs.Circles[circleId].Backends...)
+	backends = append(backends, hs.ip.Circles[circleId].Backends...)
 
-	if hs.CircleStates[circleId].Transferring {
-		w.WriteHeader(202)
-		w.Write([]byte(fmt.Sprintf("circle %d is transferring\n", circleId)))
+	if hs.tx.CircleStates[circleId].Transferring {
+		hs.Write(w, 202, fmt.Sprintf("circle %d is transferring", circleId))
 		return
 	}
-	if hs.Resyncing {
-		w.WriteHeader(202)
-		w.Write([]byte("proxy is resyncing\n"))
+	if hs.tx.Resyncing {
+		hs.Write(w, 202, "proxy is resyncing")
 		return
 	}
 
 	err = hs.setWorker(req)
 	if err != nil {
-		w.WriteHeader(400)
-		w.Write([]byte(err.Error() + "\n"))
+		hs.Write(w, 400, err.Error())
 		return
 	}
 
 	err = hs.setHaAddrs(req)
 	if err != nil {
-		w.WriteHeader(400)
-		w.Write([]byte(err.Error() + "\n"))
+		hs.Write(w, 400, err.Error())
 		return
 	}
 
 	dbs := hs.formValues(req, "db")
-	go hs.Rebalance(circleId, backends, dbs)
-	w.WriteHeader(202)
-	w.Write([]byte("accepted\n"))
+	go hs.tx.Rebalance(circleId, backends, dbs)
+	hs.Write(w, 202, "accepted")
 }
 
 func (hs *HttpService) HandlerRecovery(w http.ResponseWriter, req *http.Request) {
@@ -327,52 +314,44 @@ func (hs *HttpService) HandlerRecovery(w http.ResponseWriter, req *http.Request)
 
 	fromCircleId, err := hs.formCircleId(req, "from_circle_id") // nolint:golint
 	if err != nil {
-		w.WriteHeader(400)
-		w.Write([]byte(err.Error() + "\n"))
+		hs.Write(w, 400, err.Error())
 		return
 	}
 	toCircleId, err := hs.formCircleId(req, "to_circle_id") // nolint:golint
 	if err != nil {
-		w.WriteHeader(400)
-		w.Write([]byte(err.Error() + "\n"))
+		hs.Write(w, 400, err.Error())
 		return
 	}
 	if fromCircleId == toCircleId {
-		w.WriteHeader(400)
-		w.Write([]byte("from_circle_id and to_circle_id cannot be same\n"))
+		hs.Write(w, 400, "from_circle_id and to_circle_id cannot be same")
 		return
 	}
 
-	if hs.CircleStates[fromCircleId].Transferring || hs.CircleStates[toCircleId].Transferring {
-		w.WriteHeader(202)
-		w.Write([]byte(fmt.Sprintf("circle %d or %d is transferring\n", fromCircleId, toCircleId)))
+	if hs.tx.CircleStates[fromCircleId].Transferring || hs.tx.CircleStates[toCircleId].Transferring {
+		hs.Write(w, 202, fmt.Sprintf("circle %d or %d is transferring", fromCircleId, toCircleId))
 		return
 	}
-	if hs.Resyncing {
-		w.WriteHeader(202)
-		w.Write([]byte("proxy is resyncing\n"))
+	if hs.tx.Resyncing {
+		hs.Write(w, 202, "proxy is resyncing")
 		return
 	}
 
 	err = hs.setWorker(req)
 	if err != nil {
-		w.WriteHeader(400)
-		w.Write([]byte(err.Error() + "\n"))
+		hs.Write(w, 400, err.Error())
 		return
 	}
 
 	err = hs.setHaAddrs(req)
 	if err != nil {
-		w.WriteHeader(400)
-		w.Write([]byte(err.Error() + "\n"))
+		hs.Write(w, 400, err.Error())
 		return
 	}
 
 	backendUrls := hs.formValues(req, "backend_urls")
 	dbs := hs.formValues(req, "db")
-	go hs.Recovery(fromCircleId, toCircleId, backendUrls, dbs)
-	w.WriteHeader(202)
-	w.Write([]byte("accepted\n"))
+	go hs.tx.Recovery(fromCircleId, toCircleId, backendUrls, dbs)
+	hs.Write(w, 202, "accepted")
 }
 
 func (hs *HttpService) HandlerResync(w http.ResponseWriter, req *http.Request) {
@@ -384,42 +363,36 @@ func (hs *HttpService) HandlerResync(w http.ResponseWriter, req *http.Request) {
 
 	seconds, err := hs.formSeconds(req)
 	if err != nil {
-		w.WriteHeader(400)
-		w.Write([]byte(err.Error() + "\n"))
+		hs.Write(w, 400, err.Error())
 		return
 	}
 
-	for _, cs := range hs.CircleStates {
+	for _, cs := range hs.tx.CircleStates {
 		if cs.Transferring {
-			w.WriteHeader(202)
-			w.Write([]byte(fmt.Sprintf("circle %d is transferring\n", cs.CircleId)))
+			hs.Write(w, 202, fmt.Sprintf("circle %d is transferring", cs.CircleId))
 			return
 		}
 	}
-	if hs.Resyncing {
-		w.WriteHeader(202)
-		w.Write([]byte("proxy is resyncing\n"))
+	if hs.tx.Resyncing {
+		hs.Write(w, 202, "proxy is resyncing")
 		return
 	}
 
 	err = hs.setWorker(req)
 	if err != nil {
-		w.WriteHeader(400)
-		w.Write([]byte(err.Error() + "\n"))
+		hs.Write(w, 400, err.Error())
 		return
 	}
 
 	err = hs.setHaAddrs(req)
 	if err != nil {
-		w.WriteHeader(400)
-		w.Write([]byte(err.Error() + "\n"))
+		hs.Write(w, 400, err.Error())
 		return
 	}
 
 	dbs := hs.formValues(req, "db")
-	go hs.Resync(dbs, seconds)
-	w.WriteHeader(202)
-	w.Write([]byte("accepted\n"))
+	go hs.tx.Resync(dbs, seconds)
+	hs.Write(w, 202, "accepted")
 }
 
 func (hs *HttpService) HandlerCleanup(w http.ResponseWriter, req *http.Request) {
@@ -431,39 +404,33 @@ func (hs *HttpService) HandlerCleanup(w http.ResponseWriter, req *http.Request) 
 
 	circleId, err := hs.formCircleId(req, "circle_id") // nolint:golint
 	if err != nil {
-		w.WriteHeader(400)
-		w.Write([]byte(err.Error() + "\n"))
+		hs.Write(w, 400, err.Error())
 		return
 	}
 
-	if hs.CircleStates[circleId].Transferring {
-		w.WriteHeader(202)
-		w.Write([]byte(fmt.Sprintf("circle %d is transferring\n", circleId)))
+	if hs.tx.CircleStates[circleId].Transferring {
+		hs.Write(w, 202, fmt.Sprintf("circle %d is transferring", circleId))
 		return
 	}
-	if hs.Resyncing {
-		w.WriteHeader(202)
-		w.Write([]byte("proxy is resyncing\n"))
+	if hs.tx.Resyncing {
+		hs.Write(w, 202, "proxy is resyncing")
 		return
 	}
 
 	err = hs.setWorker(req)
 	if err != nil {
-		w.WriteHeader(400)
-		w.Write([]byte(err.Error() + "\n"))
+		hs.Write(w, 400, err.Error())
 		return
 	}
 
 	err = hs.setHaAddrs(req)
 	if err != nil {
-		w.WriteHeader(400)
-		w.Write([]byte(err.Error() + "\n"))
+		hs.Write(w, 400, err.Error())
 		return
 	}
 
-	go hs.Cleanup(circleId)
-	w.WriteHeader(202)
-	w.Write([]byte("accepted\n"))
+	go hs.tx.Cleanup(circleId)
+	hs.Write(w, 202, "accepted")
 }
 
 func (hs *HttpService) HandlerTransferState(w http.ResponseWriter, req *http.Request) {
@@ -476,15 +443,15 @@ func (hs *HttpService) HandlerTransferState(w http.ResponseWriter, req *http.Req
 	pretty := req.URL.Query().Get("pretty") == "true"
 	if req.Method == "GET" {
 		hs.addJSONHeader(w)
-		data := make([]map[string]interface{}, len(hs.CircleStates))
-		for k, cs := range hs.CircleStates {
+		data := make([]map[string]interface{}, len(hs.tx.CircleStates))
+		for k, cs := range hs.tx.CircleStates {
 			data[k] = map[string]interface{}{
 				"id":           cs.CircleId,
 				"name":         cs.Name,
 				"transferring": cs.Transferring,
 			}
 		}
-		state := map[string]interface{}{"resyncing": hs.Resyncing, "circles": data}
+		state := map[string]interface{}{"resyncing": hs.tx.Resyncing, "circles": data}
 		res := util.MarshalJSON(state, pretty, true)
 		w.Write(res)
 		return
@@ -493,27 +460,24 @@ func (hs *HttpService) HandlerTransferState(w http.ResponseWriter, req *http.Req
 		if req.FormValue("resyncing") != "" {
 			resyncing, err := hs.formBool(req, "resyncing")
 			if err != nil {
-				w.WriteHeader(400)
-				w.Write([]byte("illegal resyncing\n"))
+				hs.Write(w, 400, "illegal resyncing")
 				return
 			}
-			hs.Resyncing = resyncing
-			state["resyncing"] = hs.Resyncing
+			hs.tx.Resyncing = resyncing
+			state["resyncing"] = resyncing
 		}
 		if req.FormValue("circle_id") != "" || req.FormValue("transferring") != "" {
 			circleId, err := hs.formCircleId(req, "circle_id") // nolint:golint
 			if err != nil {
-				w.WriteHeader(400)
-				w.Write([]byte(err.Error() + "\n"))
+				hs.Write(w, 400, err.Error())
 				return
 			}
 			transferring, err := hs.formBool(req, "transferring")
 			if err != nil {
-				w.WriteHeader(400)
-				w.Write([]byte("illegal transferring\n"))
+				hs.Write(w, 400, "illegal transferring")
 				return
 			}
-			cs := hs.CircleStates[circleId]
+			cs := hs.tx.CircleStates[circleId]
 			cs.Transferring = transferring
 			cs.WriteOnly = transferring
 			state["circle"] = map[string]interface{}{
@@ -523,8 +487,7 @@ func (hs *HttpService) HandlerTransferState(w http.ResponseWriter, req *http.Req
 			}
 		}
 		if len(state) == 0 {
-			w.WriteHeader(400)
-			w.Write([]byte("missing query parameter\n"))
+			hs.Write(w, 400, "missing query parameter")
 			return
 		}
 		hs.addJSONHeader(w)
@@ -543,8 +506,7 @@ func (hs *HttpService) HandlerTransferStats(w http.ResponseWriter, req *http.Req
 
 	circleId, err := hs.formCircleId(req, "circle_id") // nolint:golint
 	if err != nil {
-		w.WriteHeader(400)
-		w.Write([]byte(err.Error() + "\n"))
+		hs.Write(w, 400, err.Error())
 		return
 	}
 
@@ -552,11 +514,10 @@ func (hs *HttpService) HandlerTransferStats(w http.ResponseWriter, req *http.Req
 	if statsType == "rebalance" || statsType == "recovery" || statsType == "resync" || statsType == "cleanup" {
 		hs.addJSONHeader(w)
 		pretty := req.URL.Query().Get("pretty") == "true"
-		res := util.MarshalJSON(hs.CircleStates[circleId].Stats, pretty, true)
+		res := util.MarshalJSON(hs.tx.CircleStates[circleId].Stats, pretty, true)
 		w.Write(res)
 	} else {
-		w.WriteHeader(400)
-		w.Write([]byte("invalid stats type\n"))
+		hs.Write(w, 400, "invalid stats type")
 	}
 }
 
@@ -573,19 +534,16 @@ func (hs *HttpService) addJSONHeader(w http.ResponseWriter) {
 	w.Header().Add("Content-Type", "application/json")
 }
 
-func (hs *HttpService) write(w http.ResponseWriter, msg string) {
-	if hs.LogEnabled {
-		log.Print(msg)
-	}
-	hs.writeResp(w, msg)
-}
-
-func (hs *HttpService) writeResp(w http.ResponseWriter, msg string) {
+func (hs *HttpService) Write(w http.ResponseWriter, status int, msg string) {
+	w.WriteHeader(status)
 	if w.Header().Get("Content-Type") == "application/json" {
 		rsp := backend.ResponseFromError(msg, true)
 		w.Write(util.MarshalJSON(rsp, false, true))
 	} else {
 		w.Write([]byte(msg + "\n"))
+	}
+	if hs.LogEnabled {
+		log.Print(msg)
 	}
 }
 
@@ -599,8 +557,7 @@ func (hs *HttpService) checkMethod(w http.ResponseWriter, req *http.Request, met
 			return true
 		}
 	}
-	w.WriteHeader(405)
-	hs.write(w, "method not allow")
+	hs.Write(w, 405, "method not allow")
 	return false
 }
 
@@ -616,8 +573,7 @@ func (hs *HttpService) checkAuth(w http.ResponseWriter, r *http.Request) bool {
 	if ok && hs.transAuth(u) == hs.Username && hs.transAuth(p) == hs.Password {
 		return true
 	}
-	w.WriteHeader(401)
-	hs.write(w, "authentication failed")
+	hs.Write(w, 401, "authentication failed")
 	return false
 }
 
@@ -659,7 +615,7 @@ func (hs *HttpService) formSeconds(req *http.Request) (int, error) {
 
 func (hs *HttpService) formCircleId(req *http.Request, key string) (int, error) { // nolint:golint
 	circleId, err := strconv.Atoi(req.FormValue(key)) // nolint:golint
-	if err != nil || circleId < 0 || circleId >= len(hs.Circles) {
+	if err != nil || circleId < 0 || circleId >= len(hs.ip.Circles) {
 		return circleId, errors.New("invalid " + key)
 	}
 	return circleId, nil
@@ -676,9 +632,9 @@ func (hs *HttpService) setWorker(req *http.Request) error {
 		if err != nil || worker <= 0 || worker > 4*runtime.NumCPU() {
 			return errors.New("invalid worker, not more than 4*cpus")
 		}
-		hs.Worker = worker
+		hs.tx.Worker = worker
 	} else {
-		hs.Worker = 1
+		hs.tx.Worker = 1
 	}
 	return nil
 }
@@ -692,7 +648,7 @@ func (hs *HttpService) setHaAddrs(req *http.Request) error {
 				return errors.New("invalid ha_addrs")
 			}
 		}
-		hs.HaAddrs = haAddrs
+		hs.tx.HaAddrs = haAddrs
 	} else if len(haAddrs) == 1 {
 		return errors.New("ha_addrs should contain two addrs at least")
 	}
