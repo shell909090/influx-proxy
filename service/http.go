@@ -499,7 +499,7 @@ func (hs *HttpService) WriteText(w http.ResponseWriter, status int, text string)
 }
 
 func (hs *HttpService) WriteHeader(w http.ResponseWriter, status int) {
-	w.Header().Set("X-Influxdb-Version", backend.VERSION)
+	w.Header().Set("X-Influxdb-Version", backend.Version)
 	w.WriteHeader(status)
 }
 
