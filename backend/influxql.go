@@ -243,38 +243,43 @@ func getMeasurement(tokens []string) (m string) {
 	return
 }
 
-func CheckQuery(q string) (tokens []string, check bool) {
+func HeadStmtInSupportCmds(tokens []string, n int) (in bool) {
+	return SupportCmds.Contains(GetHeadStmtFromTokens(tokens, n))
+}
+
+func CheckQuery(q string) (tokens []string, check bool, from bool) {
 	tokens = ScanTokens(q, 0)
 	stmt := strings.ToLower(tokens[0])
 	if stmt == "select" {
-		for i := 1; i < len(tokens); i++ {
+		for i := 2; i < len(tokens); i++ {
 			stmt := strings.ToLower(tokens[i])
 			if stmt == "into" {
-				return tokens, false
+				return tokens, false, false
 			}
 			if stmt == "from" {
-				return tokens, true
+				return tokens, true, true
 			}
 		}
-		return tokens, false
+		return tokens, false, false
 	}
 	if stmt == "show" {
-		for i := 1; i < len(tokens); i++ {
+		for i := 2; i < len(tokens); i++ {
 			stmt := strings.ToLower(tokens[i])
 			if stmt == "from" {
-				return tokens, true
+				check = HeadStmtInSupportCmds(tokens, i) || HeadStmtInSupportCmds(tokens, i-2)
+				return tokens, check, true
 			}
 		}
 	}
 	stmt2 := GetHeadStmtFromTokens(tokens, 2)
 	if SupportCmds.Contains(stmt2) {
-		return tokens, true
+		return tokens, true, stmt2 == "delete from" || stmt2 == "drop measurement"
 	}
 	stmt3 := GetHeadStmtFromTokens(tokens, 3)
 	if SupportCmds.Contains(stmt3) {
-		return tokens, true
+		return tokens, true, stmt3 == "drop series from"
 	}
-	return tokens, false
+	return tokens, false, false
 }
 
 func CheckDatabaseFromTokens(tokens []string) (check bool, show bool, alter bool, db string) {

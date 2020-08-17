@@ -44,6 +44,29 @@ curl -G 'http://127.0.0.1:7076/query' --data-urlencode 'q=SHOW retention policie
 
 
 echo ""
+echo "error test:"
+
+curl -G 'http://127.0.0.1:7076/query?db=db1' --data-urlencode 'q='
+curl -G 'http://127.0.0.1:7076/query?db=db1' --data-urlencode 'q=select * from'
+curl -G 'http://127.0.0.1:7076/query?db=db1' --data-urlencode 'q=select * measurement'
+curl -G 'http://127.0.0.1:7076/query?db=db1' --data-urlencode 'q=show TAG from cpu1'
+curl -G 'http://127.0.0.1:7076/query?db=db1' --data-urlencode 'q=show TAG values from '
+curl -G 'http://127.0.0.1:7076/query?db=db1' --data-urlencode 'q=show field KEYS fr'
+curl -G 'http://127.0.0.1:7076/query?db=db1' --data-urlencode 'q=show series from'
+curl -G 'http://127.0.0.1:7076/query?db=db2' --data-urlencode 'q=show measurement'
+curl -G 'http://127.0.0.1:7076/query?db=db2' --data-urlencode 'q=show stat'
+curl -G 'http://127.0.0.1:7076/query?db=db2' --data-urlencode 'q=drop'
+curl -G 'http://127.0.0.1:7076/query?db=db2' --data-urlencode 'q=delete from '
+curl -G 'http://127.0.0.1:7076/query?db=db2' --data-urlencode 'q=drop series'
+curl -G 'http://127.0.0.1:7076/query?db=db2' --data-urlencode 'q=drop series from'
+curl -G 'http://127.0.0.1:7076/query?db=db2' --data-urlencode 'q=drop measurement'
+curl -G 'http://127.0.0.1:7076/query' --data-urlencode 'q=CREATE DATABASE'
+curl -G 'http://127.0.0.1:7076/query' --data-urlencode 'q=drop database '
+curl -G 'http://127.0.0.1:7076/query' --data-urlencode 'q=SHOW retention policies on newdb'
+curl -G 'http://127.0.0.1:7076/query' --data-urlencode 'q=show TAG keys test from mem'
+
+
+echo ""
 echo "gzip test:"
 
 queries=(
@@ -58,6 +81,24 @@ queries=(
     'q=show tag VALUES WITH key = "region"'
     'q=SHOW retention policies'
     # 'q=show stats'
+    # 'q='
+    # 'q=select * from'
+    # 'q=select * measurement'
+    # 'q=show TAG from cpu1'
+    # 'q=show TAG values from '
+    # 'q=show field KEYS fr'
+    # 'q=show series from'
+    # 'q=show measurement'
+    # 'q=show stat'
+    # 'q=drop'
+    # 'q=delete from '
+    # 'q=drop series'
+    # 'q=drop series from'
+    # 'q=drop measurement'
+    # 'q=CREATE DATABASE'
+    # 'q=drop database '
+    # 'q=SHOW retention policies on '
+    # 'q=show TAG keys test from mem'
 )
 
 len=${#queries[*]}

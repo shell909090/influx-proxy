@@ -202,8 +202,7 @@ func (hb *HttpBackend) WriteStream(db string, stream io.Reader, compressed bool)
 	return
 }
 
-func (hb *HttpBackend) Query(req *http.Request, w http.ResponseWriter, decompress bool) ([]byte, error) {
-	var err error
+func (hb *HttpBackend) Query(req *http.Request, w http.ResponseWriter, decompress bool) (body []byte, err error) {
 	if len(req.Form) == 0 {
 		req.Form = url.Values{}
 	}
@@ -217,21 +216,21 @@ func (hb *HttpBackend) Query(req *http.Request, w http.ResponseWriter, decompres
 	req.URL, err = url.Parse(hb.Url + "/query?" + req.Form.Encode())
 	if err != nil {
 		log.Print("internal url parse error: ", err)
-		return nil, err
+		return
 	}
 
 	q := strings.TrimSpace(req.FormValue("q"))
 	resp, err := hb.transport.RoundTrip(req)
 	if err != nil {
 		log.Printf("query error: %s, the query is %s", err, q)
-		return nil, err
+		return
 	}
 	defer resp.Body.Close()
 	if w != nil {
 		CopyHeader(w.Header(), resp.Header)
 	}
 
-	body := resp.Body
+	respBody := resp.Body
 	if decompress && resp.Header.Get("Content-Encoding") == "gzip" {
 		b, err := gzip.NewReader(resp.Body)
 		if err != nil {
@@ -239,10 +238,18 @@ func (hb *HttpBackend) Query(req *http.Request, w http.ResponseWriter, decompres
 			return nil, err
 		}
 		defer b.Close()
-		body = b
+		respBody = b
 	}
 
-	return ioutil.ReadAll(body)
+	body, err = ioutil.ReadAll(respBody)
+	if err != nil {
+		return
+	}
+	if resp.StatusCode >= 400 {
+		rsp, _ := ResponseFromResponseBytes(body)
+		return nil, errors.New(rsp.Err)
+	}
+	return
 }
 
 func (hb *HttpBackend) QueryIQL(db, query string) ([]byte, error) {

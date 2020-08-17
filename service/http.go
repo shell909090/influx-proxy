@@ -22,11 +22,9 @@ import (
 type HttpService struct { // nolint:golint
 	ip           *backend.Proxy
 	tx           *transfer.Transfer
-	DBSet        map[string]bool
 	Username     string
 	Password     string
 	AuthSecure   bool
-	LogEnabled   bool
 	WriteTracing bool
 	QueryTracing bool
 }
@@ -36,16 +34,11 @@ func NewHttpService(cfg *backend.ProxyConfig) (hs *HttpService) { // nolint:goli
 	hs = &HttpService{
 		ip:           ip,
 		tx:           transfer.NewTransfer(cfg, ip.Circles),
-		DBSet:        make(map[string]bool),
 		Username:     cfg.Username,
 		Password:     cfg.Password,
 		AuthSecure:   cfg.AuthSecure,
-		LogEnabled:   cfg.LogEnabled,
 		WriteTracing: cfg.WriteTracing,
 		QueryTracing: cfg.QueryTracing,
-	}
-	for _, db := range cfg.DBList {
-		hs.DBSet[db] = true
 	}
 	return
 }
@@ -79,46 +72,18 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	q := strings.TrimSpace(req.FormValue("q"))
-	if q == "" {
-		hs.WriteError(w, req, 400, "query not found")
-		return
-	}
-	if hs.QueryTracing {
-		log.Printf("query: %s %s %s, client: %s", req.Method, req.FormValue("db"), q, req.RemoteAddr)
-	}
-
-	tokens, check := backend.CheckQuery(q)
-	if !check {
-		hs.WriteError(w, req, 400, "query forbidden")
-		return
-	}
-
-	checkDb, showDb, alterDb, db := backend.CheckDatabaseFromTokens(tokens)
-	if !checkDb {
-		db = req.FormValue("db")
-		if db == "" {
-			db, _ = backend.GetDatabaseFromTokens(tokens)
-		}
-	}
-	if !showDb {
-		if db == "" {
-			hs.WriteError(w, req, 400, "database not found")
-			return
-		}
-		if len(hs.DBSet) > 0 && !hs.DBSet[db] {
-			hs.WriteError(w, req, 400, fmt.Sprintf("database forbidden: %s", db))
-			return
-		}
-	}
-
-	body, err := hs.ip.Query(w, req, tokens, db, alterDb)
+	db := req.FormValue("db")
+	q := req.FormValue("q")
+	body, err := hs.ip.Query(w, req)
 	if err != nil {
-		log.Printf("query error: %s, the query is %s, db is %s", err, q, db)
-		hs.WriteError(w, req, 400, fmt.Sprintf("query error: %s", err))
+		log.Printf("query error: %s, query: %s %s %s, client: %s", err, req.Method, db, q, req.RemoteAddr)
+		hs.WriteError(w, req, 400, err.Error())
 		return
 	}
 	hs.WriteBody(w, body)
+	if hs.QueryTracing {
+		log.Printf("query: %s %s %s, client: %s", req.Method, db, q, req.RemoteAddr)
+	}
 }
 
 func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
@@ -136,7 +101,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
 		hs.WriteError(w, req, 400, "database not found")
 		return
 	}
-	if len(hs.DBSet) > 0 && !hs.DBSet[db] {
+	if len(hs.ip.DBSet) > 0 && !hs.ip.DBSet[db] {
 		hs.WriteError(w, req, 400, fmt.Sprintf("database forbidden: %s", db))
 		return
 	}
@@ -514,9 +479,6 @@ func (hs *HttpService) WriteError(w http.ResponseWriter, req *http.Request, stat
 	rsp := backend.ResponseFromError(err)
 	pretty := req.URL.Query().Get("pretty") == "true"
 	w.Write(util.MarshalJSON(rsp, pretty))
-	if hs.LogEnabled {
-		log.Print(err)
-	}
 }
 
 func (hs *HttpService) WriteBody(w http.ResponseWriter, body []byte) {

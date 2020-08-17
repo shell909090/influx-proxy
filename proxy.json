@@ -54,7 +54,6 @@
     "username": "",
     "password": "",
     "auth_secure": false,
-    "log_enabled": false,
     "write_tracing": false,
     "query_tracing": false,
     "https_enabled": false,

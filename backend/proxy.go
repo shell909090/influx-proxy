@@ -13,16 +13,27 @@ import (
 	"time"
 )
 
+var (
+	ErrEmptyQuery       = errors.New("empty query")
+	ErrDatabaseNotFound = errors.New("database not found")
+	ErrEmptyMeasurement = errors.New("can't get measurement")
+)
+
 type Proxy struct {
 	Circles []*Circle
+	DBSet   map[string]bool
 }
 
 func NewProxy(cfg *ProxyConfig) (ip *Proxy) {
 	ip = &Proxy{
 		Circles: make([]*Circle, len(cfg.Circles)),
+		DBSet:   make(map[string]bool),
 	}
 	for idx, circfg := range cfg.Circles {
 		ip.Circles[idx] = NewCircle(circfg, cfg, idx)
+	}
+	for _, db := range cfg.DBList {
+		ip.DBSet[db] = true
 	}
 	return
 }
@@ -44,7 +55,33 @@ func (ip *Proxy) GetBackends(key string) []*Backend {
 	return backends
 }
 
-func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request, tokens []string, db string, alterDb bool) (body []byte, err error) {
+func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request) (body []byte, err error) {
+	q := strings.TrimSpace(req.FormValue("q"))
+	if q == "" {
+		return nil, ErrEmptyQuery
+	}
+
+	tokens, check, from := CheckQuery(q)
+	if !check {
+		return nil, ErrIllegalQL
+	}
+
+	checkDb, showDb, alterDb, db := CheckDatabaseFromTokens(tokens)
+	if !checkDb {
+		db = req.FormValue("db")
+		if db == "" {
+			db, _ = GetDatabaseFromTokens(tokens)
+		}
+	}
+	if !showDb {
+		if db == "" {
+			return nil, ErrDatabaseNotFound
+		}
+		if len(ip.DBSet) > 0 && !ip.DBSet[db] {
+			return nil, fmt.Errorf("database forbidden: %s", db)
+		}
+	}
+
 	if CheckSelectOrShowFromTokens(tokens) {
 		var circle *Circle
 		badSet := make(map[int]bool)
@@ -67,8 +104,11 @@ func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request, tokens []string
 			}
 			time.Sleep(time.Microsecond)
 		}
-		meas, err := GetMeasurementFromTokens(tokens)
-		if err == nil {
+		if from {
+			meas, err := GetMeasurementFromTokens(tokens)
+			if err != nil {
+				return nil, ErrEmptyMeasurement
+			}
 			// available circle -> key(db,meas) -> backend -> select or show
 			key := GetKey(db, meas)
 			be := circle.GetBackend(key)
@@ -84,20 +124,21 @@ func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request, tokens []string
 		if err != nil {
 			return nil, err
 		}
-		var reqBodyBytes []byte
+		var bodyBytes []byte
 		if req.Body != nil {
-			reqBodyBytes, _ = ioutil.ReadAll(req.Body)
+			bodyBytes, _ = ioutil.ReadAll(req.Body)
 		}
 		key := GetKey(db, meas)
 		backends := ip.GetBackends(key)
 		for _, be := range backends {
 			// log.Printf("query backend: %s", be.Url)
-			req.Body = ioutil.NopCloser(bytes.NewBuffer(reqBodyBytes))
+			req.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
 			body, err = be.Query(req, w, false)
 			if err != nil {
 				return nil, err
 			}
 		}
+		return body, nil
 	} else if alterDb {
 		// all circles -> all backends -> create or drop database
 		for _, circle := range ip.Circles {
@@ -112,8 +153,9 @@ func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request, tokens []string
 				return
 			}
 		}
+		return body, nil
 	}
-	return
+	return nil, ErrIllegalQL
 }
 
 func (ip *Proxy) Write(p []byte, db, precision string) (err error) {

@@ -49,7 +49,6 @@ type ProxyConfig struct {
 	Username        string          `json:"username"`
 	Password        string          `json:"password"`
 	AuthSecure      bool            `json:"auth_secure"`
-	LogEnabled      bool            `json:"log_enabled"`
 	WriteTracing    bool            `json:"write_tracing"`
 	QueryTracing    bool            `json:"query_tracing"`
 	HTTPSEnabled    bool            `json:"https_enabled"`

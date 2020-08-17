@@ -83,14 +83,14 @@ func (ic *Circle) CheckActive() bool {
 func (ic *Circle) Query(w http.ResponseWriter, req *http.Request, tokens []string) ([]byte, error) {
 	// remove support of query parameter `chunked`
 	req.Form.Del("chunked")
-	var reqBodyBytes []byte
+	var bodyBytes []byte
 	if req.Body != nil {
-		reqBodyBytes, _ = ioutil.ReadAll(req.Body)
+		bodyBytes, _ = ioutil.ReadAll(req.Body)
 	}
 	bodies := make([][]byte, 0)
 
 	for _, be := range ic.Backends {
-		req.Body = ioutil.NopCloser(bytes.NewBuffer(reqBodyBytes))
+		req.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
 		body, err := be.Query(req, w, true)
 		if err != nil {
 			return nil, err

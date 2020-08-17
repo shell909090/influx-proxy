@@ -136,7 +136,6 @@ The configurations in `proxy.json` are the following:
 * `username`: proxy username, with encryption if auth_secure is enabled, default is `empty` which means no auth
 * `password`: proxy password, with encryption if auth_secure is enabled, default is `empty` which means no auth
 * `auth_secure`: secure auth with encryption, default is `false`
-* `log_enabled`: enable the logging of debug messages for troubleshooting, default is `false`
 * `write_tracing`: enable logging for the write, default is `false`
 * `query_tracing`: enable logging for the query, default is `false`
 * `https_enabled`: enable https, default is `false`
