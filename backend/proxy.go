@@ -14,9 +14,10 @@ import (
 )
 
 var (
-	ErrEmptyQuery       = errors.New("empty query")
-	ErrDatabaseNotFound = errors.New("database not found")
-	ErrEmptyMeasurement = errors.New("can't get measurement")
+	ErrEmptyQuery         = errors.New("empty query")
+	ErrDatabaseNotFound   = errors.New("database not found")
+	ErrUnavailableCircles = errors.New("circles unavailable")
+	ErrEmptyMeasurement   = errors.New("can't get measurement")
 )
 
 type Proxy struct {
@@ -100,7 +101,7 @@ func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request) (body []byte, e
 			}
 			badSet[id] = true
 			if len(badSet) == len(ip.Circles) {
-				return nil, errors.New("circles unavailable")
+				return nil, ErrUnavailableCircles
 			}
 			time.Sleep(time.Microsecond)
 		}

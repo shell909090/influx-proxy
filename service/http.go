@@ -19,6 +19,13 @@ import (
 	gzip "github.com/klauspost/pgzip"
 )
 
+var (
+	ErrInvalidSeconds = errors.New("invalid days, hours, minutes or seconds")
+	ErrInvalidWorker  = errors.New("invalid worker, not more than 4*cpus")
+	ErrInvalidHaAddrs = errors.New("invalid ha_addrs")
+	ErrHaAddrsLessTwo = errors.New("ha_addrs requires two addresses at least")
+)
+
 type HttpService struct { // nolint:golint
 	ip           *backend.Proxy
 	tx           *transfer.Transfer
@@ -557,7 +564,7 @@ func (hs *HttpService) formSeconds(req *http.Request) (int, error) {
 	minutes, ok3 := hs.formPositiveInt(req, "minutes")
 	seconds, ok4 := hs.formPositiveInt(req, "seconds")
 	if !ok1 || !ok2 || !ok3 || !ok4 {
-		return 0, errors.New("invalid days, hours, minutes or seconds")
+		return 0, ErrInvalidSeconds
 	}
 	return days*86400 + hours*3600 + minutes*60 + seconds, nil
 }
@@ -565,7 +572,7 @@ func (hs *HttpService) formSeconds(req *http.Request) (int, error) {
 func (hs *HttpService) formCircleId(req *http.Request, key string) (int, error) { // nolint:golint
 	circleId, err := strconv.Atoi(req.FormValue(key)) // nolint:golint
 	if err != nil || circleId < 0 || circleId >= len(hs.ip.Circles) {
-		return circleId, errors.New("invalid " + key)
+		return circleId, fmt.Errorf("invalid %s", key)
 	}
 	return circleId, nil
 }
@@ -579,7 +586,7 @@ func (hs *HttpService) setWorker(req *http.Request) error {
 	if str != "" {
 		worker, err := strconv.Atoi(str)
 		if err != nil || worker <= 0 || worker > 4*runtime.NumCPU() {
-			return errors.New("invalid worker, not more than 4*cpus")
+			return ErrInvalidWorker
 		}
 		hs.tx.Worker = worker
 	} else {
@@ -594,12 +601,12 @@ func (hs *HttpService) setHaAddrs(req *http.Request) error {
 		r, _ := regexp.Compile(`^[\w-.]+:\d{1,5}$`)
 		for _, addr := range haAddrs {
 			if !r.MatchString(addr) {
-				return errors.New("invalid ha_addrs")
+				return ErrInvalidHaAddrs
 			}
 		}
 		hs.tx.HaAddrs = haAddrs
 	} else if len(haAddrs) == 1 {
-		return errors.New("ha_addrs should contain two addrs at least")
+		return ErrHaAddrsLessTwo
 	}
 	return nil
 }
