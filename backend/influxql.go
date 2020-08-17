@@ -78,13 +78,13 @@ func ScanToken(data []byte, atEOF bool) (advance int, token []byte, err error) {
 	case '"':
 		advance, token, err = FindEndWithQuote(data, start, '"')
 		if err != nil {
-			log.Printf("scan token error: %s\n", err)
+			log.Printf("scan token error: %s", err)
 		}
 		return
 	case '\'':
 		advance, token, err = FindEndWithQuote(data, start, '\'')
 		if err != nil {
-			log.Printf("scan token error: %s\n", err)
+			log.Printf("scan token error: %s", err)
 		}
 		return
 	case '(':
@@ -127,7 +127,7 @@ func ScanToken(data []byte, atEOF bool) (advance int, token []byte, err error) {
 
 	}
 	if err != nil {
-		log.Printf("scan token error: %s\n", err)
+		log.Printf("scan token error: %s", err)
 		return
 	}
 

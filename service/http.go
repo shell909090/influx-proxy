@@ -268,11 +268,11 @@ func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request
 	backends = append(backends, hs.ip.Circles[circleId].Backends...)
 
 	if hs.tx.CircleStates[circleId].Transferring {
-		hs.WriteText(w, 202, fmt.Sprintf("circle %d is transferring", circleId))
+		hs.WriteText(w, 400, fmt.Sprintf("circle %d is transferring", circleId))
 		return
 	}
 	if hs.tx.Resyncing {
-		hs.WriteText(w, 202, "proxy is resyncing")
+		hs.WriteText(w, 400, "proxy is resyncing")
 		return
 	}
 
@@ -310,16 +310,16 @@ func (hs *HttpService) HandlerRecovery(w http.ResponseWriter, req *http.Request)
 		return
 	}
 	if fromCircleId == toCircleId {
-		hs.WriteError(w, req, 00, "from_circle_id and to_circle_id cannot be same")
+		hs.WriteError(w, req, 400, "from_circle_id and to_circle_id cannot be same")
 		return
 	}
 
 	if hs.tx.CircleStates[fromCircleId].Transferring || hs.tx.CircleStates[toCircleId].Transferring {
-		hs.WriteText(w, 202, fmt.Sprintf("circle %d or %d is transferring", fromCircleId, toCircleId))
+		hs.WriteText(w, 400, fmt.Sprintf("circle %d or %d is transferring", fromCircleId, toCircleId))
 		return
 	}
 	if hs.tx.Resyncing {
-		hs.WriteText(w, 202, "proxy is resyncing")
+		hs.WriteText(w, 400, "proxy is resyncing")
 		return
 	}
 
@@ -355,12 +355,12 @@ func (hs *HttpService) HandlerResync(w http.ResponseWriter, req *http.Request) {
 
 	for _, cs := range hs.tx.CircleStates {
 		if cs.Transferring {
-			hs.WriteText(w, 202, fmt.Sprintf("circle %d is transferring", cs.CircleId))
+			hs.WriteText(w, 400, fmt.Sprintf("circle %d is transferring", cs.CircleId))
 			return
 		}
 	}
 	if hs.tx.Resyncing {
-		hs.WriteText(w, 202, "proxy is resyncing")
+		hs.WriteText(w, 400, "proxy is resyncing")
 		return
 	}
 
@@ -394,11 +394,11 @@ func (hs *HttpService) HandlerCleanup(w http.ResponseWriter, req *http.Request) 
 	}
 
 	if hs.tx.CircleStates[circleId].Transferring {
-		hs.WriteText(w, 202, fmt.Sprintf("circle %d is transferring", circleId))
+		hs.WriteText(w, 400, fmt.Sprintf("circle %d is transferring", circleId))
 		return
 	}
 	if hs.tx.Resyncing {
-		hs.WriteText(w, 202, "proxy is resyncing")
+		hs.WriteText(w, 400, "proxy is resyncing")
 		return
 	}
 

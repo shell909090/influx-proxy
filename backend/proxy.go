@@ -123,7 +123,7 @@ func (ip *Proxy) Write(p []byte, db, precision string) (err error) {
 		line, err = buf.ReadBytes('\n')
 		switch err {
 		default:
-			log.Printf("error: %s\n", err)
+			log.Printf("error: %s", err)
 			return
 		case io.EOF, nil:
 			err = nil

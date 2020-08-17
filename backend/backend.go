@@ -103,18 +103,18 @@ func (ib *Backend) WriteBuffer(point *LinePoint) (err error) {
 	}
 	n, err := cb.Buffer.Write(line)
 	if err != nil {
-		log.Printf("buffer write error: %s\n", err)
+		log.Printf("buffer write error: %s", err)
 		return
 	}
 	if n != len(line) {
 		err = io.ErrShortWrite
-		log.Printf("buffer write error: %s\n", err)
+		log.Printf("buffer write error: %s", err)
 		return
 	}
 	if line[len(line)-1] != '\n' {
 		_, err = cb.Buffer.Write([]byte{'\n'})
 		if err != nil {
-			log.Printf("buffer write error: %s\n", err)
+			log.Printf("buffer write error: %s", err)
 			return
 		}
 	}
