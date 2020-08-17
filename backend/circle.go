@@ -120,7 +120,7 @@ func (ic *Circle) Query(w http.ResponseWriter, req *http.Request, tokens []strin
 		rsp = ResponseFromSeries(nil)
 	}
 	pretty := req.FormValue("pretty") == "true"
-	body := util.MarshalJSON(rsp, pretty, true)
+	body := util.MarshalJSON(rsp, pretty)
 	if w.Header().Get("Content-Encoding") == "gzip" {
 		return util.GzipCompress(body)
 	}

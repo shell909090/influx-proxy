@@ -66,15 +66,13 @@ func GzipCompress(b []byte) (cb []byte, err error) {
 	return
 }
 
-func MarshalJSON(v interface{}, pretty bool, newline bool) []byte {
+func MarshalJSON(v interface{}, pretty bool) []byte {
 	var res []byte
 	if pretty {
 		res, _ = json.MarshalIndent(v, "", "    ")
 	} else {
 		res, _ = json.Marshal(v)
 	}
-	if newline {
-		res = append(res, '\n')
-	}
+	res = append(res, '\n')
 	return res
 }
