@@ -270,40 +270,51 @@ func (ib *Backend) Close() {
 }
 
 func (ib *Backend) GetHealth(ic *Circle) map[string]interface{} {
+	var wg sync.WaitGroup
+	var smap sync.Map
+	dbs := ib.GetDatabases()
+	for _, db := range dbs {
+		wg.Add(1)
+		go func(db string) {
+			defer wg.Done()
+			inplace, incorrect := 0, 0
+			measurements := ib.GetMeasurements(db)
+			for _, meas := range measurements {
+				key := GetKey(db, meas)
+				nb := ic.GetBackend(key)
+				if nb.Url == ib.Url {
+					inplace++
+				} else {
+					incorrect++
+				}
+			}
+			smap.Store(db, map[string]int{
+				"measurements": len(measurements),
+				"inplace":      inplace,
+				"incorrect":    incorrect,
+			})
+		}(db)
+	}
+	wg.Wait()
+	stats := make(map[string]map[string]int)
+	smap.Range(func(k, v interface{}) bool {
+		stats[k.(string)] = v.(map[string]int)
+		return true
+	})
 	return map[string]interface{}{
 		"name":    ib.Name,
 		"url":     ib.Url,
 		"active":  ib.Active,
 		"backlog": ib.fb.IsData(),
 		"rewrite": ib.rewriteRunning,
-		"stats":   ib.GetStats(ic),
+		"stats":   stats,
 	}
-}
-
-func (ib *Backend) GetStats(ic *Circle) map[string]map[string]int {
-	load := make(map[string]map[string]int)
-	dbs := ib.GetDatabases()
-	for _, db := range dbs {
-		inplace, incorrect := 0, 0
-		measurements := ib.GetMeasurements(db)
-		for _, meas := range measurements {
-			key := GetKey(db, meas)
-			nb := ic.GetBackend(key)
-			if nb.Url == ib.Url {
-				inplace++
-			} else {
-				incorrect++
-			}
-		}
-		load[db] = map[string]int{"measurements": len(measurements), "inplace": inplace, "incorrect": incorrect}
-	}
-	return load
 }
 
 func ParallelQuery(backends []*Backend, req *http.Request, w http.ResponseWriter, decompress bool) (bodies [][]byte, inactive int, err error) {
+	var wg sync.WaitGroup
 	var header http.Header
 	ch := make(chan *QueryResult, len(backends))
-	wg := &sync.WaitGroup{}
 	for _, be := range backends {
 		if !be.Active {
 			inactive++

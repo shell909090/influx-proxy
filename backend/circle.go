@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"sync"
 
 	"github.com/chengshiwen/influx-proxy/util"
 	"github.com/influxdata/influxdb1-client/models"
@@ -63,11 +64,17 @@ func (ic *Circle) GetBackend(key string) *Backend {
 }
 
 func (ic *Circle) GetHealth() []map[string]interface{} {
-	stats := make([]map[string]interface{}, len(ic.Backends))
+	var wg sync.WaitGroup
+	health := make([]map[string]interface{}, len(ic.Backends))
 	for i, be := range ic.Backends {
-		stats[i] = be.GetHealth(ic)
+		wg.Add(1)
+		go func(i int, be *Backend) {
+			defer wg.Done()
+			health[i] = be.GetHealth(ic)
+		}(i, be)
 	}
-	return stats
+	wg.Wait()
+	return health
 }
 
 func (ic *Circle) CheckActive() bool {

@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -54,6 +55,23 @@ func (ip *Proxy) GetBackends(key string) []*Backend {
 		backends[i] = circle.GetBackend(key)
 	}
 	return backends
+}
+
+func (ip *Proxy) GetHealth() []map[string]interface{} {
+	var wg sync.WaitGroup
+	health := make([]map[string]interface{}, len(ip.Circles))
+	for i, c := range ip.Circles {
+		wg.Add(1)
+		go func(i int, c *Circle) {
+			defer wg.Done()
+			health[i] = map[string]interface{}{
+				"circle":   map[string]interface{}{"id": c.CircleId, "name": c.Name, "write_only": c.WriteOnly},
+				"backends": c.GetHealth(),
+			}
+		}(i, c)
+	}
+	wg.Wait()
+	return health
 }
 
 func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request) (body []byte, err error) {

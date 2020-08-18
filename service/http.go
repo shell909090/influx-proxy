@@ -143,15 +143,7 @@ func (hs *HttpService) HandlerHealth(w http.ResponseWriter, req *http.Request) {
 	if !hs.checkMethodAndAuth(w, req, "GET") {
 		return
 	}
-
-	data := make([]map[string]interface{}, len(hs.ip.Circles))
-	for i, c := range hs.ip.Circles {
-		data[i] = map[string]interface{}{
-			"circle":   map[string]interface{}{"id": c.CircleId, "name": c.Name, "write_only": c.WriteOnly},
-			"backends": c.GetHealth(),
-		}
-	}
-	hs.Write(w, req, 200, data)
+	hs.Write(w, req, 200, hs.ip.GetHealth())
 }
 
 func (hs *HttpService) HandlerReplica(w http.ResponseWriter, req *http.Request) {
