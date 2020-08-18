@@ -301,10 +301,6 @@ func (ib *Backend) GetStats(ic *Circle) map[string]map[string]int {
 }
 
 func ParallelQuery(backends []*Backend, req *http.Request, w http.ResponseWriter, decompress bool) (bodies [][]byte, inactive int, err error) {
-	var bodyBytes []byte
-	if req.Body != nil {
-		bodyBytes, _ = ioutil.ReadAll(req.Body)
-	}
 	var header http.Header
 	ch := make(chan *QueryResult, len(backends))
 	wg := &sync.WaitGroup{}
@@ -316,7 +312,7 @@ func ParallelQuery(backends []*Backend, req *http.Request, w http.ResponseWriter
 		wg.Add(1)
 		go func(be *Backend, req http.Request) {
 			defer wg.Done()
-			req.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
+			req.Body = ioutil.NopCloser(&bytes.Buffer{})
 			req.Form = CloneForm(req.Form)
 			qr := be.Query(&req, decompress)
 			ch <- qr

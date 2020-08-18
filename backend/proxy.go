@@ -9,7 +9,6 @@ import (
 	"math/rand"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -150,20 +149,15 @@ func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request) (body []byte, e
 				return nil, fmt.Errorf("circle %d not active", circle.CircleId)
 			}
 		}
-		var wg = sync.WaitGroup{}
+		backends := make([]*Backend, 0)
 		for _, circle := range ip.Circles {
-			// log.Printf("query circle: %d", circle.CircleId)
-			wg.Add(1)
-			go func(circle *Circle) {
-				defer wg.Done()
-				body, err = circle.Query(w, req, tokens)
-			}(circle)
-			wg.Wait()
-			if err != nil {
-				return
-			}
+			backends = append(backends, circle.Backends...)
 		}
-		return body, nil
+		bodies, _, err := ParallelQuery(backends, req, w, false)
+		if err != nil {
+			return nil, err
+		}
+		return bodies[0], nil
 	}
 	return nil, ErrIllegalQL
 }
