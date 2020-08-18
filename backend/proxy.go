@@ -5,11 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"math/rand"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -17,7 +17,8 @@ var (
 	ErrEmptyQuery         = errors.New("empty query")
 	ErrDatabaseNotFound   = errors.New("database not found")
 	ErrUnavailableCircles = errors.New("circles unavailable")
-	ErrEmptyMeasurement   = errors.New("can't get measurement")
+	ErrGetMeasurement     = errors.New("can't get measurement")
+	ErrGetBackends        = errors.New("can't get backends")
 )
 
 type Proxy struct {
@@ -108,13 +109,15 @@ func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request) (body []byte, e
 		if from {
 			meas, err := GetMeasurementFromTokens(tokens)
 			if err != nil {
-				return nil, ErrEmptyMeasurement
+				return nil, ErrGetMeasurement
 			}
 			// available circle -> key(db,meas) -> backend -> select or show
 			key := GetKey(db, meas)
 			be := circle.GetBackend(key)
 			// log.Printf("query circle: %d backend: %s", circle.CircleId, be.Url)
-			return be.Query(req, w, false)
+			qr := be.Query(req, false)
+			CopyHeader(w.Header(), qr.Header)
+			return qr.Body, qr.Err
 		}
 		// available circle -> all backends -> show
 		// log.Printf("query circle: %d", circle.CircleId)
@@ -125,31 +128,37 @@ func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request) (body []byte, e
 		if err != nil {
 			return nil, err
 		}
-		var bodyBytes []byte
-		if req.Body != nil {
-			bodyBytes, _ = ioutil.ReadAll(req.Body)
-		}
 		key := GetKey(db, meas)
 		backends := ip.GetBackends(key)
+		if len(backends) == 0 {
+			return nil, ErrGetBackends
+		}
 		for _, be := range backends {
-			// log.Printf("query backend: %s", be.Url)
-			req.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
-			body, err = be.Query(req, w, false)
-			if err != nil {
-				return nil, err
+			if !be.Active {
+				return nil, fmt.Errorf("backend %s(%s) not active", be.Name, be.Url)
 			}
 		}
-		return body, nil
+		bodies, _, err := ParallelQuery(backends, req, w, false)
+		if err != nil {
+			return nil, err
+		}
+		return bodies[0], nil
 	} else if alterDb {
 		// all circles -> all backends -> create or drop database
 		for _, circle := range ip.Circles {
 			if !circle.CheckActive() {
-				return nil, fmt.Errorf("circle %d not health", circle.CircleId)
+				return nil, fmt.Errorf("circle %d not active", circle.CircleId)
 			}
 		}
+		var wg = sync.WaitGroup{}
 		for _, circle := range ip.Circles {
 			// log.Printf("query circle: %d", circle.CircleId)
-			body, err = circle.Query(w, req, tokens)
+			wg.Add(1)
+			go func(circle *Circle) {
+				defer wg.Done()
+				body, err = circle.Query(w, req, tokens)
+			}(circle)
+			wg.Wait()
 			if err != nil {
 				return
 			}
@@ -194,7 +203,7 @@ func (ip *Proxy) WriteRow(line []byte, db, precision string) {
 	key := GetKey(db, meas)
 	backends := ip.GetBackends(key)
 	if len(backends) == 0 {
-		log.Printf("write data error: get backends return 0")
+		log.Printf("write data error: can't get backends")
 		return
 	}
 

@@ -1,8 +1,7 @@
 package backend
 
 import (
-	"bytes"
-	"io/ioutil"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -80,28 +79,15 @@ func (ic *Circle) CheckActive() bool {
 	return true
 }
 
-func (ic *Circle) Query(w http.ResponseWriter, req *http.Request, tokens []string) ([]byte, error) {
+func (ic *Circle) Query(w http.ResponseWriter, req *http.Request, tokens []string) (body []byte, err error) {
 	// remove support of query parameter `chunked`
 	req.Form.Del("chunked")
-	var bodyBytes []byte
-	if req.Body != nil {
-		bodyBytes, _ = ioutil.ReadAll(req.Body)
-	}
-	bodies := make([][]byte, 0)
-
-	for _, be := range ic.Backends {
-		req.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
-		body, err := be.Query(req, w, true)
-		if err != nil {
-			return nil, err
-		}
-		if body != nil {
-			bodies = append(bodies, body)
-		}
+	bodies, inactive, err := ParallelQuery(ic.Backends, req, w, true)
+	if err != nil {
+		return
 	}
 
 	var rsp *Response
-	var err error
 	stmt2 := GetHeadStmtFromTokens(tokens, 2)
 	stmt3 := GetHeadStmtFromTokens(tokens, 3)
 	if stmt2 == "show measurements" || stmt2 == "show series" || stmt2 == "show databases" {
@@ -114,17 +100,20 @@ func (ic *Circle) Query(w http.ResponseWriter, req *http.Request, tokens []strin
 		rsp, err = ic.concatByResults(bodies)
 	}
 	if err != nil {
-		return nil, err
+		return
 	}
 	if rsp == nil {
 		rsp = ResponseFromSeries(nil)
 	}
-	pretty := req.FormValue("pretty") == "true"
-	body := util.MarshalJSON(rsp, pretty)
+	if inactive > 0 {
+		rsp.Err = fmt.Sprintf("%d/%d backends not active", inactive, inactive+len(bodies))
+	}
+	pretty := req.URL.Query().Get("pretty") == "true"
+	body = util.MarshalJSON(rsp, pretty)
 	if w.Header().Get("Content-Encoding") == "gzip" {
 		return util.GzipCompress(body)
 	}
-	return body, nil
+	return
 }
 
 func (ic *Circle) reduceByValues(bodies [][]byte) (rsp *Response, err error) {

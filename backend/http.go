@@ -26,6 +26,13 @@ var (
 	ErrUnknown      = errors.New("unknown error")
 )
 
+type QueryResult struct {
+	Header http.Header
+	Status int
+	Body   []byte
+	Err    error
+}
+
 type HttpBackend struct { // nolint:golint
 	client     *http.Client
 	transport  *http.Transport
@@ -78,6 +85,14 @@ func NewTransport(tlsSkip bool) *http.Transport {
 	}
 }
 
+func NewRequest(db, query string) *http.Request {
+	header := map[string][]string{"Accept-Encoding": {"gzip"}}
+	if db == "" {
+		return &http.Request{Form: url.Values{"q": []string{query}}, Header: header}
+	}
+	return &http.Request{Form: url.Values{"db": []string{db}, "q": []string{query}}, Header: header}
+}
+
 func Compress(buf *bytes.Buffer, p []byte) (err error) {
 	zip := gzip.NewWriter(buf)
 	defer zip.Close()
@@ -92,12 +107,14 @@ func Compress(buf *bytes.Buffer, p []byte) (err error) {
 	return
 }
 
-func NewRequest(db, query string) *http.Request {
-	header := map[string][]string{"Accept-Encoding": {"gzip"}}
-	if db == "" {
-		return &http.Request{Form: url.Values{"q": []string{query}}, Header: header}
+func CloneForm(f url.Values) (cf url.Values) {
+	cf = make(url.Values, len(f))
+	for k, v := range f {
+		nv := make([]string, len(v))
+		copy(nv, v)
+		cf[k] = nv
 	}
-	return &http.Request{Form: url.Values{"db": []string{db}, "q": []string{query}}, Header: header}
+	return
 }
 
 func CopyHeader(dst, src http.Header) {
@@ -202,7 +219,8 @@ func (hb *HttpBackend) WriteStream(db string, stream io.Reader, compressed bool)
 	return
 }
 
-func (hb *HttpBackend) Query(req *http.Request, w http.ResponseWriter, decompress bool) (body []byte, err error) {
+func (hb *HttpBackend) Query(req *http.Request, decompress bool) (qr *QueryResult) {
+	qr = &QueryResult{}
 	if len(req.Form) == 0 {
 		req.Form = url.Values{}
 	}
@@ -213,9 +231,9 @@ func (hb *HttpBackend) Query(req *http.Request, w http.ResponseWriter, decompres
 		hb.SetBasicAuth(req)
 	}
 
-	req.URL, err = url.Parse(hb.Url + "/query?" + req.Form.Encode())
-	if err != nil {
-		log.Print("internal url parse error: ", err)
+	req.URL, qr.Err = url.Parse(hb.Url + "/query?" + req.Form.Encode())
+	if qr.Err != nil {
+		log.Print("internal url parse error: ", qr.Err)
 		return
 	}
 
@@ -226,43 +244,45 @@ func (hb *HttpBackend) Query(req *http.Request, w http.ResponseWriter, decompres
 		return
 	}
 	defer resp.Body.Close()
-	if w != nil {
-		CopyHeader(w.Header(), resp.Header)
-	}
 
 	respBody := resp.Body
 	if decompress && resp.Header.Get("Content-Encoding") == "gzip" {
-		b, err := gzip.NewReader(resp.Body)
-		if err != nil {
+		var b *gzip.Reader
+		b, qr.Err = gzip.NewReader(resp.Body)
+		if qr.Err != nil {
 			log.Printf("unable to decode gzip body")
-			return nil, err
+			return
 		}
 		defer b.Close()
 		respBody = b
 	}
 
-	body, err = ioutil.ReadAll(respBody)
-	if err != nil {
+	qr.Body, qr.Err = ioutil.ReadAll(respBody)
+	if qr.Err != nil {
+		log.Printf("read body error: %s, the query is %s", qr.Err, q)
 		return
 	}
 	if resp.StatusCode >= 400 {
-		rsp, _ := ResponseFromResponseBytes(body)
-		return nil, errors.New(rsp.Err)
+		rsp, _ := ResponseFromResponseBytes(qr.Body)
+		qr.Err = errors.New(rsp.Err)
 	}
+	qr.Header = resp.Header
+	qr.Status = resp.StatusCode
 	return
 }
 
 func (hb *HttpBackend) QueryIQL(db, query string) ([]byte, error) {
-	return hb.Query(NewRequest(db, query), nil, true)
+	qr := hb.Query(NewRequest(db, query), true)
+	return qr.Body, qr.Err
 }
 
 func (hb *HttpBackend) GetSeriesValues(db, query string) []string {
 	var values []string
-	p, err := hb.Query(NewRequest(db, query), nil, true)
-	if err != nil {
+	qr := hb.Query(NewRequest(db, query), true)
+	if qr.Err != nil {
 		return values
 	}
-	series, _ := SeriesFromResponseBytes(p)
+	series, _ := SeriesFromResponseBytes(qr.Body)
 	for _, s := range series {
 		for _, v := range s.Values {
 			if s.Name == "databases" && v[0].(string) == "_internal" {
@@ -290,11 +310,11 @@ func (hb *HttpBackend) GetTagKeys(db, meas string) []string {
 func (hb *HttpBackend) GetFieldKeys(db, meas string) map[string][]string {
 	fieldKeys := make(map[string][]string)
 	query := fmt.Sprintf("show field keys from \"%s\"", util.EscapeIdentifier(meas))
-	p, err := hb.Query(NewRequest(db, query), nil, true)
-	if err != nil {
+	qr := hb.Query(NewRequest(db, query), true)
+	if qr.Err != nil {
 		return fieldKeys
 	}
-	series, _ := SeriesFromResponseBytes(p)
+	series, _ := SeriesFromResponseBytes(qr.Body)
 	for _, s := range series {
 		for _, v := range s.Values {
 			fk := v[0].(string)
@@ -306,7 +326,8 @@ func (hb *HttpBackend) GetFieldKeys(db, meas string) map[string][]string {
 
 func (hb *HttpBackend) DropMeasurement(db, meas string) ([]byte, error) {
 	query := fmt.Sprintf("drop measurement \"%s\"", util.EscapeIdentifier(meas))
-	return hb.Query(NewRequest(db, query), nil, true)
+	qr := hb.Query(NewRequest(db, query), true)
+	return qr.Body, qr.Err
 }
 
 func (hb *HttpBackend) Close() {

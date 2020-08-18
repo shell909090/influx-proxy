@@ -3,7 +3,9 @@ package backend
 import (
 	"bytes"
 	"io"
+	"io/ioutil"
 	"log"
+	"net/http"
 	"net/url"
 	"sync"
 	"time"
@@ -296,4 +298,40 @@ func (ib *Backend) GetStats(ic *Circle) map[string]map[string]int {
 		load[db] = map[string]int{"measurements": len(measurements), "inplace": inplace, "incorrect": incorrect}
 	}
 	return load
+}
+
+func ParallelQuery(backends []*Backend, req *http.Request, w http.ResponseWriter, decompress bool) (bodies [][]byte, inactive int, err error) {
+	var bodyBytes []byte
+	if req.Body != nil {
+		bodyBytes, _ = ioutil.ReadAll(req.Body)
+	}
+	var header http.Header
+	ch := make(chan *QueryResult, len(backends))
+	wg := &sync.WaitGroup{}
+	for _, be := range backends {
+		if !be.Active {
+			inactive++
+			continue
+		}
+		wg.Add(1)
+		go func(be *Backend, req http.Request) {
+			defer wg.Done()
+			req.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
+			req.Form = CloneForm(req.Form)
+			qr := be.Query(&req, decompress)
+			ch <- qr
+		}(be, *req)
+	}
+	wg.Wait()
+	close(ch)
+	for qr := range ch {
+		if qr.Err != nil {
+			err = qr.Err
+			return
+		}
+		header = qr.Header
+		bodies = append(bodies, qr.Body)
+	}
+	CopyHeader(w.Header(), header)
+	return
 }
