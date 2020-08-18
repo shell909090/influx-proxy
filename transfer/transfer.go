@@ -20,8 +20,10 @@ import (
 )
 
 var (
-	FieldTypes = []string{"float", "integer", "string", "boolean"}
-	tlog       = log.New(os.Stdout, "", log.LstdFlags|log.Lmicroseconds|log.Lshortfile)
+	DefaultWorker = 1
+	DefaultBatch  = 25000
+	FieldTypes    = []string{"float", "integer", "string", "boolean"}
+	tlog          = log.New(os.Stdout, "", log.LstdFlags|log.Lmicroseconds|log.Lshortfile)
 )
 
 type Transfer struct {
@@ -43,8 +45,8 @@ func NewTransfer(cfg *backend.ProxyConfig, circles []*backend.Circle) (tx *Trans
 	tx = &Transfer{
 		tlogDir:      cfg.TLogDir,
 		CircleStates: make([]*CircleState, len(cfg.Circles)),
-		Worker:       1,
-		Batch:        25000,
+		Worker:       DefaultWorker,
+		Batch:        DefaultBatch,
 	}
 	for idx, circfg := range cfg.Circles {
 		tx.CircleStates[idx] = NewCircleState(circfg, circles[idx])
@@ -56,6 +58,11 @@ func (tx *Transfer) resetCircleStates() {
 	for _, cs := range tx.CircleStates {
 		cs.ResetStates()
 	}
+}
+
+func (tx *Transfer) resetWorkerAndBatch() {
+	tx.Worker = DefaultWorker
+	tx.Batch = DefaultBatch
 }
 
 func (tx *Transfer) setLogOutput(name string) {
@@ -211,7 +218,7 @@ func (tx *Transfer) submitCleanup(cs *CircleState, be *backend.Backend, db, meas
 	})
 }
 
-func (tx *Transfer) runTransfer(cs *CircleState, be *backend.Backend, dbs []string, f func(*CircleState, *backend.Backend, string, string, []interface{}) bool, args ...interface{}) {
+func (tx *Transfer) runTransfer(cs *CircleState, be *backend.Backend, dbs []string, fn func(*CircleState, *backend.Backend, string, string, []interface{}) bool, args ...interface{}) {
 	defer cs.wg.Done()
 	if !be.Active {
 		tlog.Printf("backend not active: %s", be.Url)
@@ -236,7 +243,7 @@ func (tx *Transfer) runTransfer(cs *CircleState, be *backend.Backend, dbs []stri
 
 	for i, db := range dbs {
 		for _, meas := range measures[i] {
-			require := f(cs, be, db, meas, args)
+			require := fn(cs, be, db, meas, args)
 			if require {
 				atomic.AddInt32(&stats.TransferCount, 1)
 			} else {
@@ -266,6 +273,7 @@ func (tx *Transfer) Rebalance(circleId int, backends []*backend.Backend, dbs []s
 		go tx.runTransfer(cs, be, dbs, tx.runRebalance)
 	}
 	cs.wg.Wait()
+	tx.resetWorkerAndBatch()
 	tlog.Printf("rebalance done: circle %d", circleId)
 }
 
@@ -308,6 +316,7 @@ func (tx *Transfer) Recovery(fromCircleId, toCircleId int, backendUrls []string,
 		go tx.runTransfer(fcs, be, dbs, tx.runRecovery, tcs, backendUrlSet)
 	}
 	fcs.wg.Wait()
+	tx.resetWorkerAndBatch()
 	tlog.Printf("recovery done: circle from %d to %d", fromCircleId, toCircleId)
 }
 
@@ -344,6 +353,7 @@ func (tx *Transfer) Resync(dbs []string, secs int) {
 		cs.wg.Wait()
 		tlog.Printf("resync done: circle %d", cs.CircleId)
 	}
+	tx.resetWorkerAndBatch()
 	tlog.Printf("resync done")
 }
 
@@ -380,6 +390,7 @@ func (tx *Transfer) Cleanup(circleId int) { // nolint:golint
 		go tx.runTransfer(cs, be, dbs, tx.runCleanup)
 	}
 	cs.wg.Wait()
+	tx.resetWorkerAndBatch()
 	tlog.Printf("cleanup done: circle %d", circleId)
 }
 

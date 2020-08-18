@@ -22,6 +22,7 @@ import (
 var (
 	ErrInvalidSeconds = errors.New("invalid days, hours, minutes or seconds")
 	ErrInvalidWorker  = errors.New("invalid worker, not more than 4*cpus")
+	ErrInvalidBatch   = errors.New("invalid batch")
 	ErrInvalidHaAddrs = errors.New("invalid ha_addrs")
 	ErrHaAddrsLessTwo = errors.New("ha_addrs requires two addresses at least")
 )
@@ -240,13 +241,7 @@ func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request
 		return
 	}
 
-	err = hs.setWorker(req)
-	if err != nil {
-		hs.WriteError(w, req, 400, err.Error())
-		return
-	}
-
-	err = hs.setHaAddrs(req)
+	err = hs.setParam(req)
 	if err != nil {
 		hs.WriteError(w, req, 400, err.Error())
 		return
@@ -287,13 +282,7 @@ func (hs *HttpService) HandlerRecovery(w http.ResponseWriter, req *http.Request)
 		return
 	}
 
-	err = hs.setWorker(req)
-	if err != nil {
-		hs.WriteError(w, req, 400, err.Error())
-		return
-	}
-
-	err = hs.setHaAddrs(req)
+	err = hs.setParam(req)
 	if err != nil {
 		hs.WriteError(w, req, 400, err.Error())
 		return
@@ -328,13 +317,7 @@ func (hs *HttpService) HandlerResync(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	err = hs.setWorker(req)
-	if err != nil {
-		hs.WriteError(w, req, 400, err.Error())
-		return
-	}
-
-	err = hs.setHaAddrs(req)
+	err = hs.setParam(req)
 	if err != nil {
 		hs.WriteError(w, req, 400, err.Error())
 		return
@@ -366,13 +349,7 @@ func (hs *HttpService) HandlerCleanup(w http.ResponseWriter, req *http.Request) 
 		return
 	}
 
-	err = hs.setWorker(req)
-	if err != nil {
-		hs.WriteError(w, req, 400, err.Error())
-		return
-	}
-
-	err = hs.setHaAddrs(req)
+	err = hs.setParam(req)
 	if err != nil {
 		hs.WriteError(w, req, 400, err.Error())
 		return
@@ -573,6 +550,23 @@ func (hs *HttpService) formBool(req *http.Request, key string) (bool, error) {
 	return strconv.ParseBool(req.FormValue(key))
 }
 
+func (hs *HttpService) setParam(req *http.Request) error {
+	var err error
+	err = hs.setWorker(req)
+	if err != nil {
+		return err
+	}
+	err = hs.setBatch(req)
+	if err != nil {
+		return err
+	}
+	err = hs.setHaAddrs(req)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (hs *HttpService) setWorker(req *http.Request) error {
 	str := strings.TrimSpace(req.FormValue("worker"))
 	if str != "" {
@@ -582,7 +576,21 @@ func (hs *HttpService) setWorker(req *http.Request) error {
 		}
 		hs.tx.Worker = worker
 	} else {
-		hs.tx.Worker = 1
+		hs.tx.Worker = transfer.DefaultWorker
+	}
+	return nil
+}
+
+func (hs *HttpService) setBatch(req *http.Request) error {
+	str := strings.TrimSpace(req.FormValue("batch"))
+	if str != "" {
+		batch, err := strconv.Atoi(str)
+		if err != nil || batch <= 0 {
+			return ErrInvalidBatch
+		}
+		hs.tx.Batch = batch
+	} else {
+		hs.tx.Batch = transfer.DefaultBatch
 	}
 	return nil
 }
