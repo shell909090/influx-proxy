@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -219,14 +220,22 @@ func (tx *Transfer) runTransfer(cs *CircleState, be *backend.Backend, dbs []stri
 
 	stats := cs.Stats[be.Url]
 	stats.DatabaseTotal = int32(len(dbs))
-	measures := make(map[string][]string)
-	for _, db := range dbs {
-		measures[db] = be.GetMeasurements(db)
-		stats.MeasurementTotal += int32(len(measures[db]))
+	measures := make([][]string, len(dbs))
+	var wg sync.WaitGroup
+	for i, db := range dbs {
+		wg.Add(1)
+		go func(i int, db string) {
+			defer wg.Done()
+			measures[i] = be.GetMeasurements(db)
+		}(i, db)
+	}
+	wg.Wait()
+	for i := range measures {
+		stats.MeasurementTotal += int32(len(measures[i]))
 	}
 
-	for _, db := range dbs {
-		for _, meas := range measures[db] {
+	for i, db := range dbs {
+		for _, meas := range measures[i] {
 			require := f(cs, be, db, meas, args)
 			if require {
 				atomic.AddInt32(&stats.TransferCount, 1)
