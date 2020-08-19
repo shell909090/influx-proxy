@@ -1,6 +1,7 @@
 package transfer
 
 import (
+	"bytes"
 	"fmt"
 	"log"
 	"net/http"
@@ -124,11 +125,27 @@ func reformFieldKeys(fieldKeys map[string][]string) map[string]string {
 }
 
 func (tx *Transfer) transfer(src *backend.Backend, dsts []*backend.Backend, db, meas string, secs int) error {
+	var wg sync.WaitGroup
+	var tagMap mapset.Set
+	var fieldMap map[string]string
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		tagKeys := src.GetTagKeys(db, meas)
+		tagMap = util.NewSetFromStrSlice(tagKeys)
+	}()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		fieldKeys := src.GetFieldKeys(db, meas)
+		fieldMap = reformFieldKeys(fieldKeys)
+	}()
+
 	timeClause := ""
 	if secs > 0 {
 		timeClause = fmt.Sprintf(" where time >= %ds", time.Now().Unix()-int64(secs))
 	}
-
 	rsp, err := src.QueryIQL(db, fmt.Sprintf("select * from \"%s\"%s", util.EscapeIdentifier(meas), timeClause))
 	if err != nil {
 		return err
@@ -141,14 +158,10 @@ func (tx *Transfer) transfer(src *backend.Backend, dsts []*backend.Backend, db, 
 		return nil
 	}
 	columns := series[0].Columns
+	wg.Wait()
 
-	tagKeys := src.GetTagKeys(db, meas)
-	tagMap := util.NewSetFromStrSlice(tagKeys)
-	fieldKeys := src.GetFieldKeys(db, meas)
-	fieldMap := reformFieldKeys(fieldKeys)
-
+	buf := bytes.Buffer{}
 	valen := len(series[0].Values)
-	lines := make([]string, 0, util.MinInt(valen, tx.Batch))
 	for idx, value := range series[0].Values {
 		mtagSet := []string{util.EscapeMeasurement(meas)}
 		fieldSet := make([]string, 0)
@@ -174,19 +187,22 @@ func (tx *Transfer) transfer(src *backend.Backend, dsts []*backend.Backend, db, 
 		mtagStr := strings.Join(mtagSet, ",")
 		fieldStr := strings.Join(fieldSet, ",")
 		ts, _ := time.Parse(time.RFC3339Nano, value[0].(string))
-		line := fmt.Sprintf("%s %s %d", mtagStr, fieldStr, ts.UnixNano())
-		lines = append(lines, line)
+		line := fmt.Sprintf("%s %s %d\n", mtagStr, fieldStr, ts.UnixNano())
+		buf.WriteString(line)
 		if (idx+1)%tx.Batch == 0 || idx+1 == valen {
-			if len(lines) != 0 {
-				lineData := strings.Join(lines, "\n")
-				for _, dst := range dsts {
-					err = dst.Write(db, []byte(lineData))
+			p := buf.Bytes()
+			for _, dst := range dsts {
+				wg.Add(1)
+				go func(dst *backend.Backend) {
+					defer wg.Done()
+					err = dst.Write(db, p)
 					if err != nil {
-						return err
+						tlog.Printf("transfer error: %s, src:%s dst:%v db:%s meas:%s secs:%d", err, src.Url, dst.Url, db, meas, secs)
 					}
-				}
-				lines = lines[:0]
+				}(dst)
 			}
+			wg.Wait()
+			buf.Reset()
 		}
 	}
 	return nil

@@ -10,13 +10,6 @@ import (
 	gzip "github.com/klauspost/pgzip"
 )
 
-func MinInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 func NewSetFromStrSlice(s []string) mapset.Set {
 	set := mapset.NewSet()
 	for _, v := range s {
