@@ -17,7 +17,7 @@ type Circle struct {
 	Backends     []*Backend
 	WriteOnly    bool
 	router       *consistent.Consistent
-	routerCaches map[string]*Backend
+	routerCaches sync.Map
 	mapToBackend map[string]*Backend
 }
 
@@ -28,7 +28,6 @@ func NewCircle(cfg *CircleConfig, pxcfg *ProxyConfig, circleId int) (ic *Circle)
 		Backends:     make([]*Backend, len(cfg.Backends)),
 		WriteOnly:    false,
 		router:       consistent.New(),
-		routerCaches: make(map[string]*Backend),
 		mapToBackend: make(map[string]*Backend),
 	}
 	ic.router.NumberOfReplicas = 256
@@ -54,12 +53,12 @@ func (ic *Circle) addRouter(be *Backend, idx int, hashKey string) {
 }
 
 func (ic *Circle) GetBackend(key string) *Backend {
-	if be, ok := ic.routerCaches[key]; ok {
-		return be
+	if be, ok := ic.routerCaches.Load(key); ok {
+		return be.(*Backend)
 	}
 	value, _ := ic.router.Get(key)
 	be := ic.mapToBackend[value]
-	ic.routerCaches[key] = be
+	ic.routerCaches.Store(key, be)
 	return be
 }
 
