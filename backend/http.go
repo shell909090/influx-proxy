@@ -85,12 +85,15 @@ func NewTransport(tlsSkip bool) *http.Transport {
 	}
 }
 
-func NewRequest(db, query string) *http.Request {
-	header := map[string][]string{"Accept-Encoding": {"gzip"}}
-	if db == "" {
-		return &http.Request{Form: url.Values{"q": []string{query}}, Header: header}
+func NewQueryRequest(method, db, q string) *http.Request {
+	header := http.Header{}
+	header.Set("Accept-Encoding", "gzip")
+	form := url.Values{}
+	form.Set("q", q)
+	if db != "" {
+		form.Set("db", db)
 	}
-	return &http.Request{Form: url.Values{"db": []string{db}, "q": []string{query}}, Header: header}
+	return &http.Request{Method: method, Form: form, Header: header}
 }
 
 func Compress(buf *bytes.Buffer, p []byte) (err error) {
@@ -271,14 +274,14 @@ func (hb *HttpBackend) Query(req *http.Request, decompress bool) (qr *QueryResul
 	return
 }
 
-func (hb *HttpBackend) QueryIQL(db, query string) ([]byte, error) {
-	qr := hb.Query(NewRequest(db, query), true)
+func (hb *HttpBackend) QueryIQL(method, db, q string) ([]byte, error) {
+	qr := hb.Query(NewQueryRequest(method, db, q), true)
 	return qr.Body, qr.Err
 }
 
-func (hb *HttpBackend) GetSeriesValues(db, query string) []string {
+func (hb *HttpBackend) GetSeriesValues(db, q string) []string {
 	var values []string
-	qr := hb.Query(NewRequest(db, query), true)
+	qr := hb.Query(NewQueryRequest("GET", db, q), true)
 	if qr.Err != nil {
 		return values
 	}
@@ -309,8 +312,8 @@ func (hb *HttpBackend) GetTagKeys(db, meas string) []string {
 
 func (hb *HttpBackend) GetFieldKeys(db, meas string) map[string][]string {
 	fieldKeys := make(map[string][]string)
-	query := fmt.Sprintf("show field keys from \"%s\"", util.EscapeIdentifier(meas))
-	qr := hb.Query(NewRequest(db, query), true)
+	q := fmt.Sprintf("show field keys from \"%s\"", util.EscapeIdentifier(meas))
+	qr := hb.Query(NewQueryRequest("GET", db, q), true)
 	if qr.Err != nil {
 		return fieldKeys
 	}
@@ -325,8 +328,8 @@ func (hb *HttpBackend) GetFieldKeys(db, meas string) map[string][]string {
 }
 
 func (hb *HttpBackend) DropMeasurement(db, meas string) ([]byte, error) {
-	query := fmt.Sprintf("drop measurement \"%s\"", util.EscapeIdentifier(meas))
-	qr := hb.Query(NewRequest(db, query), true)
+	q := fmt.Sprintf("drop measurement \"%s\"", util.EscapeIdentifier(meas))
+	qr := hb.Query(NewQueryRequest("POST", db, q), true)
 	return qr.Body, qr.Err
 }
 

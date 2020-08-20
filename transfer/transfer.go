@@ -146,7 +146,8 @@ func (tx *Transfer) transfer(src *backend.Backend, dsts []*backend.Backend, db, 
 	if secs > 0 {
 		timeClause = fmt.Sprintf(" where time >= %ds", time.Now().Unix()-int64(secs))
 	}
-	rsp, err := src.QueryIQL(db, fmt.Sprintf("select * from \"%s\"%s", util.EscapeIdentifier(meas), timeClause))
+	q := fmt.Sprintf("select * from \"%s\"%s", util.EscapeIdentifier(meas), timeClause)
+	rsp, err := src.QueryIQL("GET", db, q)
 	if err != nil {
 		return err
 	}
