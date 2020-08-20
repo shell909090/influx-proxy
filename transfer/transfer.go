@@ -21,11 +21,17 @@ import (
 )
 
 var (
+	FieldTypes    = []string{"float", "integer", "string", "boolean"}
 	DefaultWorker = 1
 	DefaultBatch  = 25000
-	FieldTypes    = []string{"float", "integer", "string", "boolean"}
+	queryLimit    = 1000000
 	tlog          = log.New(os.Stdout, "", log.LstdFlags|log.Lmicroseconds|log.Lshortfile)
 )
+
+type QueryResult struct {
+	Series models.Rows
+	Err    error
+}
 
 type Transfer struct {
 	username     string
@@ -151,11 +157,103 @@ func reformFieldKeys(fieldKeys map[string][]string) map[string]string {
 	return fieldMap
 }
 
-func (tx *Transfer) transfer(src *backend.Backend, dsts []*backend.Backend, db, meas string, secs int) error {
+func (tx *Transfer) write(ch chan *QueryResult, dsts []*backend.Backend, db, meas string, tagMap mapset.Set, fieldMap map[string]string) error {
+	var buf bytes.Buffer
 	var wg sync.WaitGroup
+	pool, err := ants.NewPool(len(dsts) * 20)
+	if err != nil {
+		return err
+	}
+	defer pool.Release()
+	for qr := range ch {
+		if qr.Err != nil {
+			return qr.Err
+		}
+		serie := qr.Series[0]
+		columns := serie.Columns
+		valen := len(serie.Values)
+		for idx, value := range serie.Values {
+			mtagSet := []string{util.EscapeMeasurement(meas)}
+			fieldSet := make([]string, 0)
+			for i := 1; i < len(value); i++ {
+				k := columns[i]
+				v := value[i]
+				if tagMap.Contains(k) {
+					if v != nil {
+						mtagSet = append(mtagSet, fmt.Sprintf("%s=%s", util.EscapeTag(k), util.EscapeTag(v.(string))))
+					}
+				} else if vtype, ok := fieldMap[k]; ok {
+					if v != nil {
+						if vtype == "float" || vtype == "boolean" {
+							fieldSet = append(fieldSet, fmt.Sprintf("%s=%v", util.EscapeTag(k), v))
+						} else if vtype == "integer" {
+							fieldSet = append(fieldSet, fmt.Sprintf("%s=%vi", util.EscapeTag(k), v))
+						} else if vtype == "string" {
+							fieldSet = append(fieldSet, fmt.Sprintf("%s=\"%s\"", util.EscapeTag(k), models.EscapeStringField(v.(string))))
+						}
+					}
+				}
+			}
+			mtagStr := strings.Join(mtagSet, ",")
+			fieldStr := strings.Join(fieldSet, ",")
+			ts, _ := time.Parse(time.RFC3339Nano, value[0].(string))
+			line := fmt.Sprintf("%s %s %d\n", mtagStr, fieldStr, ts.UnixNano())
+			buf.WriteString(line)
+			if (idx+1)%tx.Batch == 0 || idx+1 == valen {
+				p := buf.Bytes()
+				for _, dst := range dsts {
+					dst := dst
+					wg.Add(1)
+					pool.Submit(func() {
+						defer wg.Done()
+						err := dst.Write(db, p)
+						if err != nil {
+							tlog.Printf("transfer write error: %s, dst:%v db:%s meas:%s, p: %s", err, dst.Url, db, meas, p)
+						}
+					})
+				}
+				buf = bytes.Buffer{}
+			}
+		}
+	}
+	wg.Wait()
+	return nil
+}
+
+func (tx *Transfer) query(ch chan *QueryResult, src *backend.Backend, db, meas string, secs int) {
+	defer close(ch)
+	offset := 0
+	for {
+		whereClause := ""
+		if secs > 0 {
+			whereClause = fmt.Sprintf("where time >= %ds", time.Now().Unix()-int64(secs))
+		}
+		q := fmt.Sprintf("select * from \"%s\" %s order by time desc limit %d offset %d", util.EscapeIdentifier(meas), whereClause, queryLimit, offset)
+		rsp, err := src.QueryIQL("GET", db, q)
+		if err != nil {
+			ch <- &QueryResult{Err: err}
+			return
+		}
+		series, err := backend.SeriesFromResponseBytes(rsp)
+		if err != nil {
+			ch <- &QueryResult{Err: err}
+			return
+		}
+		if len(series) == 0 || len(series[0].Values) == 0 {
+			break
+		}
+		ch <- &QueryResult{Series: series}
+		offset += queryLimit
+	}
+}
+
+func (tx *Transfer) transfer(src *backend.Backend, dsts []*backend.Backend, db, meas string, secs int) error {
+	ch := make(chan *QueryResult, 4)
+	go tx.query(ch, src, db, meas, secs)
+
 	var tagMap mapset.Set
 	var fieldMap map[string]string
-
+	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -168,72 +266,8 @@ func (tx *Transfer) transfer(src *backend.Backend, dsts []*backend.Backend, db, 
 		fieldKeys := src.GetFieldKeys(db, meas)
 		fieldMap = reformFieldKeys(fieldKeys)
 	}()
-
-	timeClause := ""
-	if secs > 0 {
-		timeClause = fmt.Sprintf(" where time >= %ds", time.Now().Unix()-int64(secs))
-	}
-	q := fmt.Sprintf("select * from \"%s\"%s", util.EscapeIdentifier(meas), timeClause)
-	rsp, err := src.QueryIQL("GET", db, q)
-	if err != nil {
-		return err
-	}
-	series, err := backend.SeriesFromResponseBytes(rsp)
-	if err != nil {
-		return err
-	}
-	if len(series) < 1 {
-		return nil
-	}
-	columns := series[0].Columns
 	wg.Wait()
-
-	buf := bytes.Buffer{}
-	valen := len(series[0].Values)
-	for idx, value := range series[0].Values {
-		mtagSet := []string{util.EscapeMeasurement(meas)}
-		fieldSet := make([]string, 0)
-		for i := 1; i < len(value); i++ {
-			k := columns[i]
-			v := value[i]
-			if tagMap.Contains(k) {
-				if v != nil {
-					mtagSet = append(mtagSet, fmt.Sprintf("%s=%s", util.EscapeTag(k), util.EscapeTag(v.(string))))
-				}
-			} else if vtype, ok := fieldMap[k]; ok {
-				if v != nil {
-					if vtype == "float" || vtype == "boolean" {
-						fieldSet = append(fieldSet, fmt.Sprintf("%s=%v", util.EscapeTag(k), v))
-					} else if vtype == "integer" {
-						fieldSet = append(fieldSet, fmt.Sprintf("%s=%vi", util.EscapeTag(k), v))
-					} else if vtype == "string" {
-						fieldSet = append(fieldSet, fmt.Sprintf("%s=\"%s\"", util.EscapeTag(k), models.EscapeStringField(v.(string))))
-					}
-				}
-			}
-		}
-		mtagStr := strings.Join(mtagSet, ",")
-		fieldStr := strings.Join(fieldSet, ",")
-		ts, _ := time.Parse(time.RFC3339Nano, value[0].(string))
-		line := fmt.Sprintf("%s %s %d\n", mtagStr, fieldStr, ts.UnixNano())
-		buf.WriteString(line)
-		if (idx+1)%tx.Batch == 0 || idx+1 == valen {
-			p := buf.Bytes()
-			for _, dst := range dsts {
-				wg.Add(1)
-				go func(dst *backend.Backend) {
-					defer wg.Done()
-					err = dst.Write(db, p)
-					if err != nil {
-						tlog.Printf("transfer error: %s, src:%s dst:%v db:%s meas:%s secs:%d", err, src.Url, dst.Url, db, meas, secs)
-					}
-				}(dst)
-			}
-			wg.Wait()
-			buf.Reset()
-		}
-	}
-	return nil
+	return tx.write(ch, dsts, db, meas, tagMap, fieldMap)
 }
 
 func (tx *Transfer) submitTransfer(cs *CircleState, src *backend.Backend, dsts []*backend.Backend, db, meas string, secs int) {
@@ -305,14 +339,18 @@ func (tx *Transfer) Rebalance(circleId int, backends []*backend.Backend, dbs []s
 	if err != nil || len(dbs) == 0 {
 		return
 	}
+	tx.pool, err = ants.NewPool(tx.Worker)
+	if err != nil {
+		tlog.Printf("new pool error: %s", err)
+		return
+	}
+	defer tx.pool.Release()
 	tlog.Printf("rebalance start: circle %d", circleId)
 	cs := tx.CircleStates[circleId]
 	tx.resetCircleStates()
 	tx.broadcastTransferring(cs, true)
 	defer tx.broadcastTransferring(cs, false)
 
-	tx.pool, _ = ants.NewPool(tx.Worker)
-	defer tx.pool.Release()
 	for _, be := range backends {
 		cs.wg.Add(1)
 		go tx.runTransfer(cs, be, dbs, tx.runRebalance)
@@ -338,6 +376,12 @@ func (tx *Transfer) Recovery(fromCircleId, toCircleId int, backendUrls []string,
 	if err != nil || len(dbs) == 0 {
 		return
 	}
+	tx.pool, err = ants.NewPool(tx.Worker)
+	if err != nil {
+		tlog.Printf("new pool error: %s", err)
+		return
+	}
+	defer tx.pool.Release()
 	tlog.Printf("recovery start: circle from %d to %d", fromCircleId, toCircleId)
 	fcs := tx.CircleStates[fromCircleId]
 	tcs := tx.CircleStates[toCircleId]
@@ -345,8 +389,6 @@ func (tx *Transfer) Recovery(fromCircleId, toCircleId int, backendUrls []string,
 	tx.broadcastTransferring(tcs, true)
 	defer tx.broadcastTransferring(tcs, false)
 
-	tx.pool, _ = ants.NewPool(tx.Worker)
-	defer tx.pool.Release()
 	backendUrlSet := mapset.NewSet() // nolint:golint
 	if len(backendUrls) != 0 {
 		for _, u := range backendUrls {
@@ -384,13 +426,17 @@ func (tx *Transfer) Resync(dbs []string, secs int) {
 	if err != nil || len(dbs) == 0 {
 		return
 	}
+	tx.pool, err = ants.NewPool(tx.Worker)
+	if err != nil {
+		tlog.Printf("new pool error: %s", err)
+		return
+	}
+	defer tx.pool.Release()
 	tlog.Printf("resync start")
 	tx.resetCircleStates()
 	tx.broadcastResyncing(true)
 	defer tx.broadcastResyncing(false)
 
-	tx.pool, _ = ants.NewPool(tx.Worker)
-	defer tx.pool.Release()
 	for _, cs := range tx.CircleStates {
 		tlog.Printf("resync start: circle %d", cs.CircleId)
 		for _, be := range cs.Backends {
@@ -423,14 +469,19 @@ func (tx *Transfer) runResync(cs *CircleState, be *backend.Backend, db string, m
 
 func (tx *Transfer) Cleanup(circleId int) { // nolint:golint
 	tx.setLogOutput("cleanup.log")
+	var err error
+	tx.pool, err = ants.NewPool(tx.Worker)
+	if err != nil {
+		tlog.Printf("new pool error: %s", err)
+		return
+	}
+	defer tx.pool.Release()
 	tlog.Printf("cleanup start: circle %d", circleId)
 	cs := tx.CircleStates[circleId]
 	tx.resetCircleStates()
 	tx.broadcastTransferring(cs, true)
 	defer tx.broadcastTransferring(cs, false)
 
-	tx.pool, _ = ants.NewPool(tx.Worker)
-	defer tx.pool.Release()
 	for _, be := range cs.Backends {
 		dbs := be.GetDatabases()
 		if len(dbs) > 0 {
