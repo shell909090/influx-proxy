@@ -85,11 +85,38 @@ func (tx *Transfer) getDatabases() []string {
 	for _, cs := range tx.CircleStates {
 		for _, be := range cs.Backends {
 			if be.Active {
-				return be.GetDatabases()
+				dbs := be.GetDatabases()
+				if len(dbs) > 0 {
+					return dbs
+				}
 			}
 		}
 	}
 	return nil
+}
+
+func (tx *Transfer) createDatabases(dbs []string) ([]string, error) {
+	if len(dbs) == 0 {
+		dbs = tx.getDatabases()
+	}
+	if len(dbs) > 0 {
+		backends := make([]*backend.Backend, 0)
+		for _, cs := range tx.CircleStates {
+			backends = append(backends, cs.Backends...)
+		}
+		for _, db := range dbs {
+			q := fmt.Sprintf("create database \"%s\"", util.EscapeIdentifier(db))
+			req := backend.NewQueryRequest("POST", "", q)
+			_, _, err := backend.ParallelQuery(backends, req, nil, false)
+			if err != nil {
+				tlog.Printf("create databases error: %s, db: %s, dbs: %v", err, db, dbs)
+				return dbs, err
+			}
+		}
+	} else {
+		tlog.Printf("databases are empty in all backends")
+	}
+	return dbs, nil
 }
 
 func getBackendUrls(backends []*backend.Backend) []string {
@@ -274,14 +301,15 @@ func (tx *Transfer) runTransfer(cs *CircleState, be *backend.Backend, dbs []stri
 
 func (tx *Transfer) Rebalance(circleId int, backends []*backend.Backend, dbs []string) { // nolint:golint
 	tx.setLogOutput("rebalance.log")
+	dbs, err := tx.createDatabases(dbs)
+	if err != nil || len(dbs) == 0 {
+		return
+	}
 	tlog.Printf("rebalance start: circle %d", circleId)
 	cs := tx.CircleStates[circleId]
 	tx.resetCircleStates()
 	tx.broadcastTransferring(cs, true)
 	defer tx.broadcastTransferring(cs, false)
-	if len(dbs) == 0 {
-		dbs = tx.getDatabases()
-	}
 
 	tx.pool, _ = ants.NewPool(tx.Worker)
 	defer tx.pool.Release()
@@ -306,15 +334,16 @@ func (tx *Transfer) runRebalance(cs *CircleState, be *backend.Backend, db string
 
 func (tx *Transfer) Recovery(fromCircleId, toCircleId int, backendUrls []string, dbs []string) { // nolint:golint
 	tx.setLogOutput("recovery.log")
+	dbs, err := tx.createDatabases(dbs)
+	if err != nil || len(dbs) == 0 {
+		return
+	}
 	tlog.Printf("recovery start: circle from %d to %d", fromCircleId, toCircleId)
 	fcs := tx.CircleStates[fromCircleId]
 	tcs := tx.CircleStates[toCircleId]
 	tx.resetCircleStates()
 	tx.broadcastTransferring(tcs, true)
 	defer tx.broadcastTransferring(tcs, false)
-	if len(dbs) == 0 {
-		dbs = tx.getDatabases()
-	}
 
 	tx.pool, _ = ants.NewPool(tx.Worker)
 	defer tx.pool.Release()
@@ -351,13 +380,14 @@ func (tx *Transfer) runRecovery(fcs *CircleState, be *backend.Backend, db string
 
 func (tx *Transfer) Resync(dbs []string, secs int) {
 	tx.setLogOutput("resync.log")
+	dbs, err := tx.createDatabases(dbs)
+	if err != nil || len(dbs) == 0 {
+		return
+	}
 	tlog.Printf("resync start")
 	tx.resetCircleStates()
 	tx.broadcastResyncing(true)
 	defer tx.broadcastResyncing(false)
-	if len(dbs) == 0 {
-		dbs = tx.getDatabases()
-	}
 
 	tx.pool, _ = ants.NewPool(tx.Worker)
 	defer tx.pool.Release()
@@ -402,9 +432,11 @@ func (tx *Transfer) Cleanup(circleId int) { // nolint:golint
 	tx.pool, _ = ants.NewPool(tx.Worker)
 	defer tx.pool.Release()
 	for _, be := range cs.Backends {
-		cs.wg.Add(1)
 		dbs := be.GetDatabases()
-		go tx.runTransfer(cs, be, dbs, tx.runCleanup)
+		if len(dbs) > 0 {
+			cs.wg.Add(1)
+			go tx.runTransfer(cs, be, dbs, tx.runCleanup)
+		}
 	}
 	cs.wg.Wait()
 	tx.resetWorkerAndBatch()

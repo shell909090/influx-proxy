@@ -339,6 +339,8 @@ func ParallelQuery(backends []*Backend, req *http.Request, w http.ResponseWriter
 		header = qr.Header
 		bodies = append(bodies, qr.Body)
 	}
-	CopyHeader(w.Header(), header)
+	if w != nil {
+		CopyHeader(w.Header(), header)
+	}
 	return
 }
