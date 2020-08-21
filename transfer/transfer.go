@@ -24,7 +24,7 @@ var (
 	FieldTypes    = []string{"float", "integer", "string", "boolean"}
 	DefaultWorker = 1
 	DefaultBatch  = 25000
-	queryLimit    = 1000000
+	DefaultLimit  = 1000000
 	tlog          = log.New(os.Stdout, "", log.LstdFlags|log.Lmicroseconds|log.Lshortfile)
 )
 
@@ -208,7 +208,7 @@ func (tx *Transfer) write(ch chan *QueryResult, dsts []*backend.Backend, db, mea
 						defer wg.Done()
 						err := dst.Write(db, p)
 						if err != nil {
-							tlog.Printf("transfer write error: %s, dst:%v db:%s meas:%s, p: %s", err, dst.Url, db, meas, p)
+							tlog.Printf("transfer write error: %s, dst:%v db:%s meas:%s", err, dst.Url, db, meas)
 						}
 					})
 				}
@@ -228,7 +228,7 @@ func (tx *Transfer) query(ch chan *QueryResult, src *backend.Backend, db, meas s
 		if secs > 0 {
 			whereClause = fmt.Sprintf("where time >= %ds", time.Now().Unix()-int64(secs))
 		}
-		q := fmt.Sprintf("select * from \"%s\" %s order by time desc limit %d offset %d", util.EscapeIdentifier(meas), whereClause, queryLimit, offset)
+		q := fmt.Sprintf("select * from \"%s\" %s order by time desc limit %d offset %d", util.EscapeIdentifier(meas), whereClause, DefaultLimit, offset)
 		rsp, err := src.QueryIQL("GET", db, q)
 		if err != nil {
 			ch <- &QueryResult{Err: err}
@@ -243,7 +243,7 @@ func (tx *Transfer) query(ch chan *QueryResult, src *backend.Backend, db, meas s
 			break
 		}
 		ch <- &QueryResult{Series: series}
-		offset += queryLimit
+		offset += DefaultLimit
 	}
 }
 
