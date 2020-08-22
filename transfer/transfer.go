@@ -222,8 +222,7 @@ func (tx *Transfer) write(ch chan *QueryResult, dsts []*backend.Backend, db, mea
 
 func (tx *Transfer) query(ch chan *QueryResult, src *backend.Backend, db, meas string, secs int) {
 	defer close(ch)
-	offset := 0
-	for {
+	for offset := 0; ; offset += DefaultLimit {
 		whereClause := ""
 		if secs > 0 {
 			whereClause = fmt.Sprintf("where time >= %ds", time.Now().Unix()-int64(secs))
@@ -240,10 +239,9 @@ func (tx *Transfer) query(ch chan *QueryResult, src *backend.Backend, db, meas s
 			return
 		}
 		if len(series) == 0 || len(series[0].Values) == 0 {
-			break
+			return
 		}
 		ch <- &QueryResult{Series: series}
-		offset += DefaultLimit
 	}
 }
 

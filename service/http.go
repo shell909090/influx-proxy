@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/http/pprof"
 	"regexp"
-	"runtime"
 	"strconv"
 	"strings"
 
@@ -21,10 +20,9 @@ import (
 
 var (
 	ErrInvalidSeconds = errors.New("invalid days, hours, minutes or seconds")
-	ErrInvalidWorker  = errors.New("invalid worker, not more than 4*cpus")
-	ErrInvalidBatch   = errors.New("invalid batch")
-	ErrInvalidHaAddrs = errors.New("invalid ha_addrs")
-	ErrHaAddrsLessTwo = errors.New("ha_addrs requires two addresses at least")
+	ErrInvalidWorker  = errors.New("invalid worker, require positive integer")
+	ErrInvalidBatch   = errors.New("invalid batch, require positive integer")
+	ErrInvalidHaAddrs = errors.New("invalid ha_addrs, require at least two addresses as <host:port>, comma-separated")
 )
 
 type HttpService struct { // nolint:golint
@@ -518,6 +516,10 @@ func (hs *HttpService) formValues(req *http.Request, key string) []string {
 	return values
 }
 
+func (hs *HttpService) formBool(req *http.Request, key string) (bool, error) {
+	return strconv.ParseBool(req.FormValue(key))
+}
+
 func (hs *HttpService) formPositiveInt(req *http.Request, key string) (int, bool) {
 	str := strings.TrimSpace(req.FormValue(key))
 	if str == "" {
@@ -546,10 +548,6 @@ func (hs *HttpService) formCircleId(req *http.Request, key string) (int, error) 
 	return circleId, nil
 }
 
-func (hs *HttpService) formBool(req *http.Request, key string) (bool, error) {
-	return strconv.ParseBool(req.FormValue(key))
-}
-
 func (hs *HttpService) setParam(req *http.Request) error {
 	var err error
 	err = hs.setWorker(req)
@@ -571,7 +569,7 @@ func (hs *HttpService) setWorker(req *http.Request) error {
 	str := strings.TrimSpace(req.FormValue("worker"))
 	if str != "" {
 		worker, err := strconv.Atoi(str)
-		if err != nil || worker <= 0 || worker > 4*runtime.NumCPU() {
+		if err != nil || worker <= 0 {
 			return ErrInvalidWorker
 		}
 		hs.tx.Worker = worker
@@ -606,7 +604,7 @@ func (hs *HttpService) setHaAddrs(req *http.Request) error {
 		}
 		hs.tx.HaAddrs = haAddrs
 	} else if len(haAddrs) == 1 {
-		return ErrHaAddrsLessTwo
+		return ErrInvalidHaAddrs
 	}
 	return nil
 }
