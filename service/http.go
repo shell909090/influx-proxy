@@ -22,6 +22,7 @@ var (
 	ErrInvalidTick    = errors.New("invalid tick, require non-negative integer")
 	ErrInvalidWorker  = errors.New("invalid worker, require positive integer")
 	ErrInvalidBatch   = errors.New("invalid batch, require positive integer")
+	ErrInvalidLimit   = errors.New("invalid limit, require positive integer")
 	ErrInvalidHaAddrs = errors.New("invalid ha_addrs, require at least two addresses as <host:port>, comma-separated")
 )
 
@@ -550,6 +551,10 @@ func (hs *HttpService) setParam(req *http.Request) error {
 	if err != nil {
 		return err
 	}
+	err = hs.setLimit(req)
+	if err != nil {
+		return err
+	}
 	err = hs.setHaAddrs(req)
 	if err != nil {
 		return err
@@ -581,6 +586,20 @@ func (hs *HttpService) setBatch(req *http.Request) error {
 		hs.tx.Batch = batch
 	} else {
 		hs.tx.Batch = transfer.DefaultBatch
+	}
+	return nil
+}
+
+func (hs *HttpService) setLimit(req *http.Request) error {
+	str := strings.TrimSpace(req.FormValue("limit"))
+	if str != "" {
+		limit, err := strconv.Atoi(str)
+		if err != nil || limit <= 0 {
+			return ErrInvalidLimit
+		}
+		hs.tx.Limit = limit
+	} else {
+		hs.tx.Limit = transfer.DefaultLimit
 	}
 	return nil
 }

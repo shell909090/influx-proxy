@@ -44,6 +44,7 @@ type Transfer struct {
 	CircleStates []*CircleState
 	Worker       int
 	Batch        int
+	Limit        int
 	Resyncing    bool
 	HaAddrs      []string
 }
@@ -54,6 +55,7 @@ func NewTransfer(cfg *backend.ProxyConfig, circles []*backend.Circle) (tx *Trans
 		CircleStates: make([]*CircleState, len(cfg.Circles)),
 		Worker:       DefaultWorker,
 		Batch:        DefaultBatch,
+		Limit:        DefaultLimit,
 	}
 	for idx, circfg := range cfg.Circles {
 		tx.CircleStates[idx] = NewCircleState(circfg, circles[idx])
@@ -67,9 +69,10 @@ func (tx *Transfer) resetCircleStates() {
 	}
 }
 
-func (tx *Transfer) resetWorkerAndBatch() {
+func (tx *Transfer) resetBasicParam() {
 	tx.Worker = DefaultWorker
 	tx.Batch = DefaultBatch
+	tx.Limit = DefaultLimit
 }
 
 func (tx *Transfer) setLogOutput(name string) {
@@ -222,12 +225,12 @@ func (tx *Transfer) write(ch chan *QueryResult, dsts []*backend.Backend, db, mea
 
 func (tx *Transfer) query(ch chan *QueryResult, src *backend.Backend, db, meas string, tick int64) {
 	defer close(ch)
-	for offset := 0; ; offset += DefaultLimit {
+	for offset := 0; ; offset += tx.Limit {
 		whereClause := ""
 		if tick > 0 {
 			whereClause = fmt.Sprintf("where time >= %ds", tick)
 		}
-		q := fmt.Sprintf("select * from \"%s\" %s order by time desc limit %d offset %d", util.EscapeIdentifier(meas), whereClause, DefaultLimit, offset)
+		q := fmt.Sprintf("select * from \"%s\" %s order by time desc limit %d offset %d", util.EscapeIdentifier(meas), whereClause, tx.Limit, offset)
 		rsp, err := src.QueryIQL("GET", db, q)
 		if err != nil {
 			ch <- &QueryResult{Err: err}
@@ -354,7 +357,7 @@ func (tx *Transfer) Rebalance(circleId int, backends []*backend.Backend, dbs []s
 		go tx.runTransfer(cs, be, dbs, tx.runRebalance)
 	}
 	cs.wg.Wait()
-	tx.resetWorkerAndBatch()
+	tx.resetBasicParam()
 	tlog.Printf("rebalance done: circle %d", circleId)
 }
 
@@ -402,7 +405,7 @@ func (tx *Transfer) Recovery(fromCircleId, toCircleId int, backendUrls []string,
 		go tx.runTransfer(fcs, be, dbs, tx.runRecovery, tcs, backendUrlSet)
 	}
 	fcs.wg.Wait()
-	tx.resetWorkerAndBatch()
+	tx.resetBasicParam()
 	tlog.Printf("recovery done: circle from %d to %d", fromCircleId, toCircleId)
 }
 
@@ -444,7 +447,7 @@ func (tx *Transfer) Resync(dbs []string, tick int64) {
 		cs.wg.Wait()
 		tlog.Printf("resync done: circle %d", cs.CircleId)
 	}
-	tx.resetWorkerAndBatch()
+	tx.resetBasicParam()
 	tlog.Printf("resync done")
 }
 
@@ -488,7 +491,7 @@ func (tx *Transfer) Cleanup(circleId int) { // nolint:golint
 		}
 	}
 	cs.wg.Wait()
-	tx.resetWorkerAndBatch()
+	tx.resetBasicParam()
 	tlog.Printf("cleanup done: circle %d", circleId)
 }
 
