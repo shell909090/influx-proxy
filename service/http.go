@@ -19,7 +19,7 @@ import (
 )
 
 var (
-	ErrInvalidSeconds = errors.New("invalid days, hours, minutes or seconds")
+	ErrInvalidTick    = errors.New("invalid tick, require non-negative integer")
 	ErrInvalidWorker  = errors.New("invalid worker, require positive integer")
 	ErrInvalidBatch   = errors.New("invalid batch, require positive integer")
 	ErrInvalidHaAddrs = errors.New("invalid ha_addrs, require at least two addresses as <host:port>, comma-separated")
@@ -298,7 +298,7 @@ func (hs *HttpService) HandlerResync(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	seconds, err := hs.formSeconds(req)
+	tick, err := hs.formTick(req)
 	if err != nil {
 		hs.WriteError(w, req, 400, err.Error())
 		return
@@ -322,7 +322,7 @@ func (hs *HttpService) HandlerResync(w http.ResponseWriter, req *http.Request) {
 	}
 
 	dbs := hs.formValues(req, "db")
-	go hs.tx.Resync(dbs, seconds)
+	go hs.tx.Resync(dbs, tick)
 	hs.WriteText(w, 202, "accepted")
 }
 
@@ -520,24 +520,16 @@ func (hs *HttpService) formBool(req *http.Request, key string) (bool, error) {
 	return strconv.ParseBool(req.FormValue(key))
 }
 
-func (hs *HttpService) formPositiveInt(req *http.Request, key string) (int, bool) {
-	str := strings.TrimSpace(req.FormValue(key))
+func (hs *HttpService) formTick(req *http.Request) (int64, error) {
+	str := strings.TrimSpace(req.FormValue("tick"))
 	if str == "" {
-		return 0, true
+		return 0, nil
 	}
-	value, err := strconv.Atoi(str)
-	return value, err == nil && value >= 0
-}
-
-func (hs *HttpService) formSeconds(req *http.Request) (int, error) {
-	days, ok1 := hs.formPositiveInt(req, "days")
-	hours, ok2 := hs.formPositiveInt(req, "hours")
-	minutes, ok3 := hs.formPositiveInt(req, "minutes")
-	seconds, ok4 := hs.formPositiveInt(req, "seconds")
-	if !ok1 || !ok2 || !ok3 || !ok4 {
-		return 0, ErrInvalidSeconds
+	tick, err := strconv.ParseInt(str, 10, 64)
+	if err != nil || tick < 0 {
+		return 0, ErrInvalidTick
 	}
-	return days*86400 + hours*3600 + minutes*60 + seconds, nil
+	return tick, nil
 }
 
 func (hs *HttpService) formCircleId(req *http.Request, key string) (int, error) { // nolint:golint

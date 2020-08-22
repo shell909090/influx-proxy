@@ -220,12 +220,12 @@ func (tx *Transfer) write(ch chan *QueryResult, dsts []*backend.Backend, db, mea
 	return nil
 }
 
-func (tx *Transfer) query(ch chan *QueryResult, src *backend.Backend, db, meas string, secs int) {
+func (tx *Transfer) query(ch chan *QueryResult, src *backend.Backend, db, meas string, tick int64) {
 	defer close(ch)
 	for offset := 0; ; offset += DefaultLimit {
 		whereClause := ""
-		if secs > 0 {
-			whereClause = fmt.Sprintf("where time >= %ds", time.Now().Unix()-int64(secs))
+		if tick > 0 {
+			whereClause = fmt.Sprintf("where time >= %ds", tick)
 		}
 		q := fmt.Sprintf("select * from \"%s\" %s order by time desc limit %d offset %d", util.EscapeIdentifier(meas), whereClause, DefaultLimit, offset)
 		rsp, err := src.QueryIQL("GET", db, q)
@@ -245,9 +245,9 @@ func (tx *Transfer) query(ch chan *QueryResult, src *backend.Backend, db, meas s
 	}
 }
 
-func (tx *Transfer) transfer(src *backend.Backend, dsts []*backend.Backend, db, meas string, secs int) error {
+func (tx *Transfer) transfer(src *backend.Backend, dsts []*backend.Backend, db, meas string, tick int64) error {
 	ch := make(chan *QueryResult, 4)
-	go tx.query(ch, src, db, meas, secs)
+	go tx.query(ch, src, db, meas, tick)
 
 	var tagMap mapset.Set
 	var fieldMap map[string]string
@@ -268,15 +268,15 @@ func (tx *Transfer) transfer(src *backend.Backend, dsts []*backend.Backend, db, 
 	return tx.write(ch, dsts, db, meas, tagMap, fieldMap)
 }
 
-func (tx *Transfer) submitTransfer(cs *CircleState, src *backend.Backend, dsts []*backend.Backend, db, meas string, secs int) {
+func (tx *Transfer) submitTransfer(cs *CircleState, src *backend.Backend, dsts []*backend.Backend, db, meas string, tick int64) {
 	cs.wg.Add(1)
 	tx.pool.Submit(func() {
 		defer cs.wg.Done()
-		err := tx.transfer(src, dsts, db, meas, secs)
+		err := tx.transfer(src, dsts, db, meas, tick)
 		if err == nil {
-			tlog.Printf("transfer done, src:%s dst:%v db:%s meas:%s secs:%d", src.Url, getBackendUrls(dsts), db, meas, secs)
+			tlog.Printf("transfer done, src:%s dst:%v db:%s meas:%s tick:%d", src.Url, getBackendUrls(dsts), db, meas, tick)
 		} else {
-			tlog.Printf("transfer error: %s, src:%s dst:%v db:%s meas:%s secs:%d", err, src.Url, getBackendUrls(dsts), db, meas, secs)
+			tlog.Printf("transfer error: %s, src:%s dst:%v db:%s meas:%s tick:%d", err, src.Url, getBackendUrls(dsts), db, meas, tick)
 		}
 	})
 }
@@ -418,7 +418,7 @@ func (tx *Transfer) runRecovery(fcs *CircleState, be *backend.Backend, db string
 	return
 }
 
-func (tx *Transfer) Resync(dbs []string, secs int) {
+func (tx *Transfer) Resync(dbs []string, tick int64) {
 	tx.setLogOutput("resync.log")
 	dbs, err := tx.createDatabases(dbs)
 	if err != nil || len(dbs) == 0 {
@@ -439,7 +439,7 @@ func (tx *Transfer) Resync(dbs []string, secs int) {
 		tlog.Printf("resync start: circle %d", cs.CircleId)
 		for _, be := range cs.Backends {
 			cs.wg.Add(1)
-			go tx.runTransfer(cs, be, dbs, tx.runResync, secs)
+			go tx.runTransfer(cs, be, dbs, tx.runResync, tick)
 		}
 		cs.wg.Wait()
 		tlog.Printf("resync done: circle %d", cs.CircleId)
@@ -449,7 +449,7 @@ func (tx *Transfer) Resync(dbs []string, secs int) {
 }
 
 func (tx *Transfer) runResync(cs *CircleState, be *backend.Backend, db string, meas string, args []interface{}) (require bool) {
-	secs := args[0].(int)
+	tick := args[0].(int64)
 	key := backend.GetKey(db, meas)
 	dsts := make([]*backend.Backend, 0)
 	for _, tcs := range tx.CircleStates {
@@ -460,7 +460,7 @@ func (tx *Transfer) runResync(cs *CircleState, be *backend.Backend, db string, m
 	}
 	require = len(dsts) > 0
 	if require {
-		tx.submitTransfer(cs, be, dsts, db, meas, secs)
+		tx.submitTransfer(cs, be, dsts, db, meas, tick)
 	}
 	return
 }
