@@ -7,10 +7,10 @@ import (
 	"log"
 	"strings"
 
-	mapset "github.com/deckarep/golang-set"
+	"github.com/chengshiwen/influx-proxy/util"
 )
 
-var SupportCmds = mapset.NewSet(
+var SupportCmds = util.NewSet(
 	"show measurements",
 	"show series",
 	"show field keys",
@@ -243,10 +243,6 @@ func getMeasurement(tokens []string) (m string) {
 	return
 }
 
-func HeadStmtInSupportCmds(tokens []string, n int) (in bool) {
-	return SupportCmds.Contains(GetHeadStmtFromTokens(tokens, n))
-}
-
 func CheckQuery(q string) (tokens []string, check bool, from bool) {
 	tokens = ScanTokens(q, 0)
 	stmt := strings.ToLower(tokens[0])
@@ -266,17 +262,17 @@ func CheckQuery(q string) (tokens []string, check bool, from bool) {
 		for i := 2; i < len(tokens); i++ {
 			stmt := strings.ToLower(tokens[i])
 			if stmt == "from" {
-				check = HeadStmtInSupportCmds(tokens, i) || HeadStmtInSupportCmds(tokens, i-2)
+				check = SupportCmds[GetHeadStmtFromTokens(tokens, i)] || SupportCmds[GetHeadStmtFromTokens(tokens, i-2)]
 				return tokens, check, true
 			}
 		}
 	}
 	stmt2 := GetHeadStmtFromTokens(tokens, 2)
-	if SupportCmds.Contains(stmt2) {
+	if SupportCmds[stmt2] {
 		return tokens, true, stmt2 == "delete from" || stmt2 == "drop measurement"
 	}
 	stmt3 := GetHeadStmtFromTokens(tokens, 3)
-	if SupportCmds.Contains(stmt3) {
+	if SupportCmds[stmt3] {
 		return tokens, true, stmt3 == "drop series from"
 	}
 	return tokens, false, false

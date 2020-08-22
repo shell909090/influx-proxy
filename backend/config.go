@@ -5,6 +5,8 @@ import (
 	"errors"
 	"log"
 	"os"
+
+	"github.com/chengshiwen/influx-proxy/util"
 )
 
 const (
@@ -116,7 +118,7 @@ func (cfg *ProxyConfig) checkConfig() (err error) {
 	if len(cfg.Circles) == 0 {
 		return ErrEmptyCircles
 	}
-	set := make(map[string]bool)
+	set := util.NewSet()
 	for _, circle := range cfg.Circles {
 		if len(circle.Backends) == 0 {
 			return ErrEmptyBackends
@@ -128,7 +130,7 @@ func (cfg *ProxyConfig) checkConfig() (err error) {
 			if set[backend.Name] {
 				return ErrDuplicatedBackendName
 			}
-			set[backend.Name] = true
+			set.Add(backend.Name)
 		}
 	}
 	if cfg.HashKey != "idx" && cfg.HashKey != "name" && cfg.HashKey != "url" {

@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/chengshiwen/influx-proxy/util"
 )
 
 var (
@@ -23,19 +25,19 @@ var (
 
 type Proxy struct {
 	Circles []*Circle
-	DBSet   map[string]bool
+	DBSet   util.Set
 }
 
 func NewProxy(cfg *ProxyConfig) (ip *Proxy) {
 	ip = &Proxy{
 		Circles: make([]*Circle, len(cfg.Circles)),
-		DBSet:   make(map[string]bool),
+		DBSet:   util.NewSet(),
 	}
 	for idx, circfg := range cfg.Circles {
 		ip.Circles[idx] = NewCircle(circfg, cfg, idx)
 	}
 	for _, db := range cfg.DBList {
-		ip.DBSet[db] = true
+		ip.DBSet.Add(db)
 	}
 	return
 }

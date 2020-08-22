@@ -14,7 +14,6 @@ import (
 
 	"github.com/chengshiwen/influx-proxy/backend"
 	"github.com/chengshiwen/influx-proxy/util"
-	mapset "github.com/deckarep/golang-set"
 	"github.com/influxdata/influxdb1-client/models"
 	"github.com/panjf2000/ants/v2"
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -140,9 +139,9 @@ func reformFieldKeys(fieldKeys map[string][]string) map[string]string {
 	// The SELECT statement returns all field values if all values have the same type.
 	// If field value types differ across shards, InfluxDB first performs any applicable cast operations and
 	// then returns all values with the type that occurs first in the following list: float, integer, string, boolean.
-	fieldSet := make(map[string]mapset.Set, len(fieldKeys))
+	fieldSet := make(map[string]util.Set, len(fieldKeys))
 	for field, types := range fieldKeys {
-		fieldSet[field] = util.NewSetFromStrSlice(types)
+		fieldSet[field] = util.NewSetFromSlice(types)
 	}
 	fieldMap := make(map[string]string, len(fieldKeys))
 	for field, types := range fieldKeys {
@@ -150,7 +149,7 @@ func reformFieldKeys(fieldKeys map[string][]string) map[string]string {
 			fieldMap[field] = types[0]
 		} else {
 			for _, dt := range FieldTypes {
-				if fieldSet[field].Contains(dt) {
+				if fieldSet[field][dt] {
 					fieldMap[field] = dt
 					break
 				}
@@ -160,7 +159,7 @@ func reformFieldKeys(fieldKeys map[string][]string) map[string]string {
 	return fieldMap
 }
 
-func (tx *Transfer) write(ch chan *QueryResult, dsts []*backend.Backend, db, meas string, tagMap mapset.Set, fieldMap map[string]string) error {
+func (tx *Transfer) write(ch chan *QueryResult, dsts []*backend.Backend, db, meas string, tagMap util.Set, fieldMap map[string]string) error {
 	var buf bytes.Buffer
 	var wg sync.WaitGroup
 	pool, err := ants.NewPool(len(dsts) * 20)
@@ -181,7 +180,7 @@ func (tx *Transfer) write(ch chan *QueryResult, dsts []*backend.Backend, db, mea
 			for i := 1; i < len(value); i++ {
 				k := columns[i]
 				v := value[i]
-				if tagMap.Contains(k) {
+				if tagMap[k] {
 					if v != nil {
 						mtagSet = append(mtagSet, fmt.Sprintf("%s=%s", util.EscapeTag(k), util.EscapeTag(v.(string))))
 					}
@@ -252,14 +251,14 @@ func (tx *Transfer) transfer(src *backend.Backend, dsts []*backend.Backend, db, 
 	ch := make(chan *QueryResult, 4)
 	go tx.query(ch, src, db, meas, tick)
 
-	var tagMap mapset.Set
+	var tagMap util.Set
 	var fieldMap map[string]string
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		tagKeys := src.GetTagKeys(db, meas)
-		tagMap = util.NewSetFromStrSlice(tagKeys)
+		tagMap = util.NewSetFromSlice(tagKeys)
 	}()
 	wg.Add(1)
 	go func() {
@@ -390,7 +389,7 @@ func (tx *Transfer) Recovery(fromCircleId, toCircleId int, backendUrls []string,
 	tx.broadcastTransferring(tcs, true)
 	defer tx.broadcastTransferring(tcs, false)
 
-	backendUrlSet := mapset.NewSet() // nolint:golint
+	backendUrlSet := util.NewSet() // nolint:golint
 	if len(backendUrls) != 0 {
 		for _, u := range backendUrls {
 			backendUrlSet.Add(u)
@@ -411,10 +410,10 @@ func (tx *Transfer) Recovery(fromCircleId, toCircleId int, backendUrls []string,
 
 func (tx *Transfer) runRecovery(fcs *CircleState, be *backend.Backend, db string, meas string, args []interface{}) (require bool) {
 	tcs := args[0].(*CircleState)
-	backendUrlSet := args[1].(mapset.Set) // nolint:golint
+	backendUrlSet := args[1].(util.Set) // nolint:golint
 	key := backend.GetKey(db, meas)
 	dst := tcs.GetBackend(key)
-	require = backendUrlSet.Contains(dst.Url)
+	require = backendUrlSet[dst.Url]
 	if require {
 		tx.submitTransfer(fcs, be, []*backend.Backend{dst}, db, meas, 0)
 	}
