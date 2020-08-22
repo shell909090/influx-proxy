@@ -21,6 +21,8 @@ import (
 
 var (
 	FieldTypes    = []string{"float", "integer", "string", "boolean"}
+	RetryCount    = 10
+	RetryInterval = 15
 	DefaultWorker = 1
 	DefaultBatch  = 25000
 	DefaultLimit  = 1000000
@@ -208,9 +210,19 @@ func (tx *Transfer) write(ch chan *QueryResult, dsts []*backend.Backend, db, mea
 					wg.Add(1)
 					pool.Submit(func() {
 						defer wg.Done()
-						err := dst.Write(db, p)
+						var err error
+						for i := 0; i <= RetryCount; i++ {
+							if i > 0 {
+								time.Sleep(time.Duration(RetryInterval) * time.Second)
+								tlog.Printf("transfer write retry: %d, last err:%s dst:%s db:%s meas:%s", i, err, dst.Url, db, meas)
+							}
+							err = dst.Write(db, p)
+							if err == nil {
+								break
+							}
+						}
 						if err != nil {
-							tlog.Printf("transfer write error: %s, dst:%v db:%s meas:%s", err, dst.Url, db, meas)
+							tlog.Printf("transfer write error: %s, dst:%s db:%s meas:%s", err, dst.Url, db, meas)
 						}
 					})
 				}
@@ -230,7 +242,18 @@ func (tx *Transfer) query(ch chan *QueryResult, src *backend.Backend, db, meas s
 			whereClause = fmt.Sprintf("where time >= %ds", tick)
 		}
 		q := fmt.Sprintf("select * from \"%s\" %s order by time desc limit %d offset %d", util.EscapeIdentifier(meas), whereClause, tx.Limit, offset)
-		rsp, err := src.QueryIQL("GET", db, q)
+		var rsp []byte
+		var err error
+		for i := 0; i <= RetryCount; i++ {
+			if i > 0 {
+				time.Sleep(time.Duration(RetryInterval) * time.Second)
+				tlog.Printf("transfer query retry: %d, last err:%s src:%s db:%s meas:%s tick:%d limit:%d offset:%d", i, err, src.Url, db, meas, tick, tx.Limit, offset)
+			}
+			rsp, err = src.QueryIQL("GET", db, q)
+			if err == nil {
+				break
+			}
+		}
 		if err != nil {
 			ch <- &QueryResult{Err: err}
 			return
