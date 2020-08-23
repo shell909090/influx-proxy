@@ -18,7 +18,7 @@ var (
 	ErrEmptyBackends         = errors.New("backends cannot be empty")
 	ErrEmptyBackendName      = errors.New("backend name cannot be empty")
 	ErrDuplicatedBackendName = errors.New("backend name duplicated")
-	ErrInvalidHashKey        = errors.New("invalid hash_key, should be idx, name or url")
+	ErrInvalidHashKey        = errors.New("invalid hash_key, require idx, exi, name or url")
 )
 
 type BackendConfig struct { // nolint:golint
@@ -133,7 +133,7 @@ func (cfg *ProxyConfig) checkConfig() (err error) {
 			set.Add(backend.Name)
 		}
 	}
-	if cfg.HashKey != "idx" && cfg.HashKey != "name" && cfg.HashKey != "url" {
+	if cfg.HashKey != "idx" && cfg.HashKey != "exi" && cfg.HashKey != "name" && cfg.HashKey != "url" {
 		return ErrInvalidHashKey
 	}
 	return
