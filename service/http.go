@@ -246,7 +246,7 @@ func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request
 		return
 	}
 
-	dbs := hs.formValues(req, "db")
+	dbs := hs.formValues(req, "dbs")
 	go hs.tx.Rebalance(circleId, backends, dbs)
 	hs.WriteText(w, 202, "accepted")
 }
@@ -288,7 +288,7 @@ func (hs *HttpService) HandlerRecovery(w http.ResponseWriter, req *http.Request)
 	}
 
 	backendUrls := hs.formValues(req, "backend_urls")
-	dbs := hs.formValues(req, "db")
+	dbs := hs.formValues(req, "dbs")
 	go hs.tx.Recovery(fromCircleId, toCircleId, backendUrls, dbs)
 	hs.WriteText(w, 202, "accepted")
 }
@@ -322,7 +322,7 @@ func (hs *HttpService) HandlerResync(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	dbs := hs.formValues(req, "db")
+	dbs := hs.formValues(req, "dbs")
 	go hs.tx.Resync(dbs, tick)
 	hs.WriteText(w, 202, "accepted")
 }
