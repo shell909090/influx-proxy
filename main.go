@@ -17,8 +17,8 @@ import (
 var (
 	ConfigFile string
 	Version    bool
-	GitCommit  string
-	BuildTime  string
+	GitCommit  = "not build"
+	BuildTime  = "not build"
 )
 
 func init() {
@@ -33,8 +33,8 @@ func main() {
 	if Version {
 		fmt.Printf("Version:    %s\n", backend.Version)
 		fmt.Printf("Git commit: %s\n", GitCommit)
-		fmt.Printf("Go version: %s\n", runtime.Version())
 		fmt.Printf("Build time: %s\n", BuildTime)
+		fmt.Printf("Go version: %s\n", runtime.Version())
 		fmt.Printf("OS/Arch:    %s/%s\n", runtime.GOOS, runtime.GOARCH)
 		return
 	}
@@ -44,11 +44,7 @@ func main() {
 		fmt.Printf("illegal config file: %s\n", err)
 		return
 	}
-	if GitCommit == "" {
-		log.Printf("version: %s", backend.Version)
-	} else {
-		log.Printf("version: %s, commit: %s, build: %s", backend.Version, GitCommit, BuildTime)
-	}
+	log.Printf("version: %s, commit: %s, build: %s", backend.Version, GitCommit, BuildTime)
 	cfg.PrintSummary()
 
 	err = util.MakeDir(cfg.DataDir)
