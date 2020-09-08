@@ -3,7 +3,6 @@ package backend
 import (
 	"bytes"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -321,16 +320,17 @@ func ParallelQuery(backends []*Backend, req *http.Request, w http.ResponseWriter
 			continue
 		}
 		wg.Add(1)
-		go func(be *Backend, req http.Request) {
+		go func(be *Backend) {
 			defer wg.Done()
-			req.Body = ioutil.NopCloser(&bytes.Buffer{})
-			req.Form = CloneForm(req.Form)
-			qr := be.Query(&req, decompress)
+			cr := CloneQueryRequest(req)
+			qr := be.Query(cr, decompress)
 			ch <- qr
-		}(be, *req)
+		}(be)
 	}
-	wg.Wait()
-	close(ch)
+	go func() {
+		wg.Wait()
+		close(ch)
+	}()
 	for qr := range ch {
 		if qr.Err != nil {
 			err = qr.Err
