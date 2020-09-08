@@ -7,7 +7,9 @@
 ## Keywords:
 ## X-URL:
 
-export GO_BUILD=GO111MODULE=on go build -o bin/influx-proxy -ldflags "-s -w -X main.GitCommit=$(shell git rev-parse --short HEAD) -X 'main.BuildTime=$(shell date '+%Y-%m-%d %H:%M:%S')'"
+export GO_BUILD=GO111MODULE=on CGO_ENABLED=0 go build -o bin/influx-proxy -ldflags "-s -w -X main.GitCommit=$(shell git rev-parse --short HEAD) -X 'main.BuildTime=$(shell date '+%Y-%m-%d %H:%M:%S')'"
+
+.PHONY: build linux test bench run lint down tidy clean
 
 all: build
 
@@ -15,7 +17,7 @@ build: lint
 	$(GO_BUILD)
 
 linux: lint
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GO_BUILD)
+	GOOS=linux GOARCH=amd64 $(GO_BUILD)
 
 test:
 	go test -v github.com/chengshiwen/influx-proxy/backend
