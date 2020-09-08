@@ -310,7 +310,7 @@ func (ib *Backend) GetHealth(ic *Circle) map[string]interface{} {
 	}
 }
 
-func ParallelQuery(backends []*Backend, req *http.Request, w http.ResponseWriter, decompress bool) (bodies [][]byte, inactive int, err error) {
+func QueryInParallel(backends []*Backend, req *http.Request, w http.ResponseWriter, decompress bool) (bodies [][]byte, inactive int, err error) {
 	var wg sync.WaitGroup
 	var header http.Header
 	req.Header.Set("Query-Origin", "Parallel")
@@ -324,8 +324,7 @@ func ParallelQuery(backends []*Backend, req *http.Request, w http.ResponseWriter
 		go func(be *Backend) {
 			defer wg.Done()
 			cr := CloneQueryRequest(req)
-			qr := be.Query(cr, decompress)
-			ch <- qr
+			ch <- be.Query(cr, nil, decompress)
 		}(be)
 	}
 	go func() {

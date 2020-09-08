@@ -231,7 +231,7 @@ func (hb *HttpBackend) WriteStream(db string, stream io.Reader, compressed bool)
 	return
 }
 
-func (hb *HttpBackend) Query(req *http.Request, decompress bool) (qr *QueryResult) {
+func (hb *HttpBackend) Query(req *http.Request, w http.ResponseWriter, decompress bool) (qr *QueryResult) {
 	qr = &QueryResult{}
 	if len(req.Form) == 0 {
 		req.Form = url.Values{}
@@ -259,6 +259,9 @@ func (hb *HttpBackend) Query(req *http.Request, decompress bool) (qr *QueryResul
 		return
 	}
 	defer resp.Body.Close()
+	if w != nil {
+		CopyHeader(w.Header(), resp.Header)
+	}
 
 	respBody := resp.Body
 	if decompress && resp.Header.Get("Content-Encoding") == "gzip" {
@@ -287,13 +290,13 @@ func (hb *HttpBackend) Query(req *http.Request, decompress bool) (qr *QueryResul
 }
 
 func (hb *HttpBackend) QueryIQL(method, db, q string) ([]byte, error) {
-	qr := hb.Query(NewQueryRequest(method, db, q), true)
+	qr := hb.Query(NewQueryRequest(method, db, q), nil, true)
 	return qr.Body, qr.Err
 }
 
 func (hb *HttpBackend) GetSeriesValues(db, q string) []string {
 	var values []string
-	qr := hb.Query(NewQueryRequest("GET", db, q), true)
+	qr := hb.Query(NewQueryRequest("GET", db, q), nil, true)
 	if qr.Err != nil {
 		return values
 	}
@@ -325,7 +328,7 @@ func (hb *HttpBackend) GetTagKeys(db, meas string) []string {
 func (hb *HttpBackend) GetFieldKeys(db, meas string) map[string][]string {
 	fieldKeys := make(map[string][]string)
 	q := fmt.Sprintf("show field keys from \"%s\"", util.EscapeIdentifier(meas))
-	qr := hb.Query(NewQueryRequest("GET", db, q), true)
+	qr := hb.Query(NewQueryRequest("GET", db, q), nil, true)
 	if qr.Err != nil {
 		return fieldKeys
 	}
@@ -341,7 +344,7 @@ func (hb *HttpBackend) GetFieldKeys(db, meas string) map[string][]string {
 
 func (hb *HttpBackend) DropMeasurement(db, meas string) ([]byte, error) {
 	q := fmt.Sprintf("drop measurement \"%s\"", util.EscapeIdentifier(meas))
-	qr := hb.Query(NewQueryRequest("POST", db, q), true)
+	qr := hb.Query(NewQueryRequest("POST", db, q), nil, true)
 	return qr.Body, qr.Err
 }
 

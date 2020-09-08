@@ -97,7 +97,7 @@ func (ic *Circle) CheckActive() bool {
 func (ic *Circle) Query(w http.ResponseWriter, req *http.Request, tokens []string) (body []byte, err error) {
 	// remove support of query parameter `chunked`
 	req.Form.Del("chunked")
-	bodies, inactive, err := ParallelQuery(ic.Backends, req, w, true)
+	bodies, inactive, err := QueryInParallel(ic.Backends, req, w, true)
 	if err != nil {
 		return
 	}

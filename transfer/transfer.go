@@ -117,7 +117,7 @@ func (tx *Transfer) createDatabases(dbs []string) ([]string, error) {
 		for _, db := range dbs {
 			q := fmt.Sprintf("create database \"%s\"", util.EscapeIdentifier(db))
 			req := backend.NewQueryRequest("POST", "", q)
-			_, _, err := backend.ParallelQuery(backends, req, nil, false)
+			_, _, err := backend.QueryInParallel(backends, req, nil, false)
 			if err != nil {
 				tlog.Printf("create databases error: %s, db: %s, dbs: %v", err, db, dbs)
 				return dbs, err

@@ -128,9 +128,8 @@ func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request) (body []byte, e
 			}
 			be := circle.GetBackend(key)
 			if be.Active {
-				qr := be.Query(req, false)
+				qr := be.Query(req, w, false)
 				if qr.Status > 0 || len(badSet) == len(ip.Circles)-1 {
-					CopyHeader(w.Header(), qr.Header)
 					return qr.Body, qr.Err
 				}
 			}
@@ -173,7 +172,7 @@ func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request) (body []byte, e
 				return nil, fmt.Errorf("backend %s(%s) unavailable", be.Name, be.Url)
 			}
 		}
-		bodies, _, err := ParallelQuery(backends, req, w, false)
+		bodies, _, err := QueryInParallel(backends, req, w, false)
 		if err != nil {
 			return nil, err
 		}
@@ -189,7 +188,7 @@ func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request) (body []byte, e
 		for _, circle := range ip.Circles {
 			backends = append(backends, circle.Backends...)
 		}
-		bodies, _, err := ParallelQuery(backends, req, w, false)
+		bodies, _, err := QueryInParallel(backends, req, w, false)
 		if err != nil {
 			return nil, err
 		}
