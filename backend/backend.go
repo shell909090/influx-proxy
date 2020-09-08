@@ -313,6 +313,7 @@ func (ib *Backend) GetHealth(ic *Circle) map[string]interface{} {
 func ParallelQuery(backends []*Backend, req *http.Request, w http.ResponseWriter, decompress bool) (bodies [][]byte, inactive int, err error) {
 	var wg sync.WaitGroup
 	var header http.Header
+	req.Header.Set("Query-Origin", "Parallel")
 	ch := make(chan *QueryResult, len(backends))
 	for _, be := range backends {
 		if !be.Active {

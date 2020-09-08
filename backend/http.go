@@ -252,7 +252,10 @@ func (hb *HttpBackend) Query(req *http.Request, decompress bool) (qr *QueryResul
 	q := strings.TrimSpace(req.FormValue("q"))
 	resp, err := hb.transport.RoundTrip(req)
 	if err != nil {
-		log.Printf("query error: %s, the query is %s", err, q)
+		if req.Header.Get("Query-Origin") != "Parallel" || err.Error() != "context canceled" {
+			qr.Err = err
+			log.Printf("query error: %s, the query is %s", err, q)
+		}
 		return
 	}
 	defer resp.Body.Close()
