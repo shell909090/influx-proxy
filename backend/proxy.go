@@ -16,11 +16,11 @@ import (
 )
 
 var (
-	ErrEmptyQuery         = errors.New("empty query")
-	ErrDatabaseNotFound   = errors.New("database not found")
-	ErrUnavailableCircles = errors.New("circles unavailable")
-	ErrGetMeasurement     = errors.New("can't get measurement")
-	ErrGetBackends        = errors.New("can't get backends")
+	ErrEmptyQuery          = errors.New("empty query")
+	ErrDatabaseNotFound    = errors.New("database not found")
+	ErrBackendsUnavailable = errors.New("backends unavailable")
+	ErrGetMeasurement      = errors.New("can't get measurement")
+	ErrGetBackends         = errors.New("can't get backends")
 )
 
 type Proxy struct {
@@ -39,6 +39,7 @@ func NewProxy(cfg *ProxyConfig) (ip *Proxy) {
 	for _, db := range cfg.DBList {
 		ip.DBSet.Add(db)
 	}
+	rand.Seed(time.Now().Unix())
 	return
 }
 
@@ -103,46 +104,61 @@ func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request) (body []byte, e
 		}
 	}
 
-	if CheckSelectOrShowFromTokens(tokens) {
-		var circle *Circle
+	selectOrShow := CheckSelectOrShowFromTokens(tokens)
+	if selectOrShow && from {
+		// available circle -> backend by key(db,meas) -> select or show
+		meas, err := GetMeasurementFromTokens(tokens)
+		if err != nil {
+			return nil, ErrGetMeasurement
+		}
+		key := GetKey(db, meas)
 		badSet := make(map[int]bool)
 		for {
+			if len(badSet) == len(ip.Circles) {
+				return nil, ErrBackendsUnavailable
+			}
 			id := rand.Intn(len(ip.Circles))
 			if badSet[id] {
 				continue
 			}
-			circle = ip.Circles[id]
+			circle := ip.Circles[id]
+			if circle.WriteOnly {
+				badSet[id] = true
+				continue
+			}
+			be := circle.GetBackend(key)
+			if be.Active {
+				qr := be.Query(req, false)
+				if qr.Status > 0 || len(badSet) == len(ip.Circles)-1 {
+					CopyHeader(w.Header(), qr.Header)
+					return qr.Body, qr.Err
+				}
+			}
+			badSet[id] = true
+		}
+	} else if selectOrShow && !from {
+		// available circle -> all backends -> show
+		badSet := make(map[int]bool)
+		for {
+			id := rand.Intn(len(ip.Circles))
+			if len(badSet) == len(ip.Circles) {
+				return ip.Circles[id].Query(w, req, tokens)
+			}
+			if badSet[id] {
+				continue
+			}
+			circle := ip.Circles[id]
 			if circle.WriteOnly {
 				badSet[id] = true
 				continue
 			}
 			if circle.CheckActive() {
-				break
+				return circle.Query(w, req, tokens)
 			}
 			badSet[id] = true
-			if len(badSet) == len(ip.Circles) {
-				return nil, ErrUnavailableCircles
-			}
-			time.Sleep(time.Microsecond)
 		}
-		if from {
-			meas, err := GetMeasurementFromTokens(tokens)
-			if err != nil {
-				return nil, ErrGetMeasurement
-			}
-			// available circle -> key(db,meas) -> backend -> select or show
-			key := GetKey(db, meas)
-			be := circle.GetBackend(key)
-			// log.Printf("query circle: %d backend: %s", circle.CircleId, be.Url)
-			qr := be.Query(req, false)
-			CopyHeader(w.Header(), qr.Header)
-			return qr.Body, qr.Err
-		}
-		// available circle -> all backends -> show
-		// log.Printf("query circle: %d", circle.CircleId)
-		return circle.Query(w, req, tokens)
 	} else if CheckDeleteOrDropMeasurementFromTokens(tokens) {
-		// all circles -> key(db,meas) -> backend -> delete or drop
+		// all circles -> backend by key(db,meas) -> delete or drop
 		meas, err := GetMeasurementFromTokens(tokens)
 		if err != nil {
 			return nil, err
@@ -154,7 +170,7 @@ func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request) (body []byte, e
 		}
 		for _, be := range backends {
 			if !be.Active {
-				return nil, fmt.Errorf("backend %s(%s) not active", be.Name, be.Url)
+				return nil, fmt.Errorf("backend %s(%s) unavailable", be.Name, be.Url)
 			}
 		}
 		bodies, _, err := ParallelQuery(backends, req, w, false)
@@ -166,7 +182,7 @@ func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request) (body []byte, e
 		// all circles -> all backends -> create or drop database
 		for _, circle := range ip.Circles {
 			if !circle.CheckActive() {
-				return nil, fmt.Errorf("circle %d not active", circle.CircleId)
+				return nil, fmt.Errorf("circle %d unavailable", circle.CircleId)
 			}
 		}
 		backends := make([]*Backend, 0)

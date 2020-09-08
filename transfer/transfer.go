@@ -322,7 +322,7 @@ func (tx *Transfer) submitCleanup(cs *CircleState, be *backend.Backend, db, meas
 func (tx *Transfer) runTransfer(cs *CircleState, be *backend.Backend, dbs []string, fn func(*CircleState, *backend.Backend, string, string, []interface{}) bool, args ...interface{}) {
 	defer cs.wg.Done()
 	if !be.Active {
-		tlog.Printf("backend not active: %s", be.Url)
+		tlog.Printf("backend unavailable: %s", be.Url)
 		return
 	}
 

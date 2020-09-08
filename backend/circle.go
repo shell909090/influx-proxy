@@ -121,7 +121,7 @@ func (ic *Circle) Query(w http.ResponseWriter, req *http.Request, tokens []strin
 		rsp = ResponseFromSeries(nil)
 	}
 	if inactive > 0 {
-		rsp.Err = fmt.Sprintf("%d/%d backends not active", inactive, inactive+len(bodies))
+		rsp.Err = fmt.Sprintf("%d/%d backends unavailable", inactive, inactive+len(bodies))
 	}
 	pretty := req.URL.Query().Get("pretty") == "true"
 	body = util.MarshalJSON(rsp, pretty)
