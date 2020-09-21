@@ -85,6 +85,16 @@ func (ic *Circle) GetHealth() []map[string]interface{} {
 	return health
 }
 
+func (ic *Circle) GetActiveCount() int {
+	count := 0
+	for _, be := range ic.Backends {
+		if be.Active {
+			count++
+		}
+	}
+	return count
+}
+
 func (ic *Circle) CheckActive() bool {
 	for _, be := range ic.Backends {
 		if !be.Active {
@@ -100,6 +110,9 @@ func (ic *Circle) Query(w http.ResponseWriter, req *http.Request, tokens []strin
 	bodies, inactive, err := QueryInParallel(ic.Backends, req, w, true)
 	if err != nil {
 		return
+	}
+	if inactive > 0 && len(bodies) == 0 {
+		return nil, ErrBackendsUnavailable
 	}
 
 	var rsp *Response

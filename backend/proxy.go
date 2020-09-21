@@ -82,6 +82,22 @@ func (ip *Proxy) GetHealth() []map[string]interface{} {
 	return health
 }
 
+func (ip *Proxy) optimalCircle() (c *Circle) {
+	actives := make([]int, len(ip.Circles))
+	for i, c := range ip.Circles {
+		actives[i] = c.GetActiveCount()
+	}
+	maxActive := actives[0]
+	c = ip.Circles[0]
+	for i := 1; i < len(actives); i++ {
+		if maxActive < actives[i] {
+			maxActive = actives[i]
+			c = ip.Circles[i]
+		}
+	}
+	return
+}
+
 func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request) (body []byte, err error) {
 	q := strings.TrimSpace(req.FormValue("q"))
 	if q == "" {
@@ -144,10 +160,10 @@ func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request) (body []byte, e
 		// available circle -> all backends -> show
 		badSet := make(map[int]bool)
 		for {
-			id := rand.Intn(len(ip.Circles))
 			if len(badSet) == len(ip.Circles) {
-				return ip.Circles[id].Query(w, req, tokens)
+				return ip.optimalCircle().Query(w, req, tokens)
 			}
+			id := rand.Intn(len(ip.Circles))
 			if badSet[id] {
 				continue
 			}
