@@ -68,7 +68,12 @@ func (ip *Proxy) GetHealth() []map[string]interface{} {
 		go func(i int, c *Circle) {
 			defer wg.Done()
 			health[i] = map[string]interface{}{
-				"circle":   map[string]interface{}{"id": c.CircleId, "name": c.Name, "write_only": c.WriteOnly},
+				"circle": map[string]interface{}{
+					"id":         c.CircleId,
+					"name":       c.Name,
+					"active":     c.CheckActive(),
+					"write_only": c.WriteOnly,
+				},
 				"backends": c.GetHealth(),
 			}
 		}(i, c)
