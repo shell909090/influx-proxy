@@ -116,7 +116,7 @@ func (tx *Transfer) createDatabases(dbs []string) ([]string, error) {
 		}
 		for _, db := range dbs {
 			q := fmt.Sprintf("create database \"%s\"", util.EscapeIdentifier(db))
-			req := backend.NewQueryRequest("POST", "", q)
+			req := backend.NewQueryRequest("POST", "", q, "")
 			_, _, err := backend.QueryInParallel(backends, req, nil, false)
 			if err != nil {
 				tlog.Printf("create databases error: %s, db: %s, dbs: %v", err, db, dbs)
@@ -200,8 +200,7 @@ func (tx *Transfer) write(ch chan *QueryResult, dsts []*backend.Backend, db, mea
 			}
 			mtagStr := strings.Join(mtagSet, ",")
 			fieldStr := strings.Join(fieldSet, ",")
-			ts, _ := time.Parse(time.RFC3339Nano, value[0].(string))
-			line := fmt.Sprintf("%s %s %d\n", mtagStr, fieldStr, ts.UnixNano())
+			line := fmt.Sprintf("%s %s %v\n", mtagStr, fieldStr, value[0])
 			buf.WriteString(line)
 			if (idx+1)%tx.Batch == 0 || idx+1 == valen {
 				p := buf.Bytes()
@@ -249,7 +248,7 @@ func (tx *Transfer) query(ch chan *QueryResult, src *backend.Backend, db, meas s
 				time.Sleep(time.Duration(RetryInterval) * time.Second)
 				tlog.Printf("transfer query retry: %d, last err:%s src:%s db:%s meas:%s tick:%d limit:%d offset:%d", i, err, src.Url, db, meas, tick, tx.Limit, offset)
 			}
-			rsp, err = src.QueryIQL("GET", db, q)
+			rsp, err = src.QueryIQL("GET", db, q, "ns")
 			if err == nil {
 				break
 			}
