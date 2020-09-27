@@ -31,11 +31,15 @@ type Response struct {
 	Err     string    `json:"error,omitempty"`
 }
 
-func SeriesFromResponseBytes(b []byte) (series models.Rows, e error) {
-	rsp := &Response{}
+func (rsp *Response) Unmarshal(b []byte) (e error) {
 	dec := jsoniter.NewDecoder(bytes.NewReader(b))
 	dec.UseNumber()
-	e = dec.Decode(rsp)
+	return dec.Decode(rsp)
+}
+
+func SeriesFromResponseBytes(b []byte) (series models.Rows, e error) {
+	rsp := &Response{}
+	e = rsp.Unmarshal(b)
 	if e == nil && len(rsp.Results) > 0 && len(rsp.Results[0].Series) > 0 {
 		series = rsp.Results[0].Series
 	}
@@ -44,7 +48,7 @@ func SeriesFromResponseBytes(b []byte) (series models.Rows, e error) {
 
 func ResultsFromResponseBytes(b []byte) (results []*Result, e error) {
 	rsp := &Response{}
-	e = jsoniter.Unmarshal(b, rsp)
+	e = rsp.Unmarshal(b)
 	if e == nil && len(rsp.Results) > 0 {
 		results = rsp.Results
 	}
@@ -53,7 +57,7 @@ func ResultsFromResponseBytes(b []byte) (results []*Result, e error) {
 
 func ResponseFromResponseBytes(b []byte) (rsp *Response, e error) {
 	rsp = &Response{}
-	e = jsoniter.Unmarshal(b, rsp)
+	e = rsp.Unmarshal(b)
 	return
 }
 
