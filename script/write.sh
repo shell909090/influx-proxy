@@ -11,9 +11,9 @@ cpu1,host=server02,region=us-west value=0.55,id=2i,running=true,status="ok" 1422
 cpu1,host=server01,region=us-east,direction=in value=2.0,id=1i,running=false,status="fail" 1583599143422568543'
 
 curl -i -X POST 'http://127.0.0.1:7076/write?db=db1&precision=s' --data-binary \
-'cpu2,host=server02 value=0.67,id=2i,running=true,status="ok"
-cpu2,host=server03,region=us-east value=0.93,id=3i 1422568543
-cpu2,host=server04,region=us-west,direction=out running=false,status="fail" 1596819659'
+'cpu2,host=server02 float=1422568543,long=1422568544i,running=true,status="ok"
+cpu2,host=server03,region=us-east float=1422568543702,long=1422568543703i 1422568543
+cpu2,host=server04,region=us-west,direction=out float=1422568543702568543,long=1422568543702568544i,running=false,status="fail" 1596819659'
 
 curl -i -X POST 'http://127.0.0.1:7076/write?db=db2&precision=h' --data-binary \
 'cpu3,host=server05,region=cn\ north,tag\ key=tag\ value idle=64,system=1i,user="Dwayne Johnson",admin=true

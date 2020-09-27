@@ -1,6 +1,8 @@
 package backend
 
 import (
+	"bytes"
+
 	"github.com/influxdata/influxdb1-client/models"
 	jsoniter "github.com/json-iterator/go"
 )
@@ -31,7 +33,9 @@ type Response struct {
 
 func SeriesFromResponseBytes(b []byte) (series models.Rows, e error) {
 	rsp := &Response{}
-	e = jsoniter.Unmarshal(b, rsp)
+	dec := jsoniter.NewDecoder(bytes.NewReader(b))
+	dec.UseNumber()
+	e = dec.Decode(rsp)
 	if e == nil && len(rsp.Results) > 0 && len(rsp.Results[0].Series) > 0 {
 		series = rsp.Results[0].Series
 	}
