@@ -71,17 +71,27 @@ func (ic *Circle) GetBackend(key string) *Backend {
 	return be
 }
 
-func (ic *Circle) GetHealth() []map[string]interface{} {
+func (ic *Circle) GetHealth() interface{} {
 	var wg sync.WaitGroup
-	health := make([]map[string]interface{}, len(ic.Backends))
+	backends := make([]interface{}, len(ic.Backends))
 	for i, be := range ic.Backends {
 		wg.Add(1)
 		go func(i int, be *Backend) {
 			defer wg.Done()
-			health[i] = be.GetHealth(ic)
+			backends[i] = be.GetHealth(ic)
 		}(i, be)
 	}
 	wg.Wait()
+	circle := struct {
+		Id        int    `json:"id"` // nolint:golint
+		Name      string `json:"name"`
+		Active    bool   `json:"active"`
+		WriteOnly bool   `json:"write_only"`
+	}{ic.CircleId, ic.Name, ic.IsActive(), ic.WriteOnly}
+	health := struct {
+		Circle   interface{} `json:"circle"`
+		Backends interface{} `json:"backends"`
+	}{circle, backends}
 	return health
 }
 
@@ -95,7 +105,7 @@ func (ic *Circle) GetActiveCount() int {
 	return count
 }
 
-func (ic *Circle) CheckActive() bool {
+func (ic *Circle) IsActive() bool {
 	for _, be := range ic.Backends {
 		if !be.Active {
 			return false

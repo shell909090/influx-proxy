@@ -60,22 +60,14 @@ func (ip *Proxy) GetBackends(key string) []*Backend {
 	return backends
 }
 
-func (ip *Proxy) GetHealth() []map[string]interface{} {
+func (ip *Proxy) GetHealth() []interface{} {
 	var wg sync.WaitGroup
-	health := make([]map[string]interface{}, len(ip.Circles))
+	health := make([]interface{}, len(ip.Circles))
 	for i, c := range ip.Circles {
 		wg.Add(1)
 		go func(i int, c *Circle) {
 			defer wg.Done()
-			health[i] = map[string]interface{}{
-				"circle": map[string]interface{}{
-					"id":         c.CircleId,
-					"name":       c.Name,
-					"active":     c.CheckActive(),
-					"write_only": c.WriteOnly,
-				},
-				"backends": c.GetHealth(),
-			}
+			health[i] = c.GetHealth()
 		}(i, c)
 	}
 	wg.Wait()
@@ -172,7 +164,7 @@ func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request) (body []byte, e
 				badSet[id] = true
 				continue
 			}
-			if circle.CheckActive() {
+			if circle.IsActive() {
 				return circle.Query(w, req, tokens)
 			}
 			badSet[id] = true
@@ -201,7 +193,7 @@ func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request) (body []byte, e
 	} else if alterDb {
 		// all circles -> all backends -> create or drop database
 		for _, circle := range ip.Circles {
-			if !circle.CheckActive() {
+			if !circle.IsActive() {
 				return nil, fmt.Errorf("circle %d unavailable", circle.CircleId)
 			}
 		}

@@ -268,7 +268,7 @@ func (ib *Backend) Close() {
 	close(ib.chWrite)
 }
 
-func (ib *Backend) GetHealth(ic *Circle) map[string]interface{} {
+func (ib *Backend) GetHealth(ic *Circle) interface{} {
 	var wg sync.WaitGroup
 	var smap sync.Map
 	dbs := ib.GetDatabases()
@@ -295,19 +295,26 @@ func (ib *Backend) GetHealth(ic *Circle) map[string]interface{} {
 		}(db)
 	}
 	wg.Wait()
+	healthy := true
 	stats := make(map[string]map[string]int)
 	smap.Range(func(k, v interface{}) bool {
-		stats[k.(string)] = v.(map[string]int)
+		sm := v.(map[string]int)
+		stats[k.(string)] = sm
+		if sm["incorrect"] > 0 {
+			healthy = false
+		}
 		return true
 	})
-	return map[string]interface{}{
-		"name":    ib.Name,
-		"url":     ib.Url,
-		"active":  ib.Active,
-		"backlog": ib.fb.IsData(),
-		"rewrite": ib.rewriteRunning,
-		"stats":   stats,
-	}
+	health := struct {
+		Name    string      `json:"name"`
+		Url     string      `json:"url"` // nolint:golint
+		Active  bool        `json:"active"`
+		Backlog bool        `json:"backlog"`
+		Rewrite bool        `json:"rewrite"`
+		Healthy bool        `json:"healthy"`
+		Stats   interface{} `json:"stats"`
+	}{ib.Name, ib.Url, ib.Active, ib.fb.IsData(), ib.rewriteRunning, healthy, stats}
+	return health
 }
 
 func QueryInParallel(backends []*Backend, req *http.Request, w http.ResponseWriter, decompress bool) (bodies [][]byte, inactive int, err error) {
