@@ -71,14 +71,14 @@ func (ic *Circle) GetBackend(key string) *Backend {
 	return be
 }
 
-func (ic *Circle) GetHealth() interface{} {
+func (ic *Circle) GetHealth(stats bool) interface{} {
 	var wg sync.WaitGroup
 	backends := make([]interface{}, len(ic.Backends))
 	for i, be := range ic.Backends {
 		wg.Add(1)
 		go func(i int, be *Backend) {
 			defer wg.Done()
-			backends[i] = be.GetHealth(ic)
+			backends[i] = be.GetHealth(ic, stats)
 		}(i, be)
 	}
 	wg.Wait()

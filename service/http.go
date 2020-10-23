@@ -143,7 +143,8 @@ func (hs *HttpService) HandlerHealth(w http.ResponseWriter, req *http.Request) {
 	if !hs.checkMethodAndAuth(w, req, "GET") {
 		return
 	}
-	hs.Write(w, req, 200, hs.ip.GetHealth())
+	stats := req.URL.Query().Get("stats") == "true"
+	hs.Write(w, req, 200, hs.ip.GetHealth(stats))
 }
 
 func (hs *HttpService) HandlerReplica(w http.ResponseWriter, req *http.Request) {

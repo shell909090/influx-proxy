@@ -60,14 +60,14 @@ func (ip *Proxy) GetBackends(key string) []*Backend {
 	return backends
 }
 
-func (ip *Proxy) GetHealth() []interface{} {
+func (ip *Proxy) GetHealth(stats bool) []interface{} {
 	var wg sync.WaitGroup
 	health := make([]interface{}, len(ip.Circles))
 	for i, c := range ip.Circles {
 		wg.Add(1)
 		go func(i int, c *Circle) {
 			defer wg.Done()
-			health[i] = c.GetHealth()
+			health[i] = c.GetHealth(stats)
 		}(i, c)
 	}
 	wg.Wait()

@@ -268,7 +268,25 @@ func (ib *Backend) Close() {
 	close(ib.chWrite)
 }
 
-func (ib *Backend) GetHealth(ic *Circle) interface{} {
+func (ib *Backend) GetHealth(ic *Circle, withStats bool) interface{} {
+	health := struct {
+		Name    string      `json:"name"`
+		Url     string      `json:"url"` // nolint:golint
+		Active  bool        `json:"active"`
+		Backlog bool        `json:"backlog"`
+		Rewrite bool        `json:"rewrite"`
+		Healthy bool        `json:"healthy,omitempty"`
+		Stats   interface{} `json:"stats,omitempty"`
+	}{
+		Name:    ib.Name,
+		Url:     ib.Url,
+		Active:  ib.Active,
+		Backlog: ib.fb.IsData(),
+		Rewrite: ib.rewriteRunning,
+	}
+	if !withStats {
+		return health
+	}
 	var wg sync.WaitGroup
 	var smap sync.Map
 	dbs := ib.GetDatabases()
@@ -305,15 +323,8 @@ func (ib *Backend) GetHealth(ic *Circle) interface{} {
 		}
 		return true
 	})
-	health := struct {
-		Name    string      `json:"name"`
-		Url     string      `json:"url"` // nolint:golint
-		Active  bool        `json:"active"`
-		Backlog bool        `json:"backlog"`
-		Rewrite bool        `json:"rewrite"`
-		Healthy bool        `json:"healthy"`
-		Stats   interface{} `json:"stats"`
-	}{ib.Name, ib.Url, ib.Active, ib.fb.IsData(), ib.rewriteRunning, healthy, stats}
+	health.Healthy = healthy
+	health.Stats = stats
 	return health
 }
 
