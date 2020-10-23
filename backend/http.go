@@ -215,6 +215,7 @@ func (hb *HttpBackend) WriteStream(db string, stream io.Reader, compressed bool)
 		err = ErrNotFound
 	case 500:
 		err = ErrInternal
+		hb.Active = false
 	default: // mostly tcp connection timeout, or request entity too large
 		err = ErrUnknown
 	}
