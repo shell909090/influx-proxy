@@ -120,17 +120,14 @@ func (ib *Backend) WriteBuffer(point *LinePoint) (err error) {
 
 	switch {
 	case cb.Counter >= ib.flushSize:
-		err = ib.FlushBuffer(db)
-		if err != nil {
-			return
-		}
+		ib.FlushBuffer(db)
 	case ib.chTimer == nil:
 		ib.chTimer = time.After(time.Duration(ib.flushTime) * time.Second)
 	}
 	return
 }
 
-func (ib *Backend) FlushBuffer(db string) (err error) {
+func (ib *Backend) FlushBuffer(db string) {
 	cb := ib.buffers[db]
 	if cb.Buffer == nil {
 		return
@@ -146,7 +143,7 @@ func (ib *Backend) FlushBuffer(db string) (err error) {
 	ib.pool.Submit(func() {
 		defer ib.wg.Done()
 		var buf bytes.Buffer
-		err = Compress(&buf, p)
+		err := Compress(&buf, p)
 		if err != nil {
 			log.Print("compress buffer error: ", err)
 			return
@@ -177,17 +174,13 @@ func (ib *Backend) FlushBuffer(db string) (err error) {
 			return
 		}
 	})
-	return
 }
 
 func (ib *Backend) Flush() {
 	ib.chTimer = nil
 	for db := range ib.buffers {
 		if ib.buffers[db].Counter > 0 {
-			err := ib.FlushBuffer(db)
-			if err != nil {
-				log.Printf("flush buffer background error: %s %s", ib.Url, err)
-			}
+			ib.FlushBuffer(db)
 		}
 	}
 }
