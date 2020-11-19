@@ -44,6 +44,7 @@ type HttpBackend struct { // nolint:golint
 	AuthSecure bool
 	interval   int
 	active     atomic.Value
+	rewriting  atomic.Value
 }
 
 func NewHttpBackend(cfg *BackendConfig, pxcfg *ProxyConfig) (hb *HttpBackend) { // nolint:golint
@@ -64,6 +65,7 @@ func NewSimpleHttpBackend(cfg *BackendConfig) (hb *HttpBackend) { // nolint:goli
 		AuthSecure: cfg.AuthSecure,
 	}
 	hb.active.Store(true)
+	hb.rewriting.Store(false)
 	return
 }
 
@@ -140,15 +142,23 @@ func (hb *HttpBackend) SetBasicAuth(req *http.Request) {
 	SetBasicAuth(req, hb.Username, hb.Password, hb.AuthSecure)
 }
 
-func (hb *HttpBackend) IsActive() (b bool) {
-	return hb.active.Load().(bool)
-}
-
 func (hb *HttpBackend) CheckActive() {
 	for {
 		hb.active.Store(hb.Ping())
 		time.Sleep(time.Duration(hb.interval) * time.Second)
 	}
+}
+
+func (hb *HttpBackend) IsActive() (b bool) {
+	return hb.active.Load().(bool)
+}
+
+func (hb *HttpBackend) IsRewriting() (b bool) {
+	return hb.rewriting.Load().(bool)
+}
+
+func (hb *HttpBackend) SetRewriting(b bool) {
+	hb.rewriting.Store(b)
 }
 
 func (hb *HttpBackend) Ping() bool {

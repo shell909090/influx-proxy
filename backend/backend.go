@@ -26,7 +26,6 @@ type Backend struct {
 	flushTime       int
 	rewriteInterval int
 	rewriteTicker   *time.Ticker
-	rewriteRunning  bool
 	chWrite         chan *LinePoint
 	chTimer         <-chan time.Time
 	buffers         map[string]*CacheBuffer
@@ -40,7 +39,6 @@ func NewBackend(cfg *BackendConfig, pxcfg *ProxyConfig) (ib *Backend) {
 		flushTime:       pxcfg.FlushTime,
 		rewriteInterval: pxcfg.RewriteInterval,
 		rewriteTicker:   time.NewTicker(time.Duration(pxcfg.RewriteInterval) * time.Second),
-		rewriteRunning:  false,
 		chWrite:         make(chan *LinePoint, 16),
 		buffers:         make(map[string]*CacheBuffer),
 	}
@@ -195,8 +193,8 @@ func (ib *Backend) Flush() {
 }
 
 func (ib *Backend) RewriteIdle() {
-	if !ib.rewriteRunning && ib.fb.IsData() {
-		ib.rewriteRunning = true
+	if !ib.IsRewriting() && ib.fb.IsData() {
+		ib.SetRewriting(true)
 		go ib.RewriteLoop()
 	}
 }
@@ -213,7 +211,7 @@ func (ib *Backend) RewriteLoop() {
 			continue
 		}
 	}
-	ib.rewriteRunning = false
+	ib.SetRewriting(false)
 }
 
 func (ib *Backend) Rewrite() (err error) {
@@ -282,7 +280,7 @@ func (ib *Backend) GetHealth(ic *Circle, withStats bool) interface{} {
 		Url:     ib.Url,
 		Active:  ib.IsActive(),
 		Backlog: ib.fb.IsData(),
-		Rewrite: ib.rewriteRunning,
+		Rewrite: ib.IsRewriting(),
 	}
 	if !withStats {
 		return health
