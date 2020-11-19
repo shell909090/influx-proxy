@@ -156,7 +156,7 @@ func (ib *Backend) FlushBuffer(db string) (err error) {
 
 		p = buf.Bytes()
 
-		if ib.Active {
+		if ib.IsActive() {
 			err = ib.WriteCompressed(db, p)
 			switch err {
 			case nil:
@@ -203,7 +203,7 @@ func (ib *Backend) RewriteIdle() {
 
 func (ib *Backend) RewriteLoop() {
 	for ib.fb.IsData() {
-		if !ib.Active {
+		if !ib.IsActive() {
 			time.Sleep(time.Duration(ib.rewriteInterval) * time.Second)
 			continue
 		}
@@ -280,7 +280,7 @@ func (ib *Backend) GetHealth(ic *Circle, withStats bool) interface{} {
 	}{
 		Name:    ib.Name,
 		Url:     ib.Url,
-		Active:  ib.Active,
+		Active:  ib.IsActive(),
 		Backlog: ib.fb.IsData(),
 		Rewrite: ib.rewriteRunning,
 	}
@@ -334,7 +334,7 @@ func QueryInParallel(backends []*Backend, req *http.Request, w http.ResponseWrit
 	req.Header.Set("Query-Origin", "Parallel")
 	ch := make(chan *QueryResult, len(backends))
 	for _, be := range backends {
-		if !be.Active {
+		if !be.IsActive() {
 			inactive++
 			continue
 		}

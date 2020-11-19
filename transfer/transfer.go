@@ -94,7 +94,7 @@ func (tx *Transfer) setLogOutput(name string) {
 func (tx *Transfer) getDatabases() []string {
 	for _, cs := range tx.CircleStates {
 		for _, be := range cs.Backends {
-			if be.Active {
+			if be.IsActive() {
 				dbs := be.GetDatabases()
 				if len(dbs) > 0 {
 					return dbs
@@ -320,7 +320,7 @@ func (tx *Transfer) submitCleanup(cs *CircleState, be *backend.Backend, db, meas
 
 func (tx *Transfer) runTransfer(cs *CircleState, be *backend.Backend, dbs []string, fn func(*CircleState, *backend.Backend, string, string, []interface{}) bool, args ...interface{}) {
 	defer cs.wg.Done()
-	if !be.Active {
+	if !be.IsActive() {
 		tlog.Printf("backend unavailable: %s", be.Url)
 		return
 	}

@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/chengshiwen/influx-proxy/util"
@@ -36,13 +37,13 @@ type QueryResult struct {
 type HttpBackend struct { // nolint:golint
 	client     *http.Client
 	transport  *http.Transport
-	interval   int
 	Name       string
 	Url        string // nolint:golint
 	Username   string
 	Password   string
 	AuthSecure bool
-	Active     bool
+	interval   int
+	active     atomic.Value
 }
 
 func NewHttpBackend(cfg *BackendConfig, pxcfg *ProxyConfig) (hb *HttpBackend) { // nolint:golint
@@ -61,8 +62,8 @@ func NewSimpleHttpBackend(cfg *BackendConfig) (hb *HttpBackend) { // nolint:goli
 		Username:   cfg.Username,
 		Password:   cfg.Password,
 		AuthSecure: cfg.AuthSecure,
-		Active:     true,
 	}
+	hb.active.Store(true)
 	return
 }
 
@@ -139,9 +140,13 @@ func (hb *HttpBackend) SetBasicAuth(req *http.Request) {
 	SetBasicAuth(req, hb.Username, hb.Password, hb.AuthSecure)
 }
 
+func (hb *HttpBackend) IsActive() (b bool) {
+	return hb.active.Load().(bool)
+}
+
 func (hb *HttpBackend) CheckActive() {
 	for {
-		hb.Active = hb.Ping()
+		hb.active.Store(hb.Ping())
 		time.Sleep(time.Duration(hb.interval) * time.Second)
 	}
 }
@@ -189,7 +194,7 @@ func (hb *HttpBackend) WriteStream(db string, stream io.Reader, compressed bool)
 	resp, err := hb.client.Do(req)
 	if err != nil {
 		log.Print("http error: ", err)
-		hb.Active = false
+		hb.active.Store(false)
 		return
 	}
 	defer resp.Body.Close()
@@ -215,7 +220,6 @@ func (hb *HttpBackend) WriteStream(db string, stream io.Reader, compressed bool)
 		err = ErrNotFound
 	case 500:
 		err = ErrInternal
-		hb.Active = false
 	default: // mostly tcp connection timeout, or request entity too large
 		err = ErrUnknown
 	}

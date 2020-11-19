@@ -140,7 +140,7 @@ func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request) (body []byte, e
 				continue
 			}
 			be := circle.GetBackend(key)
-			if be.Active {
+			if be.IsActive() {
 				qr := be.Query(req, w, false)
 				if qr.Status > 0 || len(badSet) == len(ip.Circles)-1 {
 					return qr.Body, qr.Err
@@ -181,7 +181,7 @@ func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request) (body []byte, e
 			return nil, ErrGetBackends
 		}
 		for _, be := range backends {
-			if !be.Active {
+			if !be.IsActive() {
 				return nil, fmt.Errorf("backend %s(%s) unavailable", be.Name, be.Url)
 			}
 		}

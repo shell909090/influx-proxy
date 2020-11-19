@@ -98,7 +98,7 @@ func (ic *Circle) GetHealth(stats bool) interface{} {
 func (ic *Circle) GetActiveCount() int {
 	count := 0
 	for _, be := range ic.Backends {
-		if be.Active {
+		if be.IsActive() {
 			count++
 		}
 	}
@@ -107,7 +107,7 @@ func (ic *Circle) GetActiveCount() int {
 
 func (ic *Circle) IsActive() bool {
 	for _, be := range ic.Backends {
-		if !be.Active {
+		if !be.IsActive() {
 			return false
 		}
 	}
