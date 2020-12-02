@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"io"
 	"log"
-	"net/http"
 	"net/url"
 	"sync"
 	"time"
@@ -317,39 +316,4 @@ func (ib *Backend) GetHealth(ic *Circle, withStats bool) interface{} {
 	health.Healthy = healthy
 	health.Stats = stats
 	return health
-}
-
-func QueryInParallel(backends []*Backend, req *http.Request, w http.ResponseWriter, decompress bool) (bodies [][]byte, inactive int, err error) {
-	var wg sync.WaitGroup
-	var header http.Header
-	req.Header.Set("Query-Origin", "Parallel")
-	ch := make(chan *QueryResult, len(backends))
-	for _, be := range backends {
-		if !be.IsActive() {
-			inactive++
-			continue
-		}
-		wg.Add(1)
-		go func(be *Backend) {
-			defer wg.Done()
-			cr := CloneQueryRequest(req)
-			ch <- be.Query(cr, nil, decompress)
-		}(be)
-	}
-	go func() {
-		wg.Wait()
-		close(ch)
-	}()
-	for qr := range ch {
-		if qr.Err != nil {
-			err = qr.Err
-			return
-		}
-		header = qr.Header
-		bodies = append(bodies, qr.Body)
-	}
-	if w != nil {
-		CopyHeader(w.Header(), header)
-	}
-	return
 }

@@ -74,22 +74,6 @@ func (ip *Proxy) GetHealth(stats bool) []interface{} {
 	return health
 }
 
-func (ip *Proxy) optimalCircle() (c *Circle) {
-	actives := make([]int, len(ip.Circles))
-	for i, c := range ip.Circles {
-		actives[i] = c.GetActiveCount()
-	}
-	maxActive := actives[0]
-	c = ip.Circles[0]
-	for i := 1; i < len(actives); i++ {
-		if maxActive < actives[i] {
-			maxActive = actives[i]
-			c = ip.Circles[i]
-		}
-	}
-	return
-}
-
 func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request) (body []byte, err error) {
 	q := strings.TrimSpace(req.FormValue("q"))
 	if q == "" {
@@ -119,93 +103,13 @@ func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request) (body []byte, e
 
 	selectOrShow := CheckSelectOrShowFromTokens(tokens)
 	if selectOrShow && from {
-		// available circle -> backend by key(db,meas) -> select or show
-		meas, err := GetMeasurementFromTokens(tokens)
-		if err != nil {
-			return nil, ErrGetMeasurement
-		}
-		key := GetKey(db, meas)
-		badSet := make(map[int]bool)
-		for {
-			if len(badSet) == len(ip.Circles) {
-				return nil, ErrBackendsUnavailable
-			}
-			id := rand.Intn(len(ip.Circles))
-			if badSet[id] {
-				continue
-			}
-			circle := ip.Circles[id]
-			if circle.WriteOnly {
-				badSet[id] = true
-				continue
-			}
-			be := circle.GetBackend(key)
-			if be.IsActive() {
-				qr := be.Query(req, w, false)
-				if qr.Status > 0 || len(badSet) == len(ip.Circles)-1 {
-					return qr.Body, qr.Err
-				}
-			}
-			badSet[id] = true
-		}
+		return QueryFromQL(w, req, ip, tokens, db)
 	} else if selectOrShow && !from {
-		// available circle -> all backends -> show
-		badSet := make(map[int]bool)
-		for {
-			if len(badSet) == len(ip.Circles) {
-				return ip.optimalCircle().Query(w, req, tokens)
-			}
-			id := rand.Intn(len(ip.Circles))
-			if badSet[id] {
-				continue
-			}
-			circle := ip.Circles[id]
-			if circle.WriteOnly {
-				badSet[id] = true
-				continue
-			}
-			if circle.IsActive() {
-				return circle.Query(w, req, tokens)
-			}
-			badSet[id] = true
-		}
+		return QueryShowQL(w, req, ip, tokens)
 	} else if CheckDeleteOrDropMeasurementFromTokens(tokens) {
-		// all circles -> backend by key(db,meas) -> delete or drop
-		meas, err := GetMeasurementFromTokens(tokens)
-		if err != nil {
-			return nil, err
-		}
-		key := GetKey(db, meas)
-		backends := ip.GetBackends(key)
-		if len(backends) == 0 {
-			return nil, ErrGetBackends
-		}
-		for _, be := range backends {
-			if !be.IsActive() {
-				return nil, fmt.Errorf("backend %s(%s) unavailable", be.Name, be.Url)
-			}
-		}
-		bodies, _, err := QueryInParallel(backends, req, w, false)
-		if err != nil {
-			return nil, err
-		}
-		return bodies[0], nil
+		return QueryDeleteOrDropQL(w, req, ip, tokens, db)
 	} else if alterDb {
-		// all circles -> all backends -> create or drop database
-		for _, circle := range ip.Circles {
-			if !circle.IsActive() {
-				return nil, fmt.Errorf("circle %d unavailable", circle.CircleId)
-			}
-		}
-		backends := make([]*Backend, 0)
-		for _, circle := range ip.Circles {
-			backends = append(backends, circle.Backends...)
-		}
-		bodies, _, err := QueryInParallel(backends, req, w, false)
-		if err != nil {
-			return nil, err
-		}
-		return bodies[0], nil
+		return QueryAlterQL(w, req, ip)
 	}
 	return nil, ErrIllegalQL
 }
