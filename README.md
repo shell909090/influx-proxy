@@ -118,9 +118,9 @@ The configurations in `proxy.json` are the following:
   * `backends`: backend list belong to the circle, `required`
     * `name`: backend name, `required`
     * `url`: influxdb addr or other http backend which supports influxdb line protocol, `required`
-    * `username`: influxdb username, with encryption if auth_secure is enabled, default is `empty` which means no auth
-    * `password`: influxdb password, with encryption if auth_secure is enabled, default is `empty` which means no auth
-    * `auth_secure`: secure auth with encryption, default is `false`
+    * `username`: influxdb username, with encryption if auth_encrypt is enabled, default is `empty` which means no auth
+    * `password`: influxdb password, with encryption if auth_encrypt is enabled, default is `empty` which means no auth
+    * `auth_encrypt`: whether to encrypt auth (username/password), default is `false`
 * `listen_addr`: proxy listen addr, default is `:7076`
 * `db_list`: database list permitted to access, default is `[]`
 * `data_dir`: data dir to save .dat .rec, default is `data`
@@ -133,9 +133,9 @@ The configurations in `proxy.json` are the following:
 * `conn_pool_size`: default is `20`, create a connection pool which size is 20
 * `write_timeout`: default is `10`, write timeout until 10 seconds
 * `idle_timeout`: default is `10`, keep-alives wait time until 10 seconds
-* `username`: proxy username, with encryption if auth_secure is enabled, default is `empty` which means no auth
-* `password`: proxy password, with encryption if auth_secure is enabled, default is `empty` which means no auth
-* `auth_secure`: secure auth with encryption, default is `false`
+* `username`: proxy username, with encryption if auth_encrypt is enabled, default is `empty` which means no auth
+* `password`: proxy password, with encryption if auth_encrypt is enabled, default is `empty` which means no auth
+* `auth_encrypt`: whether to encrypt auth (username/password), default is `false`
 * `write_tracing`: enable logging for the write, default is `false`
 * `query_tracing`: enable logging for the query, default is `false`
 * `https_enabled`: enable https, default is `false`

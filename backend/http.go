@@ -35,16 +35,16 @@ type QueryResult struct {
 }
 
 type HttpBackend struct { // nolint:golint
-	client     *http.Client
-	transport  *http.Transport
-	Name       string
-	Url        string // nolint:golint
-	Username   string
-	Password   string
-	AuthSecure bool
-	interval   int
-	active     atomic.Value
-	rewriting  atomic.Value
+	client      *http.Client
+	transport   *http.Transport
+	Name        string
+	Url         string // nolint:golint
+	Username    string
+	Password    string
+	AuthEncrypt bool
+	interval    int
+	active      atomic.Value
+	rewriting   atomic.Value
 }
 
 func NewHttpBackend(cfg *BackendConfig, pxcfg *ProxyConfig) (hb *HttpBackend) { // nolint:golint
@@ -57,12 +57,12 @@ func NewHttpBackend(cfg *BackendConfig, pxcfg *ProxyConfig) (hb *HttpBackend) { 
 
 func NewSimpleHttpBackend(cfg *BackendConfig) (hb *HttpBackend) { // nolint:golint
 	hb = &HttpBackend{
-		transport:  NewTransport(strings.HasPrefix(cfg.Url, "https")),
-		Name:       cfg.Name,
-		Url:        cfg.Url,
-		Username:   cfg.Username,
-		Password:   cfg.Password,
-		AuthSecure: cfg.AuthSecure,
+		transport:   NewTransport(strings.HasPrefix(cfg.Url, "https")),
+		Name:        cfg.Name,
+		Url:         cfg.Url,
+		Username:    cfg.Username,
+		Password:    cfg.Password,
+		AuthEncrypt: cfg.AuthEncrypt,
 	}
 	hb.active.Store(true)
 	hb.rewriting.Store(false)
@@ -130,8 +130,8 @@ func CopyHeader(dst, src http.Header) {
 	}
 }
 
-func SetBasicAuth(req *http.Request, username string, password string, authSecure bool) {
-	if authSecure {
+func SetBasicAuth(req *http.Request, username string, password string, authEncrypt bool) {
+	if authEncrypt {
 		req.SetBasicAuth(util.AesDecrypt(username), util.AesDecrypt(password))
 	} else {
 		req.SetBasicAuth(username, password)
@@ -139,7 +139,7 @@ func SetBasicAuth(req *http.Request, username string, password string, authSecur
 }
 
 func (hb *HttpBackend) SetBasicAuth(req *http.Request) {
-	SetBasicAuth(req, hb.Username, hb.Password, hb.AuthSecure)
+	SetBasicAuth(req, hb.Username, hb.Password, hb.AuthEncrypt)
 }
 
 func (hb *HttpBackend) CheckActive() {

@@ -37,7 +37,7 @@ type QueryResult struct {
 type Transfer struct {
 	username     string
 	password     string
-	authSecure   bool
+	authEncrypt  bool
 	httpsEnabled bool
 
 	pool         *ants.Pool
@@ -554,7 +554,7 @@ func (tx *Transfer) postBroadcast(client *http.Client, url string) {
 	}
 	req, _ := http.NewRequest("POST", url, nil)
 	if tx.username != "" || tx.password != "" {
-		backend.SetBasicAuth(req, tx.username, tx.password, tx.authSecure)
+		backend.SetBasicAuth(req, tx.username, tx.password, tx.authEncrypt)
 	}
 	client.Do(req)
 }

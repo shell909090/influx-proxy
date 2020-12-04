@@ -31,7 +31,7 @@ type HttpService struct { // nolint:golint
 	tx           *transfer.Transfer
 	Username     string
 	Password     string
-	AuthSecure   bool
+	AuthEncrypt  bool
 	WriteTracing bool
 	QueryTracing bool
 }
@@ -43,7 +43,7 @@ func NewHttpService(cfg *backend.ProxyConfig) (hs *HttpService) { // nolint:goli
 		tx:           transfer.NewTransfer(cfg, ip.Circles),
 		Username:     cfg.Username,
 		Password:     cfg.Password,
-		AuthSecure:   cfg.AuthSecure,
+		AuthEncrypt:  cfg.AuthEncrypt,
 		WriteTracing: cfg.WriteTracing,
 		QueryTracing: cfg.QueryTracing,
 	}
@@ -503,7 +503,7 @@ func (hs *HttpService) checkAuth(w http.ResponseWriter, req *http.Request) bool 
 }
 
 func (hs *HttpService) transAuth(text string) string {
-	if hs.AuthSecure {
+	if hs.AuthEncrypt {
 		return util.AesEncrypt(text)
 	}
 	return text

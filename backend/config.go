@@ -22,11 +22,11 @@ var (
 )
 
 type BackendConfig struct { // nolint:golint
-	Name       string `json:"name"`
-	Url        string `json:"url"` // nolint:golint
-	Username   string `json:"username"`
-	Password   string `json:"password"`
-	AuthSecure bool   `json:"auth_secure"`
+	Name        string `json:"name"`
+	Url         string `json:"url"` // nolint:golint
+	Username    string `json:"username"`
+	Password    string `json:"password"`
+	AuthEncrypt bool   `json:"auth_encrypt"`
 }
 
 type CircleConfig struct {
@@ -50,7 +50,7 @@ type ProxyConfig struct {
 	IdleTimeout     int             `json:"idle_timeout"`
 	Username        string          `json:"username"`
 	Password        string          `json:"password"`
-	AuthSecure      bool            `json:"auth_secure"`
+	AuthEncrypt     bool            `json:"auth_encrypt"`
 	WriteTracing    bool            `json:"write_tracing"`
 	QueryTracing    bool            `json:"query_tracing"`
 	HTTPSEnabled    bool            `json:"https_enabled"`
@@ -148,4 +148,5 @@ func (cfg *ProxyConfig) PrintSummary() {
 	if len(cfg.DBList) > 0 {
 		log.Printf("db list: %v", cfg.DBList)
 	}
+	log.Printf("auth: %t, encrypt: %t", cfg.Username != "" || cfg.Password != "", cfg.AuthEncrypt)
 }
