@@ -206,22 +206,15 @@ func getDatabase(tokens []string) (m string) {
 
 func getMeasurement(tokens []string) (m string) {
 	if len(tokens) >= 3 && (tokens[1] == "." || tokens[1] == "..") {
-		if len(tokens) > 3 && tokens[1] == "." {
-			if len(tokens) >= 5 && tokens[3] == "." {
-				m = tokens[4]
-			} else {
-				m = tokens[0]
-			}
+		if len(tokens) >= 5 && tokens[3] == "." {
+			m = tokens[4]
 		} else {
 			m = tokens[2]
 		}
-		if m[0] == '"' || m[0] == '\'' {
-			m = m[1 : len(m)-1]
-		}
-		return
+	} else {
+		m = tokens[0]
 	}
 
-	m = tokens[0]
 	if m[0] == '/' {
 		return m
 	}
@@ -231,16 +224,33 @@ func getMeasurement(tokens []string) (m string) {
 		return
 	}
 
-	index := strings.IndexByte(m, '.')
+	index := FindLastIndexWithIdent(m)
 	if index == -1 {
 		return
 	}
 
 	m = m[index+1:]
 	if m[0] == '"' || m[0] == '\'' {
-		m = m[1 : len(m)-1]
+		m = strings.ReplaceAll(m[1:len(m)-1], `\"`, `"`)
 	}
 	return
+}
+
+func FindLastIndexWithIdent(m string) (i int) {
+	i = len(m) - 1
+	if m[i] == '"' || m[i] == '\'' {
+		for i = i - 1; i >= 0; i-- {
+			if m[i] == '"' || m[i] == '\'' {
+				if i > 0 && m[i-1] == '\\' {
+					i--
+				} else {
+					break
+				}
+			}
+		}
+		return i - 1
+	}
+	return strings.LastIndexByte(m, '.')
 }
 
 func CheckQuery(q string) (tokens []string, check bool, from bool) {

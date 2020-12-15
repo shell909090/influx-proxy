@@ -1,8 +1,6 @@
 package backend
 
-import (
-	"testing"
-)
+import "testing"
 
 // ALTER RETENTION POLICY "1h.cpu" ON "mydb" DEFAULT
 // ALTER RETENTION POLICY "policy1" ON "somedb" DURATION 1h REPLICATION 4
@@ -145,16 +143,25 @@ func TestGetMeasurementFromInfluxQL(t *testing.T) {
 	assertMeasurement(t, "select * from \"cpu\"", "cpu")
 	assertMeasurement(t, "select * from \"c\\\"pu\"", "c\"pu")
 	assertMeasurement(t, "select * from 'cpu'", "cpu")
-	// assertMeasurement(t, "select * from db.autogen.cpu", "cpu")
-	// assertMeasurement(t, "select * from db.autogen.\"cpu.load\"", "cpu.load")
-	// assertMeasurement(t, "select * from db.\"autogen\".\"cpu.load\"", "cpu.load")
+	assertMeasurement(t, "select * from autogen.cpu", "cpu")
+	assertMeasurement(t, "select * from db..cpu", "cpu")
+	assertMeasurement(t, "select * from db.autogen.cpu", "cpu")
+	assertMeasurement(t, "select * from db.\"auto.gen\".cpu", "cpu")
+	assertMeasurement(t, "select * from test1.autogen.\"c\\\"pu.load\"", "c\"pu.load")
+	assertMeasurement(t, "select * from test1.\"auto.gen\".\"c\\\"pu.load\"", "c\"pu.load")
+	assertMeasurement(t, "select * from db.\"auto.gen\".\"cpu.load\"", "cpu.load")
 	assertMeasurement(t, "select * from \"db\".\"autogen\".\"cpu.load\"", "cpu.load")
-	assertMeasurement(t, "select * from \"d.b\".\"autogen\".\"cpu.load\"", "cpu.load")
+	assertMeasurement(t, "select * from \"d.b\".\"auto.gen\".\"cpu.load\"", "cpu.load")
+	assertMeasurement(t, "select * from \"db\"..\"cpu.load\"", "cpu.load")
+	assertMeasurement(t, "select * from \"d.b\"..\"cpu.load\"", "cpu.load")
+	assertMeasurement(t, "select * from \"db\".autogen.cpu", "cpu")
+	assertMeasurement(t, "select * from \"db\".\"auto.gen\".cpu", "cpu")
+	assertMeasurement(t, "select * from \"d.b\"..cpu", "cpu")
 
 	assertMeasurement(t, "SELECT mean(\"value\") INTO \"cpu\\\"_1h\".:MEASUREMENT FROM /cpu.*/", "/cpu.*/")
 	assertMeasurement(t, "SELECT mean(\"value\") FROM \"cpu\" WHERE \"region\" = 'uswest' GROUP BY time(10m) fill(0)", "cpu")
 
-	// assertMeasurement(t, "SHOW FIELD KEYS", "cpu")
+	assertMeasurement(t, "SHOW FIELD KEYS", "")
 	assertMeasurement(t, "SHOW FIELD KEYS FROM \"cpu\"", "cpu")
 	assertMeasurement(t, "SHOW FIELD KEYS FROM \"1h\".\"cpu\"", "cpu")
 	assertMeasurement(t, "SHOW FIELD KEYS FROM 1h.cpu", "cpu")
@@ -165,20 +172,20 @@ func TestGetMeasurementFromInfluxQL(t *testing.T) {
 	assertMeasurement(t, "SHOW SERIES FROM \"telegraf\"..\"cp.u\" WHERE cpu = 'cpu8'", "cp.u")
 	assertMeasurement(t, "SHOW SERIES FROM \"telegraf\".\"autogen\".\"cp.u\" WHERE cpu = 'cpu8'", "cp.u")
 
-	// assertMeasurement(t, "SHOW TAG KEYS", "cpu")
+	assertMeasurement(t, "SHOW TAG KEYS", "")
 	assertMeasurement(t, "SHOW TAG KEYS FROM cpu", "cpu")
 	assertMeasurement(t, "SHOW TAG KEYS FROM \"cpu\" WHERE \"region\" = 'uswest'", "cpu")
-	// assertMeasurement(t, "SHOW TAG KEYS WHERE \"host\" = 'serverA'", "cpu")
+	assertMeasurement(t, "SHOW TAG KEYS WHERE \"host\" = 'serverA'", "")
 
-	// assertMeasurement(t, "SHOW TAG VALUES WITH KEY = \"region\"", "cpu")
+	assertMeasurement(t, "SHOW TAG VALUES WITH KEY = \"region\"", "")
 	assertMeasurement(t, "SHOW TAG VALUES FROM \"cpu\" WITH KEY = \"region\"", "cpu")
-	// assertMeasurement(t, "SHOW TAG VALUES WITH KEY !~ /.*c.*/", "cpu")
+	assertMeasurement(t, "SHOW TAG VALUES WITH KEY !~ /.*c.*/", "")
 	assertMeasurement(t, "SHOW TAG VALUES FROM \"cpu\" WITH KEY IN (\"region\", \"host\") WHERE \"service\" = 'redis'", "cpu")
 }
 
 func assertMeasurement(t *testing.T, q string, m string) {
 	qm, err := GetMeasurementFromInfluxQL(q)
-	if err != nil {
+	if err != nil && qm != m {
 		t.Errorf("error: %s, %s", q, err)
 		return
 	}
