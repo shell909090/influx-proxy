@@ -185,10 +185,11 @@ HTTP Endpoints
 Benchmark
 -----------
 
-There are two tools for benchmarking InfluxDB, which can also be applied to InfluxDB Proxy:
+There are three tools for benchmarking InfluxDB, which can also be applied to InfluxDB Proxy:
 
 * [influx-stress](https://github.com/chengshiwen/influx-stress) is a stress tool for generating artificial load on InfluxDB.
 * [influxdb-comparisons](https://github.com/influxdata/influxdb-comparisons) contains code for benchmarking InfluxDB against other databases and time series solutions.
+* [tsbs](https://github.com/timescale/tsbs) (Time Series Benchmark Suite) is a tool for comparing and evaluating databases for time series data.
 
 License
 -------
