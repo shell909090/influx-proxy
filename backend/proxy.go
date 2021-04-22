@@ -2,7 +2,6 @@ package backend
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -13,14 +12,6 @@ import (
 	"time"
 
 	"github.com/chengshiwen/influx-proxy/util"
-)
-
-var (
-	ErrEmptyQuery          = errors.New("empty query")
-	ErrDatabaseNotFound    = errors.New("database not found")
-	ErrBackendsUnavailable = errors.New("backends unavailable")
-	ErrGetMeasurement      = errors.New("can't get measurement")
-	ErrGetBackends         = errors.New("can't get backends")
 )
 
 type Proxy struct {

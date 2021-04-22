@@ -1,23 +1,36 @@
-### Makefile ---
+# Makefile
 
-## Author: Shell.Xu
-## Version: $Id: Makefile,v 0.0 2017/01/17 03:44:24 shell Exp $
-## Copyright: 2017, Eleme <zhixiang.xu@ele.me>, BizSeer <chengshiwen0103@gmail.com>
-## License: MIT
-## Keywords:
-## X-URL:
+VERSION     := 2.5.5
+LDFLAGS     ?= "-s -w -X main.GitCommit=$(shell git rev-parse --short HEAD) -X 'main.BuildTime=$(shell date '+%Y-%m-%d %H:%M:%S')'"
+GOBUILD_ENV = GO111MODULE=on CGO_ENABLED=0
+GOBUILD     = $(GOBUILD_ENV) go build -o bin/influx-proxy -a -ldflags $(LDFLAGS)
+GOX         = go run github.com/mitchellh/gox
+TARGETS     := darwin/amd64 linux/amd64 windows/amd64
+DIST_DIRS   := find * -type d -maxdepth 0 -exec
 
-export GO_BUILD=GO111MODULE=on CGO_ENABLED=0 GOPROXY=https://goproxy.cn,https://goproxy.io,direct go build -o bin/influx-proxy -a -ldflags "-s -w -X main.GitCommit=$(shell git rev-parse --short HEAD) -X 'main.BuildTime=$(shell date '+%Y-%m-%d %H:%M:%S')'"
-
-.PHONY: build linux test bench run lint down tidy clean
+.PHONY: build linux cross-build release test bench run lint down tidy clean
 
 all: build
 
 build:
-	$(GO_BUILD)
+	$(GOBUILD_ENV) $(GOBUILD)
 
 linux:
-	GOOS=linux GOARCH=amd64 $(GO_BUILD)
+	GOOS=linux GOARCH=amd64 $(GOBUILD_ENV) $(GOBUILD)
+
+cross-build: clean
+	$(GOBUILD_ENV) $(GOX) -ldflags $(LDFLAGS) -parallel=3 -output="bin/influx-proxy-$(VERSION)-{{.OS}}-{{.Arch}}/influx-proxy" -osarch='$(TARGETS)' .
+
+release: cross-build
+	( \
+		cd bin && \
+		$(DIST_DIRS) cp ../LICENSE {} \; && \
+		$(DIST_DIRS) cp ../README.md {} \; && \
+		$(DIST_DIRS) tar -zcf {}.tar.gz {} \; && \
+		$(DIST_DIRS) zip -r {}.zip {} \; && \
+		$(DIST_DIRS) rm -rf {} \; && \
+		sha256sum * > sha256sums.txt \
+	)
 
 test:
 	go test -v github.com/chengshiwen/influx-proxy/backend
@@ -35,9 +48,7 @@ down:
 	go list ./... && go mod verify
 
 tidy:
-	head -n 3 go.mod > go.mod.tmp && mv go.mod.tmp go.mod && rm -f go.sum && go mod tidy -v
+	rm -f go.sum && go mod tidy -v
 
 clean:
-	rm -rf bin data log
-
-### Makefile ends here
+	rm -rf bin data

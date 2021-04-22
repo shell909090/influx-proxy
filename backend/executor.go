@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"errors"
 	"fmt"
 	"math/rand"
 	"net/http"
@@ -8,6 +9,14 @@ import (
 
 	"github.com/chengshiwen/influx-proxy/util"
 	"github.com/influxdata/influxdb1-client/models"
+)
+
+var (
+	ErrEmptyQuery          = errors.New("empty query")
+	ErrDatabaseNotFound    = errors.New("database not found")
+	ErrBackendsUnavailable = errors.New("backends unavailable")
+	ErrGetMeasurement      = errors.New("can't get measurement")
+	ErrGetBackends         = errors.New("can't get backends")
 )
 
 func QueryFromQL(w http.ResponseWriter, req *http.Request, ip *Proxy, tokens []string, db string) (body []byte, err error) {
