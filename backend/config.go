@@ -5,12 +5,11 @@
 package backend
 
 import (
-	"encoding/json"
 	"errors"
 	"log"
-	"os"
 
 	"github.com/chengshiwen/influx-proxy/util"
+	"github.com/spf13/viper"
 )
 
 const (
@@ -26,51 +25,50 @@ var (
 )
 
 type BackendConfig struct { // nolint:golint
-	Name        string `json:"name"`
-	Url         string `json:"url"` // nolint:golint
-	Username    string `json:"username"`
-	Password    string `json:"password"`
-	AuthEncrypt bool   `json:"auth_encrypt"`
+	Name        string `mapstructure:"name"`
+	Url         string `mapstructure:"url"` // nolint:golint
+	Username    string `mapstructure:"username"`
+	Password    string `mapstructure:"password"`
+	AuthEncrypt bool   `mapstructure:"auth_encrypt"`
 }
 
 type CircleConfig struct {
-	Name     string           `json:"name"`
-	Backends []*BackendConfig `json:"backends"`
+	Name     string           `mapstructure:"name"`
+	Backends []*BackendConfig `mapstructure:"backends"`
 }
 
 type ProxyConfig struct {
-	Circles         []*CircleConfig `json:"circles"`
-	ListenAddr      string          `json:"listen_addr"`
-	DBList          []string        `json:"db_list"`
-	DataDir         string          `json:"data_dir"`
-	TLogDir         string          `json:"tlog_dir"`
-	HashKey         string          `json:"hash_key"`
-	FlushSize       int             `json:"flush_size"`
-	FlushTime       int             `json:"flush_time"`
-	CheckInterval   int             `json:"check_interval"`
-	RewriteInterval int             `json:"rewrite_interval"`
-	ConnPoolSize    int             `json:"conn_pool_size"`
-	WriteTimeout    int             `json:"write_timeout"`
-	IdleTimeout     int             `json:"idle_timeout"`
-	Username        string          `json:"username"`
-	Password        string          `json:"password"`
-	AuthEncrypt     bool            `json:"auth_encrypt"`
-	WriteTracing    bool            `json:"write_tracing"`
-	QueryTracing    bool            `json:"query_tracing"`
-	HTTPSEnabled    bool            `json:"https_enabled"`
-	HTTPSCert       string          `json:"https_cert"`
-	HTTPSKey        string          `json:"https_key"`
+	Circles         []*CircleConfig `mapstructure:"circles"`
+	ListenAddr      string          `mapstructure:"listen_addr"`
+	DBList          []string        `mapstructure:"db_list"`
+	DataDir         string          `mapstructure:"data_dir"`
+	TLogDir         string          `mapstructure:"tlog_dir"`
+	HashKey         string          `mapstructure:"hash_key"`
+	FlushSize       int             `mapstructure:"flush_size"`
+	FlushTime       int             `mapstructure:"flush_time"`
+	CheckInterval   int             `mapstructure:"check_interval"`
+	RewriteInterval int             `mapstructure:"rewrite_interval"`
+	ConnPoolSize    int             `mapstructure:"conn_pool_size"`
+	WriteTimeout    int             `mapstructure:"write_timeout"`
+	IdleTimeout     int             `mapstructure:"idle_timeout"`
+	Username        string          `mapstructure:"username"`
+	Password        string          `mapstructure:"password"`
+	AuthEncrypt     bool            `mapstructure:"auth_encrypt"`
+	WriteTracing    bool            `mapstructure:"write_tracing"`
+	QueryTracing    bool            `mapstructure:"query_tracing"`
+	HTTPSEnabled    bool            `mapstructure:"https_enabled"`
+	HTTPSCert       string          `mapstructure:"https_cert"`
+	HTTPSKey        string          `mapstructure:"https_key"`
 }
 
 func NewFileConfig(cfgfile string) (cfg *ProxyConfig, err error) {
 	cfg = &ProxyConfig{}
-	file, err := os.Open(cfgfile)
+	viper.SetConfigFile(cfgfile)
+	err = viper.ReadInConfig()
 	if err != nil {
 		return
 	}
-	defer file.Close()
-	dec := json.NewDecoder(file)
-	err = dec.Decode(cfg)
+	viper.Unmarshal(cfg)
 	if err != nil {
 		return
 	}

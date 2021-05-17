@@ -55,6 +55,17 @@ $ make
 $ ./bin/influx-proxy -config proxy.json
 ```
 
+#### Usage
+
+```sh
+$ ./bin/influx-proxy -h
+Usage of ./bin/influx-proxy:
+  -config string
+        proxy config file with json/yaml/toml format (default "proxy.json")
+  -version
+        proxy version
+```
+
 #### Build Release
 
 ```sh
@@ -111,7 +122,9 @@ The setup should look like this:
 Proxy Configuration
 --------
 
-The configurations in `proxy.json` are the following:
+The configuration file supports format `json`, `yaml` and `toml`, such as [proxy.json](proxy.json), [proxy.yaml](conf/proxy.yaml) and [proxy.toml](conf/proxy.toml).
+
+The configuration settings are as follows:
 
 * `circles`: circle list
   * `name`: circle name, `required`
@@ -155,6 +168,7 @@ The following commands are forbid.
 * `KILL`
 * `SELECT INTO`
 * `Multiple queries` delimited by semicolon `;`
+* `Multiple measurements` delimited by comma `,`
 
 ### Supported commands
 

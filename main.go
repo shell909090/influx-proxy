@@ -28,7 +28,7 @@ var (
 func init() {
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds | log.Lshortfile)
 	log.SetOutput(os.Stdout)
-	flag.StringVar(&ConfigFile, "config", "proxy.json", "proxy config file")
+	flag.StringVar(&ConfigFile, "config", "proxy.json", "proxy config file with json/yaml/toml format")
 	flag.BoolVar(&Version, "version", false, "proxy version")
 	flag.Parse()
 }
