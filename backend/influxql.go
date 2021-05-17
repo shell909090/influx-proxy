@@ -92,11 +92,22 @@ func ScanToken(data []byte, atEOF bool) (advance int, token []byte, err error) {
 		}
 		return
 	case '(':
-		advance = bytes.IndexByte(data[start:], ')')
-		if advance == -1 {
+		bracket := 0
+		advance = start
+		for ; advance < len(data); advance++ {
+			if data[advance] == '(' {
+				bracket++
+			} else if data[advance] == ')' {
+				bracket--
+			}
+			if bracket == 0 {
+				break
+			}
+		}
+		if bracket != 0 {
 			err = ErrUnclosed
 		} else {
-			advance += start + 1
+			advance++
 		}
 	case '[':
 		advance = bytes.IndexByte(data[start:], ']')
@@ -128,7 +139,6 @@ func ScanToken(data []byte, atEOF bool) (advance int, token []byte, err error) {
 		} else {
 			advance += start
 		}
-
 	}
 	if err != nil {
 		log.Printf("scan token error: %s", err)
@@ -175,7 +185,12 @@ func GetDatabaseFromTokens(tokens []string) (m string, err error) {
 }
 
 func GetMeasurementFromTokens(tokens []string) (m string, err error) {
-	return GetIdentifierFromTokens(tokens, []string{"from", "measurement"}, getMeasurement)
+	m, err = GetIdentifierFromTokens(tokens, []string{"from", "measurement"}, getMeasurement)
+	// handle subquery
+	if strings.HasPrefix(strings.ToLower(strings.TrimLeft(m, "( ")), "select") {
+		m, err = GetMeasurementFromInfluxQL(m[1 : len(m)-1])
+	}
+	return
 }
 
 func GetIdentifierFromTokens(tokens []string, keywords []string, fn func([]string) string) (m string, err error) {

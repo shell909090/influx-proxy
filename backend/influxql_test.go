@@ -165,6 +165,14 @@ func TestGetMeasurementFromInfluxQL(t *testing.T) {
 	assertMeasurement(t, "SELECT mean(\"value\") INTO \"cpu\\\"_1h\".:MEASUREMENT FROM /cpu.*/", "/cpu.*/")
 	assertMeasurement(t, "SELECT mean(\"value\") FROM \"cpu\" WHERE \"region\" = 'uswest' GROUP BY time(10m) fill(0)", "cpu")
 
+	assertMeasurement(t, "SELECT SUM(\"max\") FROM (SELECT MAX(\"water_level\") FROM \"h2o_feet\" GROUP BY \"location\")", "h2o_feet")
+	assertMeasurement(t, "SELECT MEAN(\"difference\") FROM ( SELECT \"cats\" - \"dogs\" AS \"difference\" FROM \"pet_daycare\" )", "pet_daycare")
+	assertMeasurement(t, "SELECT \"all_the_means\" FROM (SELECT MEAN(\"water_level\") AS \"all_the_means\" FROM \"h2o_feet\" WHERE time >= '2015-08-18T00:00:00Z' AND time <= '2015-08-18T00:30:00Z' GROUP BY time(12m) ) WHERE \"all_the_means\" > 5", "h2o_feet")
+	assertMeasurement(t, "SELECT SUM(\"water_level_derivative\") AS \"sum_derivative\" FROM (SELECT DERIVATIVE(MEAN(\"water_level\")) AS \"water_level_derivative\" FROM \"h2o_feet\" WHERE time >= '2015-08-18T00:00:00Z' AND time <= '2015-08-18T00:30:00Z' GROUP BY time(12m),\"location\") GROUP BY \"location\"", "h2o_feet")
+	assertMeasurement(t, "SELECT SUM(\"max\") FROM ( SELECT MAX(\"water_level\") FROM ( SELECT \"water_total\" / \"water_unit\" AS \"water_level\" FROM \"pet_daycare\" ) GROUP BY \"location\" )", "pet_daycare")
+	assertMeasurement(t, "select mean(kpi_3) from (select kpi_1+kpi_2 as kpi_3 from cpu where time < 1620877962) as measure2 where time < 1620877962 group by time(1m),app", "cpu")
+	assertMeasurement(t, "select mean(kpi_3),max(kpi_3) FRoM (select kpi_1+kpi_2 as kpi_3 from cpu where time < 1620877962) where time < 1620877962 group by time(1m),app", "cpu")
+
 	assertMeasurement(t, "SHOW FIELD KEYS", "")
 	assertMeasurement(t, "SHOW FIELD KEYS FROM \"cpu\"", "cpu")
 	assertMeasurement(t, "SHOW FIELD KEYS FROM \"1h\".\"cpu\"", "cpu")
