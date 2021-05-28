@@ -192,7 +192,8 @@ func (fb *FileBackend) CleanUp() (err error) {
 		log.Print("seek consumer error: ", err)
 		return
 	}
-	err = fb.producer.Truncate(0)
+	filename := filepath.Join(fb.datadir, fb.filename+".dat")
+	err = os.Truncate(filename, 0)
 	if err != nil {
 		log.Print("truncate error: ", err)
 		return
@@ -202,8 +203,7 @@ func (fb *FileBackend) CleanUp() (err error) {
 		log.Print("close producer error: ", err)
 		return
 	}
-	pathname := filepath.Join(fb.datadir, fb.filename)
-	fb.producer, err = os.OpenFile(pathname+".dat", os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
+	fb.producer, err = os.OpenFile(filename, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
 	if err != nil {
 		log.Print("open producer error: ", err)
 		return
