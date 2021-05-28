@@ -26,6 +26,8 @@ release: cross-build
 		cd bin && \
 		$(DIST_DIRS) cp ../LICENSE {} \; && \
 		$(DIST_DIRS) cp ../README.md {} \; && \
+		$(DIST_DIRS) cp ../proxy.json {} \; && \
+		$(DIST_DIRS) cp -r ../conf {} \; && \
 		$(DIST_DIRS) tar -zcf {}.tar.gz {} \; && \
 		$(DIST_DIRS) zip -r {}.zip {} \; && \
 		$(DIST_DIRS) rm -rf {} \; && \
