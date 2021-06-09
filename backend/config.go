@@ -12,9 +12,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-const (
-	Version = "2.5.5"
-)
+var Version = "not build"
 
 var (
 	ErrEmptyCircles          = errors.New("circles cannot be empty")

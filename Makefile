@@ -1,12 +1,12 @@
 # Makefile
 
 VERSION     := 2.5.5
-LDFLAGS     ?= "-s -w -X main.GitCommit=$(shell git rev-parse --short HEAD) -X 'main.BuildTime=$(shell date '+%Y-%m-%d %H:%M:%S')'"
+LDFLAGS     ?= "-s -w -X github.com/chengshiwen/influx-proxy/backend.Version=$(VERSION) -X main.GitCommit=$(shell git rev-parse --short HEAD) -X 'main.BuildTime=$(shell date '+%Y-%m-%d %H:%M:%S')'"
 GOBUILD_ENV = GO111MODULE=on CGO_ENABLED=0
-GOBUILD     = $(GOBUILD_ENV) go build -o bin/influx-proxy -a -ldflags $(LDFLAGS)
+GOBUILD     = go build -o bin/influx-proxy -a -ldflags $(LDFLAGS)
 GOX         = go run github.com/mitchellh/gox
 TARGETS     := darwin/amd64 linux/amd64 windows/amd64
-DIST_DIRS   := find * -type d -maxdepth 0 -exec
+DIST_DIRS   := find * -maxdepth 0 -type d -exec
 
 .PHONY: build linux cross-build release test bench run lint down tidy clean
 
