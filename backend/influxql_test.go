@@ -113,6 +113,27 @@ func TestGetDatabaseFromInfluxQL(t *testing.T) {
 	assertDatabase(t, "CREATE DATABASE \"f,oo\"", "f,oo")
 	assertDatabase(t, "CREATE DATABASE \"f oo\"", "f oo")
 	assertDatabase(t, "CREATE DATABASE \"f\\\"oo\"", "f\"oo")
+
+	assertDatabase(t, "DROP SERIES FROM \"telegraf\"..\"cp u\" WHERE cpu = 'cpu8'", "telegraf")
+	assertDatabase(t, "DROP SERIES FROM \"telegraf\".\"autogen\".\"cp u\" WHERE cpu = 'cpu8'", "telegraf")
+
+	assertDatabase(t, "select * from db..cpu", "db")
+	assertDatabase(t, "select * from db.autogen.cpu", "db")
+	assertDatabase(t, "select * from db.\"auto.gen\".cpu", "db")
+	assertDatabase(t, "select * from test1.autogen.\"c\\\"pu.load\"", "test1")
+	assertDatabase(t, "select * from test1.\"auto.gen\".\"c\\\"pu.load\"", "test1")
+	assertDatabase(t, "select * from db.\"auto.gen\".\"cpu.load\"", "db")
+	assertDatabase(t, "select * from \"db\".\"autogen\".\"cpu.load\"", "db")
+	assertDatabase(t, "select * from \"d.b\".\"auto.gen\".\"cpu.load\"", "d.b")
+	assertDatabase(t, "select * from \"db\"..\"cpu.load\"", "db")
+	assertDatabase(t, "select * from \"d.b\"..\"cpu.load\"", "d.b")
+	assertDatabase(t, "select * from \"db\".autogen.cpu", "db")
+	assertDatabase(t, "select * from \"db\".\"auto.gen\".cpu", "db")
+	assertDatabase(t, "select * from \"d.b\"..cpu", "d.b")
+
+	assertDatabase(t, "SELECT SUM(\"max\") FROM (SELECT MAX(\"water_level\") FROM db.\"auto.gen\".\"h2o_feet\" GROUP BY \"location\")", "db")
+	assertDatabase(t, "SELECT SUM(\"max\") FROM ( SELECT MAX(\"water_level\") FROM ( SELECT \"water_total\" / \"water_unit\" AS \"water_level\" FROM \"db\".autogen.\"pet_daycare\" ) GROUP BY \"location\" )", "db")
+	assertDatabase(t, "select mean(kpi_3) from (select kpi_1+kpi_2 as kpi_3 from \"d.b\"..cpu where time < 1620877962) as measure2 where time < 1620877962 group by time(1m),app", "d.b")
 }
 
 func assertDatabase(t *testing.T, q string, d string) {

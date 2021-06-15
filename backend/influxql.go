@@ -184,8 +184,12 @@ func GetMeasurementFromInfluxQL(q string) (m string, err error) {
 }
 
 func GetDatabaseFromTokens(tokens []string) (m string, err error) {
-	// For database name after from
-	return GetIdentifierFromTokens(tokens, []string{"on", "database", "from"}, getDatabase)
+	m, err = GetIdentifierFromTokens(tokens, []string{"on", "database", "from"}, getDatabase)
+	// handle subquery
+	if strings.HasPrefix(strings.ToLower(strings.TrimLeft(m, "( ")), "select") {
+		m, err = GetDatabaseFromInfluxQL(m[1:])
+	}
+	return
 }
 
 func GetMeasurementFromTokens(tokens []string) (m string, err error) {
@@ -213,6 +217,10 @@ func GetIdentifierFromTokens(tokens []string, keywords []string, fn func([]strin
 
 func getDatabase(tokens []string) (m string) {
 	m = tokens[0]
+	if m[0] == '(' {
+		return
+	}
+
 	if m[0] == '"' || m[0] == '\'' {
 		m = m[1 : len(m)-1]
 		return
@@ -238,8 +246,8 @@ func getMeasurement(tokens []string) (m string) {
 		m = tokens[0]
 	}
 
-	if m[0] == '/' {
-		return m
+	if m[0] == '(' || m[0] == '/' {
+		return
 	}
 
 	if m[0] == '"' || m[0] == '\'' {
