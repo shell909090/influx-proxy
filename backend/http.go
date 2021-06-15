@@ -114,7 +114,6 @@ func CloneQueryRequest(r *http.Request) *http.Request {
 
 func Compress(buf *bytes.Buffer, p []byte) (err error) {
 	zip := gzip.NewWriter(buf)
-	defer zip.Close()
 	n, err := zip.Write(p)
 	if err != nil {
 		return
@@ -123,6 +122,7 @@ func Compress(buf *bytes.Buffer, p []byte) (err error) {
 		err = io.ErrShortWrite
 		return
 	}
+	err = zip.Close()
 	return
 }
 
