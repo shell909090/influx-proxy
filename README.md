@@ -181,11 +181,14 @@ Only support match the following commands.
 * `show field keys`
 * `show tag keys`
 * `show tag values`
-* `show retention policies`
 * `show stats`
 * `show databases`
 * `create database`
 * `drop database`
+* `show retention policies`
+* `create retention policy`
+* `alter retention policy`
+* `drop retention policy`
 * `delete from`
 * `drop series from`
 * `drop measurement`

@@ -100,29 +100,8 @@ func QueryShowQL(w http.ResponseWriter, req *http.Request, ip *Proxy, tokens []s
 	return
 }
 
-/**
-  for retention policy
-*/
-func QueryRetentionPolicyQL(w http.ResponseWriter, req *http.Request, ip *Proxy) (body []byte, err error) {
-	// all circles -> all backends -> create or drop retention policy
-	for _, circle := range ip.Circles {
-		if !circle.IsActive() {
-			return nil, fmt.Errorf("circle %d(%s) unavailable", circle.CircleId, circle.Name)
-		}
-	}
-	backends := make([]*Backend, 0)
-	for _, circle := range ip.Circles {
-		backends = append(backends, circle.Backends...)
-	}
-	bodies, _, err := QueryInParallel(backends, req, w, false)
-	if err != nil {
-		return nil, err
-	}
-	return bodies[0], nil
-}
-
 func QueryDeleteOrDropQL(w http.ResponseWriter, req *http.Request, ip *Proxy, tokens []string, db string) (body []byte, err error) {
-	// all circles -> backend by key(db,meas) -> delete or drop
+	// all circles -> backend by key(db,meas) -> delete or drop measurement/series
 	meas, err := GetMeasurementFromTokens(tokens)
 	if err != nil {
 		return nil, err
@@ -145,7 +124,7 @@ func QueryDeleteOrDropQL(w http.ResponseWriter, req *http.Request, ip *Proxy, to
 }
 
 func QueryAlterQL(w http.ResponseWriter, req *http.Request, ip *Proxy) (body []byte, err error) {
-	// all circles -> all backends -> create or drop database
+	// all circles -> all backends -> create or drop database; create, alter or drop retention policy
 	for _, circle := range ip.Circles {
 		if !circle.IsActive() {
 			return nil, fmt.Errorf("circle %d(%s) unavailable", circle.CircleId, circle.Name)

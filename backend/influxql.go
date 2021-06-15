@@ -20,18 +20,17 @@ var SupportCmds = util.NewSet(
 	"show field keys",
 	"show tag keys",
 	"show tag values",
-	"show retention policies",
 	"show stats",
 	"show databases",
 	"create database",
 	"drop database",
-	"delete from",
-	"drop series from",
-	"drop measurement",
-	// for retention policy
+	"show retention policies",
 	"create retention policy",
 	"alter retention policy",
 	"drop retention policy",
+	"delete from",
+	"drop series from",
+	"drop measurement",
 )
 
 var (
@@ -323,6 +322,14 @@ func CheckDatabaseFromTokens(tokens []string) (check bool, show bool, alter bool
 	return
 }
 
+func CheckRetentionPolicyFromTokens(tokens []string) (check bool) {
+	if len(tokens) >= 3 {
+		stmt := GetHeadStmtFromTokens(tokens, 3)
+		return stmt == "create retention policy" || stmt == "alter retention policy" || stmt == "drop retention policy"
+	}
+	return
+}
+
 func CheckSelectOrShowFromTokens(tokens []string) (check bool) {
 	stmt := strings.ToLower(tokens[0])
 	check = stmt == "select" || stmt == "show"
@@ -333,17 +340,6 @@ func CheckDeleteOrDropMeasurementFromTokens(tokens []string) (check bool) {
 	if len(tokens) >= 3 {
 		stmt := GetHeadStmtFromTokens(tokens, 2)
 		return stmt == "delete from" || stmt == "drop measurement" || stmt == "drop series"
-	}
-	return
-}
-
-/**
-for retention policy check
-*/
-func CheckRetentionPolicy(tokens []string) (check bool) {
-	if len(tokens) >= 3 {
-		stmt := GetHeadStmtFromTokens(tokens, 3)
-		return stmt == "create retention policy" || stmt == "alter retention policy" || stmt == "drop retention policy"
 	}
 	return
 }

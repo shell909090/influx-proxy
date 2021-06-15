@@ -103,11 +103,8 @@ func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request) (body []byte, e
 		return QueryShowQL(w, req, ip, tokens)
 	} else if CheckDeleteOrDropMeasurementFromTokens(tokens) {
 		return QueryDeleteOrDropQL(w, req, ip, tokens, db)
-	} else if alterDb {
+	} else if alterDb || CheckRetentionPolicyFromTokens(tokens) {
 		return QueryAlterQL(w, req, ip)
-	} else if CheckRetentionPolicy(tokens) {
-		// for retention policy
-		return QueryRetentionPolicyQL(w, req, ip)
 	}
 	return nil, ErrIllegalQL
 }
