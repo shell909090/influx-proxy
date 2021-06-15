@@ -1,12 +1,10 @@
-InfluxDB Proxy
-======
+# InfluxDB Proxy
 
 This project adds a basic high availability and consistent hash layer to InfluxDB.
 
 NOTE: influx-proxy must be built with Go 1.14+ with Go module support, don't implement udp.
 
-Why
----
+## Why
 
 We used [InfluxDB Relay](https://github.com/influxdata/influxdb-relay) before, but it doesn't support some demands.
 We use grafana for visualizing time series data, so we need add datasource for grafana. We need change the datasource config when influxdb is down.
@@ -18,8 +16,7 @@ Forked from the above InfluxDB Proxy, after many improvements and optimizations,
 
 Since the InfluxDB Proxy v1 is limited by the only `ONE` database and the `KEYMAPS` configuration, we refactored [InfluxDB Proxy v2](https://github.com/chengshiwen/influx-proxy) with high availability and consistent hash, which supports multiple databases and tools to rebalance, recovery, resync and cleanup.
 
-Features
---------
+## Features
 
 * Support gzip.
 * Support query.
@@ -38,13 +35,11 @@ Features
 * Support database whitelist.
 * Support version display.
 
-Requirements
------------
+## Requirements
 
 * Golang >= 1.14 with Go module support
 
-Usage
-------------
+## Usage
 
 #### Quickstart
 
@@ -75,13 +70,11 @@ $ # build linux amd64
 $ make linux
 ```
 
-Tutorial
------------
+## Tutorial
 
 [Chinese](https://git.io/influx-proxy-wiki)
 
-Description
------------
+## Description
 
 The architecture is fairly simple, one InfluxDB Proxy instance and two consistent hash circles with two InfluxDB instances respectively.
 The Proxy should point HTTP requests with db and measurement to the two circles and the four InfluxDB servers.
@@ -119,8 +112,7 @@ The setup should look like this:
   └────────────┘    └────────────┘
 ```
 
-Proxy Configuration
---------
+## Proxy Configuration
 
 The configuration file supports format `json`, `yaml` and `toml`, such as [proxy.json](proxy.json), [proxy.yaml](conf/proxy.yaml) and [proxy.toml](conf/proxy.toml).
 
@@ -155,8 +147,7 @@ The configuration settings are as follows:
 * `https_cert`: the ssl certificate to use when https is enabled, default is `empty`
 * `https_key`: use a separate private key location, default is `empty`
 
-Query Commands
---------
+## Query Commands
 
 ### Unsupported commands
 
@@ -194,13 +185,11 @@ Only support match the following commands.
 * `drop measurement`
 * `on clause` (the `db` parameter takes precedence when the parameter is set in `/query` http endpoint)
 
-HTTP Endpoints
---------
+## HTTP Endpoints
 
 [HTTP Endpoints](https://github.com/chengshiwen/influx-proxy/wiki/HTTP-Endpoints)
 
-Benchmark
------------
+## Benchmark
 
 There are three tools for benchmarking InfluxDB, which can also be applied to InfluxDB Proxy:
 
@@ -208,7 +197,13 @@ There are three tools for benchmarking InfluxDB, which can also be applied to In
 * [influxdb-comparisons](https://github.com/influxdata/influxdb-comparisons) contains code for benchmarking InfluxDB against other databases and time series solutions.
 * [tsbs](https://github.com/timescale/tsbs) (Time Series Benchmark Suite) is a tool for comparing and evaluating databases for time series data.
 
-License
--------
+## Tool
+
+There are two tools for InfluxDB and InfluxDB Proxy:
+
+* [influx-tool](https://github.com/chengshiwen/influx-tool): high performance tool to rebalance, recovery, resync, cleanup and compact. most commands do not require InfluxDB to start
+* [influx-tool-v0.1](https://github.com/chengshiwen/influx-tool-v0.1): export tool to extend the official tool `influx_inspect export`, no longer updated
+
+## License
 
 MIT.
