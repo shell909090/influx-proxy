@@ -42,6 +42,11 @@ curl -G 'http://127.0.0.1:7076/query' --data-urlencode 'q=show tag VALUES on db2
 curl -G 'http://127.0.0.1:7076/query' --data-urlencode 'q=SHOW retention policies on db2'
 # curl -G 'http://127.0.0.1:7076/query?db=db2' --data-urlencode 'q=show stats'
 
+curl -X POST 'http://127.0.0.1:7076/query' --data-urlencode 'q=CREATE RETENTION POLICY "24h.events" ON "db1" DURATION 24h REPLICATION 1'
+curl -G 'http://127.0.0.1:7076/query?db=db1' --data-urlencode 'q=SHOW retention policies'
+curl -X POST 'http://127.0.0.1:7076/query' --data-urlencode 'q=ALTER retention policy "24h.events" ON "db1" DURATION 168h SHARD DURATION 24h'
+curl -G 'http://127.0.0.1:7076/query?db=db1' --data-urlencode 'q=SHOW retention policies'
+
 
 echo ""
 echo "error test:"
@@ -125,6 +130,8 @@ curl -G 'http://127.0.0.1:7076/query?db=db2' --data-urlencode 'q=select * from c
 curl -G 'http://127.0.0.1:7076/query?db=db2' --data-urlencode 'q=select * from cpu4'
 curl -G 'http://127.0.0.1:7076/query?db=db2' --data-urlencode 'q=select * from "measurement with spaces, commas and \"quotes\""'
 curl -G 'http://127.0.0.1:7076/query?db=db2' --data-urlencode 'q=select * from "\"measurement with spaces, commas and \"quotes\"\""'
+curl -X POST 'http://127.0.0.1:7076/query' --data-urlencode 'q=DROP RETENTION POLICY "24h.events" on "db1"'
+curl -G 'http://127.0.0.1:7076/query?db=db1' --data-urlencode 'q=SHOW retention policies'
 curl -X POST 'http://127.0.0.1:7076/query' --data-urlencode 'q=drop database db1'
 curl -X POST 'http://127.0.0.1:7076/query' --data-urlencode 'q=drop database db2'
 curl -G 'http://127.0.0.1:7076/query' --data-urlencode 'q=show databases'

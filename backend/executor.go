@@ -79,7 +79,7 @@ func QueryShowQL(w http.ResponseWriter, req *http.Request, ip *Proxy, tokens []s
 	} else if stmt3 == "show field keys" || stmt3 == "show tag keys" || stmt3 == "show tag values" {
 		rsp, err = reduceBySeries(bodies)
 	} else if stmt3 == "show retention policies" {
-		rsp, err = concatByValues(bodies)
+		rsp, err = attachByValues(bodies)
 	} else if stmt2 == "show stats" {
 		rsp, err = concatByResults(bodies)
 	}
@@ -224,21 +224,32 @@ func reduceBySeries(bodies [][]byte) (rsp *Response, err error) {
 	return ResponseFromSeries(series), nil
 }
 
-func concatByValues(bodies [][]byte) (rsp *Response, err error) {
-	var series models.Rows
-	var values [][]interface{}
-	for _, b := range bodies {
+func attachByValues(bodies [][]byte) (rsp *Response, err error) {
+	series, err := SeriesFromResponseBytes(bodies[0])
+	if err != nil {
+		return nil, err
+	}
+	valuesMap := make(map[string]bool)
+	if len(series) == 1 {
+		for _, value := range series[0].Values {
+			key := value[0].(string)
+			valuesMap[key] = true
+		}
+	}
+	for _, b := range bodies[1:] {
 		_series, err := SeriesFromResponseBytes(b)
 		if err != nil {
 			return nil, err
 		}
 		if len(_series) == 1 {
-			series = _series
-			values = append(values, _series[0].Values...)
+			for _, value := range _series[0].Values {
+				key := value[0].(string)
+				if _, ok := valuesMap[key]; !ok {
+					series[0].Values = append(series[0].Values, value)
+					valuesMap[key] = true
+				}
+			}
 		}
-	}
-	if len(series) == 1 {
-		series[0].Values = values
 	}
 	return ResponseFromSeries(series), nil
 }
