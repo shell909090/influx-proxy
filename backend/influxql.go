@@ -28,6 +28,10 @@ var SupportCmds = util.NewSet(
 	"delete from",
 	"drop series from",
 	"drop measurement",
+	// for retention policy
+	"create retention policy",
+	"alter retention policy",
+	"drop retention policy",
 )
 
 var (
@@ -181,7 +185,8 @@ func GetMeasurementFromInfluxQL(q string) (m string, err error) {
 }
 
 func GetDatabaseFromTokens(tokens []string) (m string, err error) {
-	return GetIdentifierFromTokens(tokens, []string{"on", "database"}, getDatabase)
+	// For database name after from
+	return GetIdentifierFromTokens(tokens, []string{"on", "database", "from"}, getDatabase)
 }
 
 func GetMeasurementFromTokens(tokens []string) (m string, err error) {
@@ -328,6 +333,17 @@ func CheckDeleteOrDropMeasurementFromTokens(tokens []string) (check bool) {
 	if len(tokens) >= 3 {
 		stmt := GetHeadStmtFromTokens(tokens, 2)
 		return stmt == "delete from" || stmt == "drop measurement" || stmt == "drop series"
+	}
+	return
+}
+
+/**
+for retention policy check
+*/
+func CheckRetentionPolicy(tokens []string) (check bool) {
+	if len(tokens) >= 3 {
+		stmt := GetHeadStmtFromTokens(tokens, 3)
+		return stmt == "create retention policy" || stmt == "alter retention policy" || stmt == "drop retention policy"
 	}
 	return
 }

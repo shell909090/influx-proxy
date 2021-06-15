@@ -105,6 +105,9 @@ func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request) (body []byte, e
 		return QueryDeleteOrDropQL(w, req, ip, tokens, db)
 	} else if alterDb {
 		return QueryAlterQL(w, req, ip)
+	} else if CheckRetentionPolicy(tokens) {
+		// for retention policy
+		return QueryRetentionPolicyQL(w, req, ip)
 	}
 	return nil, ErrIllegalQL
 }
