@@ -274,10 +274,10 @@ func (hb *HttpBackend) Query(req *http.Request, w http.ResponseWriter, decompres
 
 	respBody := resp.Body
 	if decompress && resp.Header.Get("Content-Encoding") == "gzip" {
-		var b *gzip.Reader
-		b, qr.Err = gzip.NewReader(resp.Body)
-		if qr.Err != nil {
-			log.Printf("unable to decode gzip body")
+		b, err := gzip.NewReader(resp.Body)
+		if err != nil {
+			qr.Err = err
+			log.Printf("unable to decode gzip body: %s", err)
 			return
 		}
 		defer b.Close()
