@@ -5,6 +5,7 @@
 package service
 
 import (
+	"compress/gzip"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,7 +20,6 @@ import (
 	"github.com/chengshiwen/influx-proxy/backend"
 	"github.com/chengshiwen/influx-proxy/transfer"
 	"github.com/chengshiwen/influx-proxy/util"
-	gzip "github.com/klauspost/pgzip"
 )
 
 var (

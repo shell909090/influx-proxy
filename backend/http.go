@@ -6,6 +6,7 @@ package backend
 
 import (
 	"bytes"
+	"compress/gzip"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -20,7 +21,6 @@ import (
 	"time"
 
 	"github.com/chengshiwen/influx-proxy/util"
-	gzip "github.com/klauspost/pgzip"
 )
 
 var (

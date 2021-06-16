@@ -6,11 +6,10 @@ package util
 
 import (
 	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"io"
 	"os"
-
-	gzip "github.com/klauspost/pgzip"
 )
 
 func PathExist(path string) (bool, error) {
