@@ -201,12 +201,12 @@ func GetMeasurementFromTokens(tokens []string) (m string, err error) {
 	return
 }
 
-func GetIdentifierFromTokens(tokens []string, keywords []string, fn func([]string) string) (m string, err error) {
+func GetIdentifierFromTokens(tokens []string, keywords []string, fn func([]string, string) string) (m string, err error) {
 	for i := 0; i < len(tokens); i++ {
 		for j := 0; j < len(keywords); j++ {
 			if strings.ToLower(tokens[i]) == keywords[j] {
 				if i+1 < len(tokens) {
-					m = fn(tokens[i+1:])
+					m = fn(tokens[i+1:], keywords[j])
 					return
 				}
 			}
@@ -215,7 +215,7 @@ func GetIdentifierFromTokens(tokens []string, keywords []string, fn func([]strin
 	return "", ErrIllegalQL
 }
 
-func getDatabase(tokens []string) (m string) {
+func getDatabase(tokens []string, keyword string) (m string) {
 	m = tokens[0]
 	if m[0] == '(' {
 		return
@@ -223,19 +223,27 @@ func getDatabase(tokens []string) (m string) {
 
 	if m[0] == '"' || m[0] == '\'' {
 		m = m[1 : len(m)-1]
+		if keyword == "from" && (len(tokens) < 3 || (tokens[1] != "." && tokens[1] != "..")) {
+			return ""
+		}
 		return
 	}
 
 	index := strings.IndexByte(m, '.')
 	if index == -1 {
+		if keyword == "from" {
+			return ""
+		}
 		return
+	} else if index == len(m)-1 {
+		return ""
 	}
 
 	m = m[:index]
 	return
 }
 
-func getMeasurement(tokens []string) (m string) {
+func getMeasurement(tokens []string, keyword string) (m string) {
 	if len(tokens) >= 3 && (tokens[1] == "." || tokens[1] == "..") {
 		if len(tokens) >= 5 && tokens[3] == "." {
 			m = tokens[4]
@@ -325,7 +333,7 @@ func CheckDatabaseFromTokens(tokens []string) (check bool, show bool, alter bool
 	alter = stmt == "create database" || stmt == "drop database"
 	check = show || alter
 	if alter && len(tokens) >= 3 {
-		db = getDatabase(tokens[2:])
+		db = getDatabase(tokens[2:], "database")
 	}
 	return
 }
