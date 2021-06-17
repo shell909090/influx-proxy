@@ -91,7 +91,7 @@ func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request) (body []byte, e
 		if db == "" {
 			return nil, ErrDatabaseNotFound
 		}
-		if len(ip.DBSet) > 0 && !ip.DBSet[db] {
+		if db == "_internal" || (len(ip.DBSet) > 0 && !ip.DBSet[db]) {
 			return nil, fmt.Errorf("database forbidden: %s", db)
 		}
 	}
