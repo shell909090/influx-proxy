@@ -153,13 +153,14 @@ The configuration settings are as follows:
 
 The following commands are forbid.
 
-* `ALTER`
 * `GRANT`
 * `REVOKE`
 * `KILL`
+* `Explain`
 * `SELECT INTO`
 * `Multiple queries` delimited by semicolon `;`
 * `Multiple measurements` delimited by comma `,`
+* `Regexp measurement`
 
 ### Supported commands
 
