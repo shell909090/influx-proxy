@@ -1,0 +1,57 @@
+{
+    "circles": [
+        {
+            "name": "circle-1",
+            "backends": [
+                {
+                    "name": "influxdb-1-1",
+                    "url": "http://influxdb-1:8086",
+                    "username": "",
+                    "password": ""
+                },
+                {
+                    "name": "influxdb-1-2",
+                    "url": "http://influxdb-2:8086",
+                    "username": "",
+                    "password": ""
+                }
+            ]
+        },
+        {
+            "name": "circle-2",
+            "backends": [
+                {
+                    "name": "influxdb-2-1",
+                    "url": "http://influxdb-3:8086",
+                    "username": "",
+                    "password": ""
+                },
+                {
+                    "name": "influxdb-2-2",
+                    "url": "http://influxdb-4:8086",
+                    "username": "",
+                    "password": ""
+                }
+            ]
+        }
+    ],
+    "listen_addr": ":7076",
+    "db_list": [],
+    "data_dir": "data",
+    "tlog_dir": "log",
+    "hash_key": "idx",
+    "flush_size": 10000,
+    "flush_time": 1,
+    "check_interval": 1,
+    "rewrite_interval": 10,
+    "conn_pool_size": 20,
+    "write_timeout": 10,
+    "idle_timeout": 10,
+    "username": "",
+    "password": "",
+    "write_tracing": false,
+    "query_tracing": false,
+    "https_enabled": false,
+    "https_cert": "",
+    "https_key": ""
+}

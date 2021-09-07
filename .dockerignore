@@ -1,0 +1,17 @@
+.DS_Store
+.dockerignore
+.github/
+.gitignore
+.golangci.yml
+.idea/
+AUTHORS
+LICENSE
+README.md
+bin/
+cert/
+data/
+docker/
+!docker/build/entrypoint.sh
+log/
+script/
+wiki/

@@ -1,0 +1,47 @@
+version: "3.5"
+
+services:
+
+  influx-proxy:
+    image: chengshiwen/influx-proxy:latest
+    container_name: influx-proxy
+    ports:
+      - 7076:7076
+    environment:
+      - TZ=Asia/Shanghai
+    volumes:
+      - ./proxy.json:/etc/influx-proxy/proxy.json
+    restart: unless-stopped
+    networks:
+      - influx_net
+
+  influxdb-1:
+    image: influxdb:1.8
+    container_name: influxdb-1
+    restart: unless-stopped
+    networks:
+      - influx_net
+
+  influxdb-2:
+    image: influxdb:1.8
+    container_name: influxdb-2
+    restart: unless-stopped
+    networks:
+      - influx_net
+
+  influxdb-3:
+    image: influxdb:1.8
+    container_name: influxdb-3
+    restart: unless-stopped
+    networks:
+      - influx_net
+
+  influxdb-4:
+    image: influxdb:1.8
+    container_name: influxdb-4
+    restart: unless-stopped
+    networks:
+      - influx_net
+
+networks:
+  influx_net:
