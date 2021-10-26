@@ -193,6 +193,9 @@ func TestGetMeasurementFromInfluxQL(t *testing.T) {
 	assertMeasurement(t, "select * from \"db\".\"auto.gen\".cpu", "cpu")
 	assertMeasurement(t, "select * from \"d.b\"..cpu", "cpu")
 
+	assertMeasurement(t, "select time, \"D:\\\\work\\\\run\\\\log\" from host1 order by desc limit 1", "host1")
+	assertMeasurement(t, "select \"time\", \"D:\\\\work\\\\run\\\\log\" from \"host1\" order by desc limit 1", "host1")
+
 	assertMeasurement(t, "SELECT mean(\"value\") INTO \"cpu\\\"_1h\".:MEASUREMENT FROM /cpu.*/", "/cpu.*/")
 	assertMeasurement(t, "SELECT mean(\"value\") FROM \"cpu\" WHERE \"region\" = 'uswest' GROUP BY time(10m) fill(0)", "cpu")
 

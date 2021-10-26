@@ -34,7 +34,7 @@ var SupportCmds = util.NewSet(
 )
 
 var (
-	ErrWrongQuote     = errors.New("wrong quote")
+	ErrWrongBackslash = errors.New("wrong backslash")
 	ErrUnmatchedQuote = errors.New("unmatched quote")
 	ErrUnclosed       = errors.New("unclosed parenthesis")
 	ErrIllegalQL      = errors.New("illegal InfluxQL")
@@ -54,11 +54,11 @@ func FindEndWithQuote(data []byte, start int, endchar byte) (end int, unquoted [
 			case len(data) == end:
 				err = ErrUnmatchedQuote
 				return
-			case data[end+1] == endchar:
+			case data[end+1] == endchar || data[end+1] == '\\':
 				end++
 				unquoted = append(unquoted, data[end])
 			default:
-				err = ErrWrongQuote
+				err = ErrWrongBackslash
 				return
 			}
 		default:
