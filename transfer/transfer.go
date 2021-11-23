@@ -219,7 +219,7 @@ func (tx *Transfer) write(ch chan *QueryResult, dsts []*backend.Backend, db, mea
 								time.Sleep(time.Duration(RetryInterval) * time.Second)
 								tlog.Printf("transfer write retry: %d, last err:%s dst:%s db:%s meas:%s", i, err, dst.Url, db, meas)
 							}
-							err = dst.Write(db, p)
+							err = dst.Write(db, "", p)
 							if err == nil {
 								break
 							}

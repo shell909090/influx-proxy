@@ -16,6 +16,7 @@ import (
 
 type LinePoint struct {
 	Db   string
+	Rp   string
 	Line []byte
 }
 

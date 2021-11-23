@@ -104,9 +104,17 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
 	}
 
 	precision := req.URL.Query().Get("precision")
-	if precision == "" {
-		precision = "ns"
+	switch precision {
+	case "", "n", "ns", "u", "ms", "s", "m", "h":
+		// it's valid
+		if precision == "" {
+			precision = "ns"
+		}
+	default:
+		hs.WriteError(w, req, 400, fmt.Sprintf("invalid precision %q (use n, ns, u, ms, s, m or h)", precision))
+		return
 	}
+
 	db := req.URL.Query().Get("db")
 	if db == "" {
 		hs.WriteError(w, req, 400, "database not found")
@@ -116,6 +124,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
 		hs.WriteError(w, req, 400, fmt.Sprintf("database forbidden: %s", db))
 		return
 	}
+	rp := req.URL.Query().Get("rp")
 
 	body := req.Body
 	if req.Header.Get("Content-Encoding") == "gzip" {
@@ -133,12 +142,12 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	err = hs.ip.Write(p, db, precision)
+	err = hs.ip.Write(p, db, rp, precision)
 	if err == nil {
 		hs.WriteHeader(w, 204)
 	}
 	if hs.WriteTracing {
-		log.Printf("write: %s %s %s, client: %s", db, precision, p, req.RemoteAddr)
+		log.Printf("write: %s %s %s %s, client: %s", db, rp, precision, p, req.RemoteAddr)
 	}
 }
 

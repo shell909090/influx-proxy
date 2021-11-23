@@ -135,7 +135,7 @@ func QueryAlterQL(w http.ResponseWriter, req *http.Request, ip *Proxy) (body []b
 	// all circles -> all backends -> create or drop database; create, alter or drop retention policy
 	for _, circle := range ip.Circles {
 		if !circle.IsActive() {
-			return nil, fmt.Errorf("circle %d(%s) unavailable", circle.CircleId, circle.Name)
+			return nil, fmt.Errorf("circle %d (name: %s) unavailable", circle.CircleId, circle.Name)
 		}
 	}
 	backends := make([]*Backend, 0)

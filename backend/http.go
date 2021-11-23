@@ -189,24 +189,25 @@ func (hb *HttpBackend) Ping() bool {
 	return true
 }
 
-func (hb *HttpBackend) Write(db string, p []byte) (err error) {
+func (hb *HttpBackend) Write(db, rp string, p []byte) (err error) {
 	var buf bytes.Buffer
 	err = Compress(&buf, p)
 	if err != nil {
 		log.Print("compress error: ", err)
 		return
 	}
-	return hb.WriteStream(db, &buf, true)
+	return hb.WriteStream(db, rp, &buf, true)
 }
 
-func (hb *HttpBackend) WriteCompressed(db string, p []byte) (err error) {
+func (hb *HttpBackend) WriteCompressed(db, rp string, p []byte) (err error) {
 	buf := bytes.NewBuffer(p)
-	return hb.WriteStream(db, buf, true)
+	return hb.WriteStream(db, rp, buf, true)
 }
 
-func (hb *HttpBackend) WriteStream(db string, stream io.Reader, compressed bool) (err error) {
+func (hb *HttpBackend) WriteStream(db, rp string, stream io.Reader, compressed bool) (err error) {
 	q := url.Values{}
 	q.Set("db", db)
+	q.Set("rp", rp)
 	req, err := http.NewRequest("POST", hb.Url+"/write?"+q.Encode(), stream)
 	if hb.Username != "" || hb.Password != "" {
 		hb.SetBasicAuth(req)
@@ -246,6 +247,9 @@ func (hb *HttpBackend) WriteStream(db string, stream io.Reader, compressed bool)
 		err = ErrInternal
 	default: // mostly tcp connection timeout, or request entity too large
 		err = ErrUnknown
+	}
+	if bytes.Contains(respbuf, []byte("retention policy not found")) {
+		err = ErrBadRequest
 	}
 	return
 }

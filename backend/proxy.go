@@ -109,7 +109,7 @@ func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request) (body []byte, e
 	return nil, ErrIllegalQL
 }
 
-func (ip *Proxy) Write(p []byte, db, precision string) (err error) {
+func (ip *Proxy) Write(p []byte, db, rp, precision string) (err error) {
 	buf := bytes.NewBuffer(p)
 	var line []byte
 	for {
@@ -124,12 +124,12 @@ func (ip *Proxy) Write(p []byte, db, precision string) (err error) {
 		if len(line) == 0 {
 			break
 		}
-		ip.WriteRow(line, db, precision)
+		ip.WriteRow(line, db, rp, precision)
 	}
 	return
 }
 
-func (ip *Proxy) WriteRow(line []byte, db, precision string) {
+func (ip *Proxy) WriteRow(line []byte, db, rp, precision string) {
 	nanoLine := AppendNano(line, precision)
 	meas, err := ScanKey(nanoLine)
 	if err != nil {
@@ -137,7 +137,7 @@ func (ip *Proxy) WriteRow(line []byte, db, precision string) {
 		return
 	}
 	if !RapidCheck(nanoLine[len(meas):]) {
-		log.Printf("invalid format, drop data: %s %s %s", db, precision, string(line))
+		log.Printf("invalid format, drop data: %s %s %s %s", db, rp, precision, string(line))
 		return
 	}
 
@@ -148,11 +148,11 @@ func (ip *Proxy) WriteRow(line []byte, db, precision string) {
 		return
 	}
 
-	point := &LinePoint{db, nanoLine}
+	point := &LinePoint{db, rp, nanoLine}
 	for _, be := range backends {
 		err := be.WritePoint(point)
 		if err != nil {
-			log.Printf("write data to buffer error: %s, %s, %s, %s, %s", err, be.Url, db, precision, string(line))
+			log.Printf("write data to buffer error: %s, %s, %s, %s, %s, %s", err, be.Url, db, rp, precision, string(line))
 		}
 	}
 }

@@ -31,7 +31,7 @@ type Backend struct {
 	rewriteTicker   *time.Ticker
 	chWrite         chan *LinePoint
 	chTimer         <-chan time.Time
-	buffers         map[string]*CacheBuffer
+	buffers         map[string]map[string]*CacheBuffer
 	wg              sync.WaitGroup
 }
 
@@ -43,7 +43,7 @@ func NewBackend(cfg *BackendConfig, pxcfg *ProxyConfig) (ib *Backend) {
 		rewriteInterval: pxcfg.RewriteInterval,
 		rewriteTicker:   time.NewTicker(time.Duration(pxcfg.RewriteInterval) * time.Second),
 		chWrite:         make(chan *LinePoint, 16),
-		buffers:         make(map[string]*CacheBuffer),
+		buffers:         make(map[string]map[string]*CacheBuffer),
 	}
 
 	var err error
@@ -93,12 +93,14 @@ func (ib *Backend) WritePoint(point *LinePoint) (err error) {
 }
 
 func (ib *Backend) WriteBuffer(point *LinePoint) (err error) {
-	db, line := point.Db, point.Line
-	cb, ok := ib.buffers[db]
-	if !ok {
-		ib.buffers[db] = &CacheBuffer{Buffer: &bytes.Buffer{}}
-		cb = ib.buffers[db]
+	db, rp, line := point.Db, point.Rp, point.Line
+	if _, ok := ib.buffers[db]; !ok {
+		ib.buffers[db] = make(map[string]*CacheBuffer)
 	}
+	if _, ok := ib.buffers[db][rp]; !ok {
+		ib.buffers[db][rp] = &CacheBuffer{Buffer: &bytes.Buffer{}}
+	}
+	cb := ib.buffers[db][rp]
 	cb.Counter++
 	if cb.Buffer == nil {
 		cb.Buffer = &bytes.Buffer{}
@@ -123,15 +125,15 @@ func (ib *Backend) WriteBuffer(point *LinePoint) (err error) {
 
 	switch {
 	case cb.Counter >= ib.flushSize:
-		ib.FlushBuffer(db)
+		ib.FlushBuffer(db, rp)
 	case ib.chTimer == nil:
 		ib.chTimer = time.After(time.Duration(ib.flushTime) * time.Second)
 	}
 	return
 }
 
-func (ib *Backend) FlushBuffer(db string) {
-	cb := ib.buffers[db]
+func (ib *Backend) FlushBuffer(db, rp string) {
+	cb := ib.buffers[db][rp]
 	if cb.Buffer == nil {
 		return
 	}
@@ -155,7 +157,7 @@ func (ib *Backend) FlushBuffer(db string) {
 		p = buf.Bytes()
 
 		if ib.IsActive() {
-			err = ib.WriteCompressed(db, p)
+			err = ib.WriteCompressed(db, rp, p)
 			switch err {
 			case nil:
 				return
@@ -166,14 +168,14 @@ func (ib *Backend) FlushBuffer(db string) {
 				log.Printf("bad backend, drop all data")
 				return
 			default:
-				log.Printf("write http error: %s %s, length: %d", ib.Url, db, len(p))
+				log.Printf("write http error: %s %s %s, length: %d", ib.Url, db, rp, len(p))
 			}
 		}
 
-		b := bytes.Join([][]byte{[]byte(url.QueryEscape(db)), p}, []byte{' '})
+		b := bytes.Join([][]byte{[]byte(url.QueryEscape(db)), []byte(url.QueryEscape(rp)), p}, []byte{' '})
 		err = ib.fb.Write(b)
 		if err != nil {
-			log.Printf("write db and data to file error with db: %s, length: %d error: %s", db, len(p), err)
+			log.Printf("write db and data to file error with db: %s, rp: %s, length: %d error: %s", db, rp, len(p), err)
 			return
 		}
 	})
@@ -182,8 +184,10 @@ func (ib *Backend) FlushBuffer(db string) {
 func (ib *Backend) Flush() {
 	ib.chTimer = nil
 	for db := range ib.buffers {
-		if ib.buffers[db].Counter > 0 {
-			ib.FlushBuffer(db)
+		for rp := range ib.buffers[db] {
+			if ib.buffers[db][rp].Counter > 0 {
+				ib.FlushBuffer(db, rp)
+			}
 		}
 	}
 }
@@ -220,8 +224,8 @@ func (ib *Backend) Rewrite() (err error) {
 		return
 	}
 
-	p := bytes.SplitN(b, []byte{' '}, 2)
-	if len(p) < 2 {
+	p := bytes.SplitN(b, []byte{' '}, 3)
+	if len(p) < 3 {
 		log.Print("rewrite read invalid data with length: ", len(p))
 		return
 	}
@@ -230,7 +234,12 @@ func (ib *Backend) Rewrite() (err error) {
 		log.Print("rewrite db unescape error: ", err)
 		return
 	}
-	err = ib.WriteCompressed(db, p[1])
+	rp, err := url.QueryUnescape(string(p[1]))
+	if err != nil {
+		log.Print("rewrite rp unescape error: ", err)
+		return
+	}
+	err = ib.WriteCompressed(db, rp, p[2])
 
 	switch err {
 	case nil:
@@ -241,7 +250,7 @@ func (ib *Backend) Rewrite() (err error) {
 		log.Printf("bad backend, drop all data")
 		err = nil
 	default:
-		log.Printf("rewrite http error: %s %s, length: %d", ib.Url, db, len(p[1]))
+		log.Printf("rewrite http error: %s %s %s, length: %d", ib.Url, db, rp, len(p[1]))
 
 		err = ib.fb.RollbackMeta()
 		if err != nil {
