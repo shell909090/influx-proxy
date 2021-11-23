@@ -15,7 +15,6 @@ type Circle struct {
 	CircleId     int // nolint:golint
 	Name         string
 	Backends     []*Backend
-	WriteOnly    bool
 	router       *consistent.Consistent
 	routerCaches sync.Map
 	mapToBackend map[string]*Backend
@@ -26,7 +25,6 @@ func NewCircle(cfg *CircleConfig, pxcfg *ProxyConfig, circleId int) (ic *Circle)
 		CircleId:     circleId,
 		Name:         cfg.Name,
 		Backends:     make([]*Backend, len(cfg.Backends)),
-		WriteOnly:    false,
 		router:       consistent.New(),
 		mapToBackend: make(map[string]*Backend),
 	}
@@ -87,7 +85,7 @@ func (ic *Circle) GetHealth(stats bool) interface{} {
 		Name      string `json:"name"`
 		Active    bool   `json:"active"`
 		WriteOnly bool   `json:"write_only"`
-	}{ic.CircleId, ic.Name, ic.IsActive(), ic.WriteOnly}
+	}{ic.CircleId, ic.Name, ic.IsActive(), ic.IsWriteOnly()}
 	health := struct {
 		Circle   interface{} `json:"circle"`
 		Backends interface{} `json:"backends"`
@@ -102,4 +100,19 @@ func (ic *Circle) IsActive() bool {
 		}
 	}
 	return true
+}
+
+func (ic *Circle) IsWriteOnly() bool {
+	for _, be := range ic.Backends {
+		if be.IsWriteOnly() {
+			return true
+		}
+	}
+	return false
+}
+
+func (ic *Circle) SetWriteOnly(b bool) {
+	for _, be := range ic.Backends {
+		be.SetWriteOnly(b)
+	}
 }

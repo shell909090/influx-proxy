@@ -49,6 +49,7 @@ type HttpBackend struct { // nolint:golint
 	interval    int
 	active      atomic.Value
 	rewriting   atomic.Value
+	writeOnly   atomic.Value
 }
 
 func NewHttpBackend(cfg *BackendConfig, pxcfg *ProxyConfig) (hb *HttpBackend) { // nolint:golint
@@ -70,6 +71,7 @@ func NewSimpleHttpBackend(cfg *BackendConfig) (hb *HttpBackend) { // nolint:goli
 	}
 	hb.active.Store(true)
 	hb.rewriting.Store(false)
+	hb.writeOnly.Store(false)
 	return
 }
 
@@ -163,6 +165,14 @@ func (hb *HttpBackend) IsRewriting() (b bool) {
 
 func (hb *HttpBackend) SetRewriting(b bool) {
 	hb.rewriting.Store(b)
+}
+
+func (hb *HttpBackend) IsWriteOnly() (b bool) {
+	return hb.writeOnly.Load().(bool)
+}
+
+func (hb *HttpBackend) SetWriteOnly(b bool) {
+	hb.writeOnly.Store(b)
 }
 
 func (hb *HttpBackend) Ping() bool {

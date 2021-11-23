@@ -264,19 +264,21 @@ func (ib *Backend) Close() {
 
 func (ib *Backend) GetHealth(ic *Circle, withStats bool) interface{} {
 	health := struct {
-		Name    string      `json:"name"`
-		Url     string      `json:"url"` // nolint:golint
-		Active  bool        `json:"active"`
-		Backlog bool        `json:"backlog"`
-		Rewrite bool        `json:"rewrite"`
-		Healthy bool        `json:"healthy,omitempty"`
-		Stats   interface{} `json:"stats,omitempty"`
+		Name      string      `json:"name"`
+		Url       string      `json:"url"` // nolint:golint
+		Active    bool        `json:"active"`
+		Backlog   bool        `json:"backlog"`
+		Rewriting bool        `json:"rewriting"`
+		WriteOnly bool        `json:"write_only"`
+		Healthy   bool        `json:"healthy,omitempty"`
+		Stats     interface{} `json:"stats,omitempty"`
 	}{
-		Name:    ib.Name,
-		Url:     ib.Url,
-		Active:  ib.IsActive(),
-		Backlog: ib.fb.IsData(),
-		Rewrite: ib.IsRewriting(),
+		Name:      ib.Name,
+		Url:       ib.Url,
+		Active:    ib.IsActive(),
+		Backlog:   ib.fb.IsData(),
+		Rewriting: ib.IsRewriting(),
+		WriteOnly: ib.IsWriteOnly(),
 	}
 	if !withStats {
 		return health

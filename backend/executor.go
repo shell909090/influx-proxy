@@ -7,7 +7,6 @@ package backend
 import (
 	"errors"
 	"fmt"
-	"math/rand"
 	"net/http"
 	"sync"
 
@@ -24,35 +23,44 @@ var (
 )
 
 func QueryFromQL(w http.ResponseWriter, req *http.Request, ip *Proxy, tokens []string, db string) (body []byte, err error) {
-	// available circle -> backend by key(db,meas) -> select or show
+	// all circles -> backend by key(db,meas) -> select or show
 	meas, err := GetMeasurementFromTokens(tokens)
 	if err != nil {
 		return nil, ErrGetMeasurement
 	}
 	key := GetKey(db, meas)
-	badSet := make(map[int]bool)
-	for {
-		if len(badSet) == len(ip.Circles) {
-			return nil, ErrBackendsUnavailable
-		}
-		id := rand.Intn(len(ip.Circles))
-		if badSet[id] {
-			continue
-		}
-		circle := ip.Circles[id]
-		if circle.WriteOnly {
-			badSet[id] = true
-			continue
-		}
-		be := circle.GetBackend(key)
-		if be.IsActive() {
-			qr := be.Query(req, w, false)
-			if qr.Status > 0 || len(badSet) == len(ip.Circles)-1 {
-				return qr.Body, qr.Err
-			}
-		}
-		badSet[id] = true
+	backends := ip.GetBackends(key)
+	if len(backends) == 0 {
+		return nil, ErrGetBackends
 	}
+
+	// pass non-active, rewriting or write-only.
+	for _, be := range backends {
+		if !be.IsActive() || be.IsRewriting() || be.IsWriteOnly() {
+			continue
+		}
+		qr := be.Query(req, w, false)
+		if qr.Err == nil {
+			return qr.Body, nil
+		}
+		err = qr.Err
+	}
+	// pass non-active, non-writing (excluding rewriting and write-only).
+	for _, be := range backends {
+		if !be.IsActive() || !(be.IsRewriting() || be.IsWriteOnly()) {
+			continue
+		}
+		qr := be.Query(req, w, false)
+		if qr.Err == nil {
+			return qr.Body, nil
+		}
+		err = qr.Err
+	}
+
+	if err != nil {
+		return nil, err
+	}
+	return nil, ErrBackendsUnavailable
 }
 
 func QueryShowQL(w http.ResponseWriter, req *http.Request, ip *Proxy, tokens []string) (body []byte, err error) {
