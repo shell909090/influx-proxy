@@ -2,6 +2,7 @@
 
 curl -X POST 'http://127.0.0.1:7076/query' --data-urlencode 'q=CREATE DATABASE db1'
 curl -X POST 'http://127.0.0.1:7076/query' --data-urlencode 'q=CREATE DATABASE db2'
+curl -X POST 'http://127.0.0.1:7076/query' --data-urlencode 'q=CREATE RETENTION POLICY rp2 ON db2 DURATION 0s REPLICATION 1 SHARD DURATION 168h'
 
 echo ""
 
@@ -15,12 +16,12 @@ curl -i -X POST 'http://127.0.0.1:7076/write?db=db1&precision=s' --data-binary \
 cpu2,host=server03,region=us-east float=1422568543702,long=1422568543703i 1422568543
 cpu2,host=server04,region=us-west,direction=out float=1422568543702568543,long=1422568543702568544i,running=false,status="fail" 1596819659'
 
-curl -i -X POST 'http://127.0.0.1:7076/write?db=db2&precision=h' --data-binary \
+curl -i -X POST 'http://127.0.0.1:7076/write?db=db2&rp=rp2&precision=h' --data-binary \
 'cpu3,host=server05,region=cn\ north,tag\ key=tag\ value idle=64,system=1i,user="Dwayne Johnson",admin=true
 cpu3,host=server06,region=cn\ south,tag\ key=value\=with"equals" idle=16,system=16i,user="Jay Chou",admin=false  439888
 cpu3,host=server07,region=cn\ south,tag\ key=value\,with"commas" idle=74,system=23i,user="Stephen Chow" 440204'
 
-curl -i -X POST 'http://127.0.0.1:7076/write?db=db2&precision=ms' --data-binary \
+curl -i -X POST 'http://127.0.0.1:7076/write?db=db2&rp=rp2&precision=ms' --data-binary \
 'cpu4 idle=14,system=31i,user="Dwayne Johnson",admin=true,character="\", ,\,\\,\\\,\\\\"
 cpu4 idle=39,system=56i,user="Jay Chou",brief\ desc="the best \"singer\"" 1422568543702
 cpu4 idle=47,system=93i,user="Stephen Chow",admin=true,brief\ desc="the best \"novelist\""  1596819420440'
