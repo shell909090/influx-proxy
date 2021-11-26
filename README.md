@@ -20,6 +20,7 @@ Since the InfluxDB Proxy v1 is limited by the only `ONE` database and the `KEYMA
 
 * Support gzip.
 * Support query.
+* Support write.
 * Support some cluster influxql.
 * Filter some dangerous influxql.
 * Transparent for client, like cluster for client.
@@ -28,7 +29,7 @@ Since the InfluxDB Proxy v1 is limited by the only `ONE` database and the `KEYMA
 * Support database sharding with consistent hash.
 * Support tools to rebalance, recovery, resync and cleanup.
 * Load config file and no longer depend on python and redis.
-* Support precision query parameter when writing data.
+* Support both rp and precision parameter when writing data.
 * Support influxdb-java, influxdb shell and grafana.
 * Support authentication and https.
 * Support health status query.
@@ -156,7 +157,7 @@ The following commands are forbid.
 * `GRANT`
 * `REVOKE`
 * `KILL`
-* `Explain`
+* `EXPLAIN`
 * `SELECT INTO`
 * `Multiple queries` delimited by semicolon `;`
 * `Multiple measurements` delimited by comma `,`
@@ -200,10 +201,9 @@ There are three tools for benchmarking InfluxDB, which can also be applied to In
 
 ## Tool
 
-There are two tools for InfluxDB and InfluxDB Proxy:
+There is a tool for InfluxDB and InfluxDB Proxy:
 
 * [influx-tool](https://github.com/chengshiwen/influx-tool): high performance tool to rebalance, recovery, resync, cleanup and compact. most commands do not require InfluxDB to start
-* [influx-tool-v0.1](https://github.com/chengshiwen/influx-tool-v0.1): export tool to extend the official tool `influx_inspect export`, no longer updated
 
 ## License
 
