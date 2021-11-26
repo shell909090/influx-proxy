@@ -94,6 +94,7 @@ func (ib *Backend) WritePoint(point *LinePoint) (err error) {
 
 func (ib *Backend) WriteBuffer(point *LinePoint) (err error) {
 	db, rp, line := point.Db, point.Rp, point.Line
+	// it's thread-safe since ib.buffers is only used (read-write) in ib.worker() goroutine
 	if _, ok := ib.buffers[db]; !ok {
 		ib.buffers[db] = make(map[string]*CacheBuffer)
 	}
