@@ -7,6 +7,7 @@ package backend
 import (
 	"errors"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"sync"
 
@@ -29,13 +30,11 @@ func QueryFromQL(w http.ResponseWriter, req *http.Request, ip *Proxy, tokens []s
 		return nil, ErrGetMeasurement
 	}
 	key := GetKey(db, meas)
-	backends := ip.GetBackends(key)
-	if len(backends) == 0 {
-		return nil, ErrGetBackends
-	}
 
 	// pass non-active, rewriting or write-only.
-	for _, be := range backends {
+	perms := rand.Perm(len(ip.Circles))
+	for _, p := range perms {
+		be := ip.Circles[p].GetBackend(key)
 		if !be.IsActive() || be.IsRewriting() || be.IsWriteOnly() {
 			continue
 		}
@@ -45,7 +44,9 @@ func QueryFromQL(w http.ResponseWriter, req *http.Request, ip *Proxy, tokens []s
 		}
 		err = qr.Err
 	}
+
 	// pass non-active, non-writing (excluding rewriting and write-only).
+	backends := ip.GetBackends(key)
 	for _, be := range backends {
 		if !be.IsActive() || !(be.IsRewriting() || be.IsWriteOnly()) {
 			continue
