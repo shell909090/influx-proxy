@@ -7,6 +7,7 @@ package backend
 import (
 	"errors"
 	"fmt"
+	"log"
 	"math/rand"
 	"net/http"
 	"sync"
@@ -76,8 +77,11 @@ func QueryShowQL(w http.ResponseWriter, req *http.Request, ip *Proxy, tokens []s
 	if err != nil {
 		return
 	}
-	if inactive > 0 && len(bodies) == 0 {
-		return nil, ErrBackendsUnavailable
+	if inactive > 0 {
+		log.Printf("query: %s, inactive: %d/%d backends unavailable", req.FormValue("q"), inactive, inactive+len(bodies))
+		if len(bodies) == 0 {
+			return nil, ErrBackendsUnavailable
+		}
 	}
 
 	var rsp *Response
@@ -98,9 +102,6 @@ func QueryShowQL(w http.ResponseWriter, req *http.Request, ip *Proxy, tokens []s
 	if rsp == nil {
 		rsp = ResponseFromSeries(nil)
 	}
-	if inactive > 0 {
-		rsp.Err = fmt.Sprintf("%d/%d backends unavailable", inactive, inactive+len(bodies))
-	}
 	pretty := req.URL.Query().Get("pretty") == "true"
 	body = util.MarshalJSON(rsp, pretty)
 	if w.Header().Get("Content-Encoding") == "gzip" {
@@ -117,6 +118,19 @@ func QueryDeleteOrDropQL(w http.ResponseWriter, req *http.Request, ip *Proxy, to
 	}
 	key := GetKey(db, meas)
 	backends := ip.GetBackends(key)
+	return QueryBackends(backends, req, w)
+}
+
+func QueryAlterQL(w http.ResponseWriter, req *http.Request, ip *Proxy) (body []byte, err error) {
+	// all circles -> all backends -> create or drop database; create, alter or drop retention policy
+	backends := make([]*Backend, 0)
+	for _, circle := range ip.Circles {
+		backends = append(backends, circle.Backends...)
+	}
+	return QueryBackends(backends, req, w)
+}
+
+func QueryBackends(backends []*Backend, req *http.Request, w http.ResponseWriter) (body []byte, err error) {
 	if len(backends) == 0 {
 		return nil, ErrGetBackends
 	}
@@ -124,24 +138,6 @@ func QueryDeleteOrDropQL(w http.ResponseWriter, req *http.Request, ip *Proxy, to
 		if !be.IsActive() {
 			return nil, fmt.Errorf("backend %s(%s) unavailable", be.Name, be.Url)
 		}
-	}
-	bodies, _, err := QueryInParallel(backends, req, w, false)
-	if err != nil {
-		return nil, err
-	}
-	return bodies[0], nil
-}
-
-func QueryAlterQL(w http.ResponseWriter, req *http.Request, ip *Proxy) (body []byte, err error) {
-	// all circles -> all backends -> create or drop database; create, alter or drop retention policy
-	for _, circle := range ip.Circles {
-		if !circle.IsActive() {
-			return nil, fmt.Errorf("circle %d (name: %s) unavailable", circle.CircleId, circle.Name)
-		}
-	}
-	backends := make([]*Backend, 0)
-	for _, circle := range ip.Circles {
-		backends = append(backends, circle.Backends...)
 	}
 	bodies, _, err := QueryInParallel(backends, req, w, false)
 	if err != nil {

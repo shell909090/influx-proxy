@@ -16,7 +16,7 @@ type Circle struct {
 	Name         string
 	Backends     []*Backend
 	router       *consistent.Consistent
-	routerCaches sync.Map
+	routerCache  sync.Map
 	mapToBackend map[string]*Backend
 }
 
@@ -60,12 +60,12 @@ func (ic *Circle) addRouter(be *Backend, idx int, hashKey string) {
 }
 
 func (ic *Circle) GetBackend(key string) *Backend {
-	if be, ok := ic.routerCaches.Load(key); ok {
+	if be, ok := ic.routerCache.Load(key); ok {
 		return be.(*Backend)
 	}
 	value, _ := ic.router.Get(key)
 	be := ic.mapToBackend[value]
-	ic.routerCaches.Store(key, be)
+	ic.routerCache.Store(key, be)
 	return be
 }
 
