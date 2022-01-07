@@ -96,17 +96,21 @@ func (tx *Transfer) setLogOutput(name string) {
 }
 
 func (tx *Transfer) getDatabases() []string {
+	dbs := make([]string, 0)
+	dbm := make(map[string]bool)
 	for _, cs := range tx.CircleStates {
 		for _, be := range cs.Backends {
 			if be.IsActive() {
-				dbs := be.GetDatabases()
-				if len(dbs) > 0 {
-					return dbs
+				for _, db := range be.GetDatabases() {
+					if _, ok := dbm[db]; !ok {
+						dbs = append(dbs, db)
+						dbm[db] = true
+					}
 				}
 			}
 		}
 	}
-	return nil
+	return dbs
 }
 
 func (tx *Transfer) createDatabases(dbs []string) ([]string, error) {
