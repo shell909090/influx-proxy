@@ -124,6 +124,10 @@ func (ip *Proxy) Write(p []byte, db, rp, precision string) (err error) {
 		if len(line) == 0 {
 			break
 		}
+		line = bytes.TrimSpace(line)
+		if len(line) == 0 {
+			continue
+		}
 		ip.WriteRow(line, db, rp, precision)
 	}
 	return
