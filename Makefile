@@ -6,7 +6,7 @@ LDFLAGS     ?= "-s -w -X github.com/chengshiwen/influx-proxy/backend.Version=$(V
 GOBUILD_ENV = GO111MODULE=on CGO_ENABLED=0
 GOBUILD     = go build -o bin/$(PROGRAM) -a -ldflags $(LDFLAGS)
 GOX         = go run github.com/mitchellh/gox
-TARGETS     := darwin/amd64 darwin/arm64 linux/amd64 windows/amd64
+TARGETS     := darwin/amd64 darwin/arm64 linux/amd64 linux/arm64 windows/amd64
 DIST_DIRS   := find * -maxdepth 0 -type d -exec
 
 .PHONY: build linux cross-build release test bench run lint down tidy clean
@@ -20,7 +20,7 @@ linux:
 	GOOS=linux GOARCH=amd64 $(GOBUILD_ENV) $(GOBUILD)
 
 cross-build: clean
-	$(GOBUILD_ENV) $(GOX) -ldflags $(LDFLAGS) -parallel=4 -output="bin/$(PROGRAM)-$(VERSION)-{{.OS}}-{{.Arch}}/$(PROGRAM)" -osarch='$(TARGETS)' .
+	$(GOBUILD_ENV) $(GOX) -ldflags $(LDFLAGS) -parallel=5 -output="bin/$(PROGRAM)-$(VERSION)-{{.OS}}-{{.Arch}}/$(PROGRAM)" -osarch='$(TARGETS)' .
 
 release: cross-build
 	( \
