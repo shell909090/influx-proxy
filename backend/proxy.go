@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/chengshiwen/influx-proxy/util"
+	"github.com/influxdata/influxdb1-client/models"
 )
 
 type Proxy struct {
@@ -148,15 +149,38 @@ func (ip *Proxy) WriteRow(line []byte, db, rp, precision string) {
 	key := GetKey(db, meas)
 	backends := ip.GetBackends(key)
 	if len(backends) == 0 {
-		log.Printf("write data error: can't get backends")
+		log.Printf("write data error: can't get backends, db: %s, meas: %s", db, meas)
 		return
 	}
 
 	point := &LinePoint{db, rp, nanoLine}
 	for _, be := range backends {
-		err := be.WritePoint(point)
+		err = be.WritePoint(point)
 		if err != nil {
 			log.Printf("write data to buffer error: %s, %s, %s, %s, %s, %s", err, be.Url, db, rp, precision, string(line))
 		}
 	}
+}
+
+func (ip *Proxy) WritePoints(points []models.Point, db, rp string) error {
+	var err error
+	for _, pt := range points {
+		meas := string(pt.Name())
+		key := GetKey(db, meas)
+		backends := ip.GetBackends(key)
+		if len(backends) == 0 {
+			log.Printf("write point error: can't get backends, db: %s, meas: %s", db, meas)
+			err = ErrEmptyBackends
+			continue
+		}
+
+		point := &LinePoint{db, rp, []byte(pt.String())}
+		for _, be := range backends {
+			err = be.WritePoint(point)
+			if err != nil {
+				log.Printf("write point to buffer error: %s, %s, %s, %s, %s", err, be.Url, db, rp, pt.String())
+			}
+		}
+	}
+	return err
 }

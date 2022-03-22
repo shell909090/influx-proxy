@@ -5,6 +5,7 @@
 package service
 
 import (
+	"bytes"
 	"compress/gzip"
 	"encoding/json"
 	"errors"
@@ -18,8 +19,12 @@ import (
 	"strings"
 
 	"github.com/chengshiwen/influx-proxy/backend"
+	"github.com/chengshiwen/influx-proxy/service/prometheus"
+	"github.com/chengshiwen/influx-proxy/service/prometheus/remote"
 	"github.com/chengshiwen/influx-proxy/transfer"
 	"github.com/chengshiwen/influx-proxy/util"
+	"github.com/gogo/protobuf/proto"
+	"github.com/golang/snappy"
 )
 
 var (
@@ -68,6 +73,7 @@ func (hs *HttpService) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/cleanup", hs.HandlerCleanup)
 	mux.HandleFunc("/transfer/state", hs.HandlerTransferState)
 	mux.HandleFunc("/transfer/stats", hs.HandlerTransferStats)
+	mux.HandleFunc("/api/v1/prom/write", hs.HandlerPromWrite)
 	mux.HandleFunc("/debug/pprof/", pprof.Index)
 	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
 }
@@ -447,6 +453,77 @@ func (hs *HttpService) HandlerTransferStats(w http.ResponseWriter, req *http.Req
 		hs.Write(w, req, 200, hs.tx.CircleStates[circleId].Stats)
 	} else {
 		hs.WriteError(w, req, 400, "invalid stats type")
+	}
+}
+
+func (hs *HttpService) HandlerPromWrite(w http.ResponseWriter, req *http.Request) {
+	defer req.Body.Close()
+	if !hs.checkMethodAndAuth(w, req, "POST") {
+		return
+	}
+
+	db := req.URL.Query().Get("db")
+	if db == "" {
+		hs.WriteError(w, req, 400, "database not found")
+		return
+	}
+	if len(hs.ip.DBSet) > 0 && !hs.ip.DBSet[db] {
+		hs.WriteError(w, req, 400, fmt.Sprintf("database forbidden: %s", db))
+		return
+	}
+	rp := req.URL.Query().Get("rp")
+
+	body := req.Body
+	var bs []byte
+	if req.ContentLength > 0 {
+		// This will just be an initial hint for the reader, as the
+		// bytes.Buffer will grow as needed when ReadFrom is called
+		bs = make([]byte, 0, req.ContentLength)
+	}
+	buf := bytes.NewBuffer(bs)
+
+	_, err := buf.ReadFrom(body)
+	if err != nil {
+		if hs.WriteTracing {
+			log.Printf("Prom write handler unable to read bytes from request body")
+		}
+		hs.WriteError(w, req, 400, err.Error())
+		return
+	}
+
+	if hs.WriteTracing {
+		log.Printf("Prom write body received by handler, body: %s", buf.String())
+	}
+
+	reqBuf, err := snappy.Decode(nil, buf.Bytes())
+	if err != nil {
+		hs.WriteError(w, req, 400, err.Error())
+		return
+	}
+
+	// Convert the Prometheus remote write request to Influx Points
+	var writeReq remote.WriteRequest
+	if err := proto.Unmarshal(reqBuf, &writeReq); err != nil {
+		hs.WriteError(w, req, 400, err.Error())
+		return
+	}
+
+	points, err := prometheus.WriteRequestToPoints(&writeReq)
+	if err != nil {
+		if hs.WriteTracing {
+			log.Printf("Prom write handler, error: %s", err)
+		}
+		// Check if the error was from something other than dropping invalid values.
+		if _, ok := err.(prometheus.DroppedValuesError); !ok {
+			hs.WriteError(w, req, 400, err.Error())
+			return
+		}
+	}
+
+	// Write points.
+	err = hs.ip.WritePoints(points, db, rp)
+	if err == nil {
+		hs.WriteHeader(w, 204)
 	}
 }
 
