@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/url"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/panjf2000/ants/v2"
@@ -25,6 +26,7 @@ type Backend struct {
 	fb   *FileBackend
 	pool *ants.Pool
 
+	running         atomic.Value
 	flushSize       int
 	flushTime       int
 	rewriteInterval int
@@ -45,6 +47,7 @@ func NewBackend(cfg *BackendConfig, pxcfg *ProxyConfig) (ib *Backend) {
 		chWrite:         make(chan *LinePoint, 16),
 		buffers:         make(map[string]map[string]*CacheBuffer),
 	}
+	ib.running.Store(true)
 
 	var err error
 	ib.fb, err = NewFileBackend(cfg.Name, pxcfg.DataDir)
@@ -65,7 +68,7 @@ func NewSimpleBackend(cfg *BackendConfig) *Backend {
 }
 
 func (ib *Backend) worker() {
-	for {
+	for ib.IsRunning() {
 		select {
 		case p, ok := <-ib.chWrite:
 			if !ok {
@@ -74,12 +77,20 @@ func (ib *Backend) worker() {
 				ib.wg.Wait()
 				ib.HttpBackend.Close()
 				ib.fb.Close()
+				ib.pool.Release()
 				return
 			}
 			ib.WriteBuffer(p)
 
 		case <-ib.chTimer:
 			ib.Flush()
+			if !ib.IsRunning() {
+				ib.wg.Wait()
+				ib.HttpBackend.Close()
+				ib.fb.Close()
+				ib.pool.Release()
+				return
+			}
 
 		case <-ib.rewriteTicker.C:
 			ib.RewriteIdle()
@@ -88,6 +99,9 @@ func (ib *Backend) worker() {
 }
 
 func (ib *Backend) WritePoint(point *LinePoint) (err error) {
+	if !ib.IsRunning() {
+		return io.ErrClosedPipe
+	}
 	ib.chWrite <- point
 	return
 }
@@ -202,6 +216,9 @@ func (ib *Backend) RewriteIdle() {
 
 func (ib *Backend) RewriteLoop() {
 	for ib.fb.IsData() {
+		if !ib.IsRunning() {
+			return
+		}
 		if !ib.IsActive() {
 			time.Sleep(time.Duration(ib.rewriteInterval) * time.Second)
 			continue
@@ -267,8 +284,12 @@ func (ib *Backend) Rewrite() (err error) {
 	return
 }
 
+func (ib *Backend) IsRunning() (b bool) {
+	return ib.running.Load().(bool)
+}
+
 func (ib *Backend) Close() {
-	ib.pool.Release()
+	ib.running.Store(false)
 	close(ib.chWrite)
 }
 

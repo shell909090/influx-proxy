@@ -116,3 +116,9 @@ func (ic *Circle) SetTransferIn(b bool) {
 		be.SetTransferIn(b)
 	}
 }
+
+func (ic *Circle) Close() {
+	for _, be := range ic.Backends {
+		be.Close()
+	}
+}

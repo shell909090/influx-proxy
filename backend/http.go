@@ -47,6 +47,7 @@ type HttpBackend struct { // nolint:golint
 	Password    string
 	AuthEncrypt bool
 	interval    int
+	running     atomic.Value
 	active      atomic.Value
 	rewriting   atomic.Value
 	transferIn  atomic.Value
@@ -71,6 +72,7 @@ func NewSimpleHttpBackend(cfg *BackendConfig) (hb *HttpBackend) { // nolint:goli
 		AuthEncrypt: cfg.AuthEncrypt,
 		writeOnly:   cfg.WriteOnly,
 	}
+	hb.running.Store(true)
 	hb.active.Store(true)
 	hb.rewriting.Store(false)
 	hb.transferIn.Store(false)
@@ -151,7 +153,7 @@ func (hb *HttpBackend) SetBasicAuth(req *http.Request) {
 }
 
 func (hb *HttpBackend) CheckActive() {
-	for {
+	for hb.running.Load().(bool) {
 		hb.active.Store(hb.Ping())
 		time.Sleep(time.Duration(hb.interval) * time.Second)
 	}
@@ -374,5 +376,6 @@ func (hb *HttpBackend) DropMeasurement(db, meas string) ([]byte, error) {
 }
 
 func (hb *HttpBackend) Close() {
+	hb.running.Store(false)
 	hb.transport.CloseIdleConnections()
 }

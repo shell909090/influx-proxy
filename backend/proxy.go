@@ -184,3 +184,9 @@ func (ip *Proxy) WritePoints(points []models.Point, db, rp string) error {
 	}
 	return err
 }
+
+func (ip *Proxy) Close() {
+	for _, c := range ip.Circles {
+		c.Close()
+	}
+}
