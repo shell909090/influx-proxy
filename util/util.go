@@ -5,10 +5,7 @@
 package util
 
 import (
-	"bytes"
-	"compress/gzip"
 	"encoding/json"
-	"io"
 	"os"
 )
 
@@ -34,22 +31,6 @@ func MakeDir(dir string) (err error) {
 			return
 		}
 	}
-	return
-}
-
-func GzipCompress(b []byte) (cb []byte, err error) {
-	var buf bytes.Buffer
-	zip := gzip.NewWriter(&buf)
-	n, err := zip.Write(b)
-	if err != nil {
-		return
-	}
-	if n != len(b) {
-		err = io.ErrShortWrite
-		return
-	}
-	err = zip.Close()
-	cb = buf.Bytes()
 	return
 }
 

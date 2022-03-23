@@ -31,6 +31,11 @@ var (
 	ErrUnknown      = errors.New("unknown error")
 )
 
+const (
+	HeaderQueryOrigin = "Query-Origin"
+	QueryParallel     = "Parallel"
+)
+
 type QueryResult struct {
 	Header http.Header
 	Status int
@@ -120,15 +125,14 @@ func CloneQueryRequest(r *http.Request) *http.Request {
 
 func Compress(buf *bytes.Buffer, p []byte) (err error) {
 	zip := gzip.NewWriter(buf)
+	defer zip.Close()
 	n, err := zip.Write(p)
 	if err != nil {
 		return
 	}
 	if n != len(p) {
 		err = io.ErrShortWrite
-		return
 	}
-	err = zip.Close()
 	return
 }
 
@@ -259,6 +263,9 @@ func (hb *HttpBackend) WriteStream(db, rp string, stream io.Reader, compressed b
 }
 
 func (hb *HttpBackend) Query(req *http.Request, w http.ResponseWriter, decompress bool) (qr *QueryResult) {
+	if req.Header.Get(HeaderQueryOrigin) == QueryParallel {
+		defer req.Body.Close()
+	}
 	qr = &QueryResult{}
 	if len(req.Form) == 0 {
 		req.Form = url.Values{}
@@ -279,7 +286,7 @@ func (hb *HttpBackend) Query(req *http.Request, w http.ResponseWriter, decompres
 	q := strings.TrimSpace(req.FormValue("q"))
 	resp, err := hb.transport.RoundTrip(req)
 	if err != nil {
-		if req.Header.Get("Query-Origin") != "Parallel" || err.Error() != "context canceled" {
+		if req.Header.Get(HeaderQueryOrigin) != QueryParallel || err.Error() != "context canceled" {
 			qr.Err = err
 			log.Printf("query error: %s, the query is %s", err, q)
 		}

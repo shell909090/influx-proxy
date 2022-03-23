@@ -5,6 +5,7 @@
 package backend
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"log"
@@ -105,7 +106,12 @@ func QueryShowQL(w http.ResponseWriter, req *http.Request, ip *Proxy, tokens []s
 	pretty := req.URL.Query().Get("pretty") == "true"
 	body = util.MarshalJSON(rsp, pretty)
 	if w.Header().Get("Content-Encoding") == "gzip" {
-		return util.GzipCompress(body)
+		var buf bytes.Buffer
+		err = Compress(&buf, body)
+		if err != nil {
+			return
+		}
+		body = buf.Bytes()
 	}
 	return
 }
@@ -149,7 +155,7 @@ func QueryBackends(backends []*Backend, req *http.Request, w http.ResponseWriter
 func QueryInParallel(backends []*Backend, req *http.Request, w http.ResponseWriter, decompress bool) (bodies [][]byte, inactive int, err error) {
 	var wg sync.WaitGroup
 	var header http.Header
-	req.Header.Set("Query-Origin", "Parallel")
+	req.Header.Set(HeaderQueryOrigin, QueryParallel)
 	ch := make(chan *QueryResult, len(backends))
 	for _, be := range backends {
 		if !be.IsActive() {
