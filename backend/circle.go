@@ -111,8 +111,8 @@ func (ic *Circle) IsWriteOnly() bool {
 	return false
 }
 
-func (ic *Circle) SetWriteOnly(b bool) {
+func (ic *Circle) SetTransferIn(b bool) {
 	for _, be := range ic.Backends {
-		be.SetWriteOnly(b)
+		be.SetTransferIn(b)
 	}
 }

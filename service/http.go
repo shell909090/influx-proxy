@@ -420,7 +420,7 @@ func (hs *HttpService) HandlerTransferState(w http.ResponseWriter, req *http.Req
 			}
 			cs := hs.tx.CircleStates[circleId]
 			cs.Transferring = transferring
-			cs.SetWriteOnly(transferring)
+			cs.SetTransferIn(transferring)
 			state["circle"] = map[string]interface{}{
 				"id":           cs.CircleId,
 				"name":         cs.Name,

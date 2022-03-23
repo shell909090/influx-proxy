@@ -32,6 +32,7 @@ type BackendConfig struct { // nolint:golint
 	Username    string `mapstructure:"username"`
 	Password    string `mapstructure:"password"`
 	AuthEncrypt bool   `mapstructure:"auth_encrypt"`
+	WriteOnly   bool   `mapstructure:"write_only"`
 }
 
 type CircleConfig struct {
