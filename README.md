@@ -4,6 +4,8 @@ This project adds a basic high availability and consistent hash layer to InfluxD
 
 NOTE: influx-proxy must be built with Go 1.14+ with Go module support, don't implement udp.
 
+NOTE: [InfluxDB Cluster](https://github.com/chengshiwen/influxdb-cluster) for replacing [InfluxDB Enterprise](https://docs.influxdata.com/enterprise_influxdb/v1.8/) is coming, which is better than InfluxDB Proxy.
+
 ## Why
 
 We used [InfluxDB Relay](https://github.com/influxdata/influxdb-relay) before, but it doesn't support some demands.
@@ -18,9 +20,7 @@ Since the InfluxDB Proxy v1 is limited by the only `ONE` database and the `KEYMA
 
 ## Features
 
-* Support gzip.
-* Support query.
-* Support write.
+* Support query and write.
 * Support some cluster influxql.
 * Filter some dangerous influxql.
 * Transparent for client, like cluster for client.
@@ -31,14 +31,18 @@ Since the InfluxDB Proxy v1 is limited by the only `ONE` database and the `KEYMA
 * Load config file and no longer depend on python and redis.
 * Support both rp and precision parameter when writing data.
 * Support influxdb-java, influxdb shell and grafana.
+* Support prometheus remote read and write.
 * Support authentication and https.
+* Support authentication encryption.
 * Support health status query.
 * Support database whitelist.
 * Support version display.
+* Support gzip.
 
 ## Requirements
 
 * Golang >= 1.14 with Go module support
+* InfluxDB 1.2 - 1.8 (For 2.x, please visit branch [influxdb-v2](https://github.com/chengshiwen/influx-proxy/tree/influxdb-v2))
 
 ## Usage
 
@@ -127,6 +131,7 @@ The configuration settings are as follows:
     * `username`: influxdb username, with encryption if auth_encrypt is enabled, default is `empty` which means no auth
     * `password`: influxdb password, with encryption if auth_encrypt is enabled, default is `empty` which means no auth
     * `auth_encrypt`: whether to encrypt auth (username/password), default is `false`
+    * `write_only`: whether to write only on the influxdb, default is `false`
 * `listen_addr`: proxy listen addr, default is `:7076`
 * `db_list`: database list permitted to access, default is `[]`
 * `data_dir`: data dir to save .dat .rec, default is `data`
@@ -159,6 +164,7 @@ The following commands are forbid.
 * `KILL`
 * `EXPLAIN`
 * `SELECT INTO`
+* `CONTINUOUS QUERY`
 * `Multiple queries` delimited by semicolon `;`
 * `Multiple measurements` delimited by comma `,`
 * `Regexp measurement`
