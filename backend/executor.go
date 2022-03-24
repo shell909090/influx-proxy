@@ -70,10 +70,7 @@ func QueryShowQL(w http.ResponseWriter, req *http.Request, ip *Proxy, tokens []s
 	// all circles -> all backends -> show
 	// remove support of query parameter `chunked`
 	req.Form.Del("chunked")
-	backends := make([]*Backend, 0)
-	for _, circle := range ip.Circles {
-		backends = append(backends, circle.Backends...)
-	}
+	backends := ip.GetAllBackends()
 	bodies, inactive, err := QueryInParallel(backends, req, w, true)
 	if err != nil {
 		return
@@ -129,10 +126,7 @@ func QueryDeleteOrDropQL(w http.ResponseWriter, req *http.Request, ip *Proxy, to
 
 func QueryAlterQL(w http.ResponseWriter, req *http.Request, ip *Proxy) (body []byte, err error) {
 	// all circles -> all backends -> create or drop database; create, alter or drop retention policy
-	backends := make([]*Backend, 0)
-	for _, circle := range ip.Circles {
-		backends = append(backends, circle.Backends...)
-	}
+	backends := ip.GetAllBackends()
 	return QueryBackends(backends, req, w)
 }
 

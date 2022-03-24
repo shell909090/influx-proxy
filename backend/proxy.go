@@ -21,19 +21,24 @@ import (
 
 type Proxy struct {
 	Circles []*Circle
-	DBSet   util.Set
+	dbSet   util.Set
 }
 
 func NewProxy(cfg *ProxyConfig) (ip *Proxy) {
+	err := util.MakeDir(cfg.DataDir)
+	if err != nil {
+		log.Fatalf("create data dir error: %s", err)
+		return
+	}
 	ip = &Proxy{
 		Circles: make([]*Circle, len(cfg.Circles)),
-		DBSet:   util.NewSet(),
+		dbSet:   util.NewSet(),
 	}
 	for idx, circfg := range cfg.Circles {
 		ip.Circles[idx] = NewCircle(circfg, cfg, idx)
 	}
 	for _, db := range cfg.DBList {
-		ip.DBSet.Add(db)
+		ip.dbSet.Add(db)
 	}
 	rand.Seed(time.Now().UnixNano())
 	return
@@ -56,6 +61,18 @@ func (ip *Proxy) GetBackends(key string) []*Backend {
 	return backends
 }
 
+func (ip *Proxy) GetAllBackends() []*Backend {
+	capacity := 0
+	for _, circle := range ip.Circles {
+		capacity += len(circle.Backends)
+	}
+	backends := make([]*Backend, 0, capacity)
+	for _, circle := range ip.Circles {
+		backends = append(backends, circle.Backends...)
+	}
+	return backends
+}
+
 func (ip *Proxy) GetHealth(stats bool) []interface{} {
 	var wg sync.WaitGroup
 	health := make([]interface{}, len(ip.Circles))
@@ -68,6 +85,10 @@ func (ip *Proxy) GetHealth(stats bool) []interface{} {
 	}
 	wg.Wait()
 	return health
+}
+
+func (ip *Proxy) IsForbiddenDB(db string) bool {
+	return db == "_internal" || (len(ip.dbSet) > 0 && !ip.dbSet[db])
 }
 
 func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request) (body []byte, err error) {
@@ -92,7 +113,7 @@ func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request) (body []byte, e
 		if db == "" {
 			return nil, ErrDatabaseNotFound
 		}
-		if db == "_internal" || (len(ip.DBSet) > 0 && !ip.DBSet[db]) {
+		if ip.IsForbiddenDB(db) {
 			return nil, fmt.Errorf("database forbidden: %s", db)
 		}
 	}

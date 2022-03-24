@@ -126,7 +126,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
 		hs.WriteError(w, req, 400, "database not found")
 		return
 	}
-	if len(hs.ip.DBSet) > 0 && !hs.ip.DBSet[db] {
+	if hs.ip.IsForbiddenDB(db) {
 		hs.WriteError(w, req, 400, fmt.Sprintf("database forbidden: %s", db))
 		return
 	}
@@ -467,7 +467,7 @@ func (hs *HttpService) HandlerPromWrite(w http.ResponseWriter, req *http.Request
 		hs.WriteError(w, req, 400, "database not found")
 		return
 	}
-	if len(hs.ip.DBSet) > 0 && !hs.ip.DBSet[db] {
+	if hs.ip.IsForbiddenDB(db) {
 		hs.WriteError(w, req, 400, fmt.Sprintf("database forbidden: %s", db))
 		return
 	}

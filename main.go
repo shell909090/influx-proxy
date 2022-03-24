@@ -15,7 +15,6 @@ import (
 
 	"github.com/chengshiwen/influx-proxy/backend"
 	"github.com/chengshiwen/influx-proxy/service"
-	"github.com/chengshiwen/influx-proxy/util"
 )
 
 var (
@@ -52,12 +51,6 @@ func main() {
 	}
 	log.Printf("version: %s, commit: %s, build: %s", backend.Version, backend.GitCommit, backend.BuildTime)
 	cfg.PrintSummary()
-
-	err = util.MakeDir(cfg.DataDir)
-	if err != nil {
-		log.Fatalln("create data dir error")
-		return
-	}
 
 	mux := http.NewServeMux()
 	service.NewHttpService(cfg).Register(mux)
