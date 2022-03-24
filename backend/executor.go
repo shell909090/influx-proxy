@@ -236,30 +236,30 @@ func reduceBySeries(bodies [][]byte) (rsp *Response, err error) {
 }
 
 func attachByValues(bodies [][]byte) (rsp *Response, err error) {
-	series, err := SeriesFromResponseBytes(bodies[0])
-	if err != nil {
-		return nil, err
-	}
+	var series models.Rows
 	valuesMap := make(map[string]bool)
-	if len(series) == 1 {
-		for _, value := range series[0].Values {
-			key := value[0].(string)
-			valuesMap[key] = true
-		}
-	}
-	for _, b := range bodies[1:] {
+	isInitial := false
+	for _, b := range bodies {
 		_series, err := SeriesFromResponseBytes(b)
 		if err != nil {
 			return nil, err
 		}
 		if len(_series) == 1 {
+			if series == nil {
+				series = _series
+			}
 			for _, value := range _series[0].Values {
 				key := value[0].(string)
+				if !isInitial {
+					valuesMap[key] = true
+					continue
+				}
 				if _, ok := valuesMap[key]; !ok {
 					series[0].Values = append(series[0].Values, value)
 					valuesMap[key] = true
 				}
 			}
+			isInitial = true
 		}
 	}
 	return ResponseFromSeries(series), nil
