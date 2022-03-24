@@ -73,6 +73,7 @@ func (hs *HttpService) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/cleanup", hs.HandlerCleanup)
 	mux.HandleFunc("/transfer/state", hs.HandlerTransferState)
 	mux.HandleFunc("/transfer/stats", hs.HandlerTransferStats)
+	mux.HandleFunc("/api/v1/prom/read", hs.HandlerPromRead)
 	mux.HandleFunc("/api/v1/prom/write", hs.HandlerPromWrite)
 	mux.HandleFunc("/debug/pprof/", pprof.Index)
 	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
@@ -121,13 +122,9 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	db := req.URL.Query().Get("db")
-	if db == "" {
-		hs.WriteError(w, req, 400, "database not found")
-		return
-	}
-	if hs.ip.IsForbiddenDB(db) {
-		hs.WriteError(w, req, 400, fmt.Sprintf("database forbidden: %s", db))
+	db, err := hs.formDB(req)
+	if err != nil {
+		hs.WriteError(w, req, 400, err.Error())
 		return
 	}
 	rp := req.URL.Query().Get("rp")
@@ -456,19 +453,75 @@ func (hs *HttpService) HandlerTransferStats(w http.ResponseWriter, req *http.Req
 	}
 }
 
+func (hs *HttpService) HandlerPromRead(w http.ResponseWriter, req *http.Request) {
+	defer req.Body.Close()
+	if !hs.checkMethodAndAuth(w, req, "POST") {
+		return
+	}
+
+	db, err := hs.formDB(req)
+	if err != nil {
+		hs.WriteError(w, req, 400, err.Error())
+		return
+	}
+
+	compressed, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		hs.WriteError(w, req, 500, err.Error())
+		return
+	}
+
+	reqBuf, err := snappy.Decode(nil, compressed)
+	if err != nil {
+		hs.WriteError(w, req, 400, err.Error())
+		return
+	}
+
+	var readReq remote.ReadRequest
+	if err := proto.Unmarshal(reqBuf, &readReq); err != nil {
+		hs.WriteError(w, req, 400, err.Error())
+		return
+	}
+	if len(readReq.Queries) != 1 {
+		err = errors.New("prometheus read endpoint currently only supports one query at a time")
+		hs.WriteError(w, req, 400, err.Error())
+		return
+	}
+
+	var metric string
+	q := readReq.Queries[0]
+	for _, m := range q.Matchers {
+		if m.Name == "__name__" {
+			metric = m.Name
+		}
+	}
+	if metric == "" {
+		log.Printf("prometheus query: %v", q)
+		err = errors.New("prometheus metric not found")
+		hs.WriteError(w, req, 400, err.Error())
+	}
+
+	req.Body = ioutil.NopCloser(bytes.NewBuffer(compressed))
+	err = hs.ip.ReadProm(w, req, db, metric)
+	if err != nil {
+		log.Printf("prometheus read error: %s, query: %s %s %v, client: %s", err, req.Method, db, q, req.RemoteAddr)
+		hs.WriteError(w, req, 400, err.Error())
+		return
+	}
+	if hs.QueryTracing {
+		log.Printf("prometheus read: %s %s %v, client: %s", req.Method, db, q, req.RemoteAddr)
+	}
+}
+
 func (hs *HttpService) HandlerPromWrite(w http.ResponseWriter, req *http.Request) {
 	defer req.Body.Close()
 	if !hs.checkMethodAndAuth(w, req, "POST") {
 		return
 	}
 
-	db := req.URL.Query().Get("db")
-	if db == "" {
-		hs.WriteError(w, req, 400, "database not found")
-		return
-	}
-	if hs.ip.IsForbiddenDB(db) {
-		hs.WriteError(w, req, 400, fmt.Sprintf("database forbidden: %s", db))
+	db, err := hs.formDB(req)
+	if err != nil {
+		hs.WriteError(w, req, 400, err.Error())
 		return
 	}
 	rp := req.URL.Query().Get("rp")
@@ -482,7 +535,7 @@ func (hs *HttpService) HandlerPromWrite(w http.ResponseWriter, req *http.Request
 	}
 	buf := bytes.NewBuffer(bs)
 
-	_, err := buf.ReadFrom(body)
+	_, err = buf.ReadFrom(body)
 	if err != nil {
 		if hs.WriteTracing {
 			log.Printf("Prom write handler unable to read bytes from request body")
@@ -597,6 +650,17 @@ func (hs *HttpService) transAuth(text string) string {
 		return util.AesEncrypt(text)
 	}
 	return text
+}
+
+func (hs *HttpService) formDB(req *http.Request) (string, error) {
+	db := req.FormValue("db")
+	if db == "" {
+		return db, errors.New("database not found")
+	}
+	if hs.ip.IsForbiddenDB(db) {
+		return db, fmt.Errorf("database forbidden: %s", db)
+	}
+	return db, nil
 }
 
 func (hs *HttpService) formValues(req *http.Request, key string) []string {

@@ -262,6 +262,42 @@ func (hb *HttpBackend) WriteStream(db, rp string, stream io.Reader, compressed b
 	return
 }
 
+func (hb *HttpBackend) ReadProm(req *http.Request, w http.ResponseWriter) (err error) {
+	if len(req.Form) == 0 {
+		req.Form = url.Values{}
+	}
+	req.Form.Del("u")
+	req.Form.Del("p")
+	if hb.Username != "" || hb.Password != "" {
+		hb.SetBasicAuth(req)
+	}
+
+	req.URL, err = url.Parse(hb.Url + "/api/v1/prom/read?" + req.Form.Encode())
+	if err != nil {
+		log.Print("internal url parse error: ", err)
+		return
+	}
+
+	resp, err := hb.transport.RoundTrip(req)
+	if err != nil {
+		log.Printf("prometheus read error: %s", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	CopyHeader(w.Header(), resp.Header)
+
+	p, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("prometheus read body error: %s", err)
+		return
+	}
+
+	w.WriteHeader(resp.StatusCode)
+	_, err = w.Write(p)
+	return
+}
+
 func (hb *HttpBackend) Query(req *http.Request, w http.ResponseWriter, decompress bool) (qr *QueryResult) {
 	if req.Header.Get(HeaderQueryOrigin) == QueryParallel {
 		defer req.Body.Close()
