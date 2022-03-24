@@ -36,7 +36,7 @@
         }
     ],
     "listen_addr": ":7076",
-    "db_list": ["db1", "db2"],
+    "db_list": [],
     "data_dir": "data",
     "tlog_dir": "log",
     "hash_key": "idx",
