@@ -122,7 +122,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	db, err := hs.formDB(req)
+	db, err := hs.queryDB(req, false)
 	if err != nil {
 		hs.WriteError(w, req, 400, err.Error())
 		return
@@ -169,8 +169,8 @@ func (hs *HttpService) HandlerReplica(w http.ResponseWriter, req *http.Request) 
 		return
 	}
 
-	db := req.FormValue("db")
-	meas := req.FormValue("meas")
+	db := req.URL.Query().Get("db")
+	meas := req.URL.Query().Get("meas")
 	if db != "" && meas != "" {
 		key := backend.GetKey(db, meas)
 		backends := hs.ip.GetBackends(key)
@@ -459,7 +459,7 @@ func (hs *HttpService) HandlerPromRead(w http.ResponseWriter, req *http.Request)
 		return
 	}
 
-	db, err := hs.formDB(req)
+	db, err := hs.queryDB(req, true)
 	if err != nil {
 		hs.WriteError(w, req, 400, err.Error())
 		return
@@ -478,7 +478,7 @@ func (hs *HttpService) HandlerPromRead(w http.ResponseWriter, req *http.Request)
 	}
 
 	var readReq remote.ReadRequest
-	if err := proto.Unmarshal(reqBuf, &readReq); err != nil {
+	if err = proto.Unmarshal(reqBuf, &readReq); err != nil {
 		hs.WriteError(w, req, 400, err.Error())
 		return
 	}
@@ -519,7 +519,7 @@ func (hs *HttpService) HandlerPromWrite(w http.ResponseWriter, req *http.Request
 		return
 	}
 
-	db, err := hs.formDB(req)
+	db, err := hs.queryDB(req, false)
 	if err != nil {
 		hs.WriteError(w, req, 400, err.Error())
 		return
@@ -538,25 +538,27 @@ func (hs *HttpService) HandlerPromWrite(w http.ResponseWriter, req *http.Request
 	_, err = buf.ReadFrom(body)
 	if err != nil {
 		if hs.WriteTracing {
-			log.Printf("Prom write handler unable to read bytes from request body")
+			log.Printf("prom write handler unable to read bytes from request body")
 		}
 		hs.WriteError(w, req, 400, err.Error())
 		return
 	}
 
-	if hs.WriteTracing {
-		log.Printf("Prom write body received by handler, body: %s", buf.String())
-	}
-
 	reqBuf, err := snappy.Decode(nil, buf.Bytes())
 	if err != nil {
+		if hs.WriteTracing {
+			log.Printf("prom write handler unable to snappy decode from request body, error: %s", err)
+		}
 		hs.WriteError(w, req, 400, err.Error())
 		return
 	}
 
 	// Convert the Prometheus remote write request to Influx Points
 	var writeReq remote.WriteRequest
-	if err := proto.Unmarshal(reqBuf, &writeReq); err != nil {
+	if err = proto.Unmarshal(reqBuf, &writeReq); err != nil {
+		if hs.WriteTracing {
+			log.Printf("prom write handler unable to unmarshal from snappy decoded bytes, error: %s", err)
+		}
 		hs.WriteError(w, req, 400, err.Error())
 		return
 	}
@@ -564,7 +566,7 @@ func (hs *HttpService) HandlerPromWrite(w http.ResponseWriter, req *http.Request
 	points, err := prometheus.WriteRequestToPoints(&writeReq)
 	if err != nil {
 		if hs.WriteTracing {
-			log.Printf("Prom write handler, error: %s", err)
+			log.Printf("prom write handler, error: %s", err)
 		}
 		// Check if the error was from something other than dropping invalid values.
 		if _, ok := err.(prometheus.DroppedValuesError); !ok {
@@ -633,7 +635,8 @@ func (hs *HttpService) checkAuth(w http.ResponseWriter, req *http.Request) bool 
 	if hs.Username == "" && hs.Password == "" {
 		return true
 	}
-	u, p := req.URL.Query().Get("u"), req.URL.Query().Get("p")
+	query := req.URL.Query()
+	u, p := query.Get("u"), query.Get("p")
 	if hs.transAuth(u) == hs.Username && hs.transAuth(p) == hs.Password {
 		return true
 	}
@@ -652,8 +655,13 @@ func (hs *HttpService) transAuth(text string) string {
 	return text
 }
 
-func (hs *HttpService) formDB(req *http.Request) (string, error) {
-	db := req.FormValue("db")
+func (hs *HttpService) queryDB(req *http.Request, form bool) (string, error) {
+	var db string
+	if form {
+		db = req.FormValue("db")
+	} else {
+		db = req.URL.Query().Get("db")
+	}
 	if db == "" {
 		return db, errors.New("database not found")
 	}
