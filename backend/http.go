@@ -48,9 +48,9 @@ type HttpBackend struct { // nolint:golint
 	transport   *http.Transport
 	Name        string
 	Url         string // nolint:golint
-	Username    string
-	Password    string
-	AuthEncrypt bool
+	username    string
+	password    string
+	authEncrypt bool
 	interval    int
 	running     atomic.Value
 	active      atomic.Value
@@ -72,9 +72,9 @@ func NewSimpleHttpBackend(cfg *BackendConfig) (hb *HttpBackend) { // nolint:goli
 		transport:   NewTransport(strings.HasPrefix(cfg.Url, "https")),
 		Name:        cfg.Name,
 		Url:         cfg.Url,
-		Username:    cfg.Username,
-		Password:    cfg.Password,
-		AuthEncrypt: cfg.AuthEncrypt,
+		username:    cfg.Username,
+		password:    cfg.Password,
+		authEncrypt: cfg.AuthEncrypt,
 		writeOnly:   cfg.WriteOnly,
 	}
 	hb.running.Store(true)
@@ -153,7 +153,7 @@ func SetBasicAuth(req *http.Request, username string, password string, authEncry
 }
 
 func (hb *HttpBackend) SetBasicAuth(req *http.Request) {
-	SetBasicAuth(req, hb.Username, hb.Password, hb.AuthEncrypt)
+	SetBasicAuth(req, hb.username, hb.password, hb.authEncrypt)
 }
 
 func (hb *HttpBackend) CheckActive() {
@@ -217,7 +217,7 @@ func (hb *HttpBackend) WriteStream(db, rp string, stream io.Reader, compressed b
 	q.Set("db", db)
 	q.Set("rp", rp)
 	req, err := http.NewRequest("POST", hb.Url+"/write?"+q.Encode(), stream)
-	if hb.Username != "" || hb.Password != "" {
+	if hb.username != "" || hb.password != "" {
 		hb.SetBasicAuth(req)
 	}
 	if compressed {
@@ -268,7 +268,7 @@ func (hb *HttpBackend) ReadProm(req *http.Request, w http.ResponseWriter) (err e
 	}
 	req.Form.Del("u")
 	req.Form.Del("p")
-	if hb.Username != "" || hb.Password != "" {
+	if hb.username != "" || hb.password != "" {
 		hb.SetBasicAuth(req)
 	}
 
@@ -309,7 +309,7 @@ func (hb *HttpBackend) Query(req *http.Request, w http.ResponseWriter, decompres
 	req.Form.Del("u")
 	req.Form.Del("p")
 	req.ContentLength = 0
-	if hb.Username != "" || hb.Password != "" {
+	if hb.username != "" || hb.password != "" {
 		hb.SetBasicAuth(req)
 	}
 

@@ -38,11 +38,11 @@ var (
 type HttpService struct { // nolint:golint
 	ip           *backend.Proxy
 	tx           *transfer.Transfer
-	Username     string
-	Password     string
-	AuthEncrypt  bool
-	WriteTracing bool
-	QueryTracing bool
+	username     string
+	password     string
+	authEncrypt  bool
+	writeTracing bool
+	queryTracing bool
 }
 
 func NewHttpService(cfg *backend.ProxyConfig) (hs *HttpService) { // nolint:golint
@@ -50,11 +50,11 @@ func NewHttpService(cfg *backend.ProxyConfig) (hs *HttpService) { // nolint:goli
 	hs = &HttpService{
 		ip:           ip,
 		tx:           transfer.NewTransfer(cfg, ip.Circles),
-		Username:     cfg.Username,
-		Password:     cfg.Password,
-		AuthEncrypt:  cfg.AuthEncrypt,
-		WriteTracing: cfg.WriteTracing,
-		QueryTracing: cfg.QueryTracing,
+		username:     cfg.Username,
+		password:     cfg.Password,
+		authEncrypt:  cfg.AuthEncrypt,
+		writeTracing: cfg.WriteTracing,
+		queryTracing: cfg.QueryTracing,
 	}
 	return
 }
@@ -66,7 +66,7 @@ func (hs *HttpService) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/health", hs.HandlerHealth)
 	mux.HandleFunc("/replica", hs.HandlerReplica)
 	mux.HandleFunc("/encrypt", hs.HandlerEncrypt)
-	mux.HandleFunc("/decrypt", hs.HandlerDencrypt)
+	mux.HandleFunc("/decrypt", hs.HandlerDecrypt)
 	mux.HandleFunc("/rebalance", hs.HandlerRebalance)
 	mux.HandleFunc("/recovery", hs.HandlerRecovery)
 	mux.HandleFunc("/resync", hs.HandlerResync)
@@ -99,7 +99,7 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	hs.WriteBody(w, body)
-	if hs.QueryTracing {
+	if hs.queryTracing {
 		log.Printf("query: %s %s %s, client: %s", req.Method, db, q, req.RemoteAddr)
 	}
 }
@@ -149,7 +149,7 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
 	if err == nil {
 		hs.WriteHeader(w, 204)
 	}
-	if hs.WriteTracing {
+	if hs.writeTracing {
 		log.Printf("write: %s %s %s %s, client: %s", db, rp, precision, p, req.RemoteAddr)
 	}
 }
@@ -198,7 +198,7 @@ func (hs *HttpService) HandlerEncrypt(w http.ResponseWriter, req *http.Request) 
 	hs.WriteText(w, 200, encrypt)
 }
 
-func (hs *HttpService) HandlerDencrypt(w http.ResponseWriter, req *http.Request) {
+func (hs *HttpService) HandlerDecrypt(w http.ResponseWriter, req *http.Request) {
 	defer req.Body.Close()
 	if !hs.checkMethod(w, req, "GET") {
 		return
@@ -508,7 +508,7 @@ func (hs *HttpService) HandlerPromRead(w http.ResponseWriter, req *http.Request)
 		hs.WriteError(w, req, 400, err.Error())
 		return
 	}
-	if hs.QueryTracing {
+	if hs.queryTracing {
 		log.Printf("prometheus read: %s %s %v, client: %s", req.Method, db, q, req.RemoteAddr)
 	}
 }
@@ -537,7 +537,7 @@ func (hs *HttpService) HandlerPromWrite(w http.ResponseWriter, req *http.Request
 
 	_, err = buf.ReadFrom(body)
 	if err != nil {
-		if hs.WriteTracing {
+		if hs.writeTracing {
 			log.Printf("prom write handler unable to read bytes from request body")
 		}
 		hs.WriteError(w, req, 400, err.Error())
@@ -546,7 +546,7 @@ func (hs *HttpService) HandlerPromWrite(w http.ResponseWriter, req *http.Request
 
 	reqBuf, err := snappy.Decode(nil, buf.Bytes())
 	if err != nil {
-		if hs.WriteTracing {
+		if hs.writeTracing {
 			log.Printf("prom write handler unable to snappy decode from request body, error: %s", err)
 		}
 		hs.WriteError(w, req, 400, err.Error())
@@ -556,7 +556,7 @@ func (hs *HttpService) HandlerPromWrite(w http.ResponseWriter, req *http.Request
 	// Convert the Prometheus remote write request to Influx Points
 	var writeReq remote.WriteRequest
 	if err = proto.Unmarshal(reqBuf, &writeReq); err != nil {
-		if hs.WriteTracing {
+		if hs.writeTracing {
 			log.Printf("prom write handler unable to unmarshal from snappy decoded bytes, error: %s", err)
 		}
 		hs.WriteError(w, req, 400, err.Error())
@@ -565,7 +565,7 @@ func (hs *HttpService) HandlerPromWrite(w http.ResponseWriter, req *http.Request
 
 	points, err := prometheus.WriteRequestToPoints(&writeReq)
 	if err != nil {
-		if hs.WriteTracing {
+		if hs.writeTracing {
 			log.Printf("prom write handler, error: %s", err)
 		}
 		// Check if the error was from something other than dropping invalid values.
@@ -632,16 +632,16 @@ func (hs *HttpService) checkMethod(w http.ResponseWriter, req *http.Request, met
 }
 
 func (hs *HttpService) checkAuth(w http.ResponseWriter, req *http.Request) bool {
-	if hs.Username == "" && hs.Password == "" {
+	if hs.username == "" && hs.password == "" {
 		return true
 	}
 	query := req.URL.Query()
 	u, p := query.Get("u"), query.Get("p")
-	if hs.transAuth(u) == hs.Username && hs.transAuth(p) == hs.Password {
+	if hs.transAuth(u) == hs.username && hs.transAuth(p) == hs.password {
 		return true
 	}
 	u, p, ok := req.BasicAuth()
-	if ok && hs.transAuth(u) == hs.Username && hs.transAuth(p) == hs.Password {
+	if ok && hs.transAuth(u) == hs.username && hs.transAuth(p) == hs.password {
 		return true
 	}
 	hs.WriteError(w, req, 401, "authentication failed")
@@ -649,7 +649,7 @@ func (hs *HttpService) checkAuth(w http.ResponseWriter, req *http.Request) bool 
 }
 
 func (hs *HttpService) transAuth(text string) string {
-	if hs.AuthEncrypt {
+	if hs.authEncrypt {
 		return util.AesEncrypt(text)
 	}
 	return text
