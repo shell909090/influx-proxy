@@ -9,6 +9,7 @@ import (
 	"log"
 
 	"github.com/chengshiwen/influx-proxy/util"
+	jsoniter "github.com/json-iterator/go"
 	"github.com/spf13/viper"
 )
 
@@ -65,21 +66,18 @@ type ProxyConfig struct {
 }
 
 func NewFileConfig(cfgfile string) (cfg *ProxyConfig, err error) {
-	cfg = &ProxyConfig{}
 	viper.SetConfigFile(cfgfile)
 	err = viper.ReadInConfig()
 	if err != nil {
 		return
 	}
-	viper.Unmarshal(cfg)
+	cfg = &ProxyConfig{}
+	err = viper.Unmarshal(cfg)
 	if err != nil {
 		return
 	}
 	cfg.setDefault()
 	err = cfg.checkConfig()
-	if err != nil {
-		return
-	}
 	return
 }
 
@@ -154,4 +152,10 @@ func (cfg *ProxyConfig) PrintSummary() {
 		log.Printf("db list: %v", cfg.DBList)
 	}
 	log.Printf("auth: %t, encrypt: %t", cfg.Username != "" || cfg.Password != "", cfg.AuthEncrypt)
+}
+
+func (cfg *ProxyConfig) String() string {
+	json := jsoniter.Config{TagKey: "mapstructure"}.Froze()
+	b, _ := json.Marshal(cfg)
+	return string(b)
 }
