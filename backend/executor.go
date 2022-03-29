@@ -145,6 +145,7 @@ func QueryShowQL(w http.ResponseWriter, req *http.Request, ip *Proxy, tokens []s
 		}
 		body = buf.Bytes()
 	}
+	w.Header().Del("Content-Length")
 	return
 }
 

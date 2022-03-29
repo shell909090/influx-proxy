@@ -125,7 +125,7 @@ func TestGetDatabaseFromInfluxQL(t *testing.T) {
 	assertDatabase(t, "select * from db.\"auto.gen\".\"cpu.load\"", "db")
 	assertDatabase(t, "select * from \"db\".\"autogen\".\"cpu.load\"", "db")
 	assertDatabase(t, "select * from \"d.b\".\"auto.gen\".\"cpu.load\"", "d.b")
-	assertDatabase(t, "select * from \"db\"..\"cpu.load\"", "db")
+	assertDatabase(t, "select * from \"d\\\"b\"..\"cpu.load\"", "d\"b")
 	assertDatabase(t, "select * from \"d.b\"..\"cpu.load\"", "d.b")
 	assertDatabase(t, "select * from \"db\".autogen.cpu", "db")
 	assertDatabase(t, "select * from \"db\".\"auto.gen\".cpu", "db")
