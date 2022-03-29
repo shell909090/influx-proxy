@@ -42,9 +42,19 @@ Since the InfluxDB Proxy v1 is limited by the only `ONE` database and the `KEYMA
 ## Requirements
 
 * Golang >= 1.14 with Go module support
-* InfluxDB 1.2 - 1.8 (For 2.x, please visit branch [influxdb-v2](https://github.com/chengshiwen/influx-proxy/tree/influxdb-v2))
+* InfluxDB 1.2 - 1.8 (For InfluxDB 2.x, please visit branch [influxdb-v2](https://github.com/chengshiwen/influx-proxy/tree/influxdb-v2))
 
 ## Usage
+
+#### Quickstart by Docker
+
+Download `docker-compose.yml` and `proxy.json` from [docker/quick](https://github.com/chengshiwen/influx-proxy/tree/master/docker/quick)
+
+```sh
+$ docker-compose up -d
+```
+
+An influx-proxy container (port: 7076) and 4 influxdb containers will start.
 
 #### Quickstart
 
@@ -73,6 +83,18 @@ $ # build current platform
 $ make build
 $ # build linux amd64
 $ make linux
+```
+
+## Development
+
+Before developing, you need to install and run [Docker](https://docs.docker.com/get-docker/)
+
+```sh
+$ ./script/setup.sh  # start 4 influxdb instances by docker
+$ make run
+$ ./script/write.sh  # write data
+$ ./script/query.sh  # query data
+$ ./script/remove.sh # remove 4 influxdb instances
 ```
 
 ## Tutorial
