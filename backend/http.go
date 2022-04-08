@@ -299,9 +299,6 @@ func (hb *HttpBackend) ReadProm(req *http.Request, w http.ResponseWriter) (err e
 }
 
 func (hb *HttpBackend) Query(req *http.Request, w http.ResponseWriter, decompress bool) (qr *QueryResult) {
-	if req.Header.Get(HeaderQueryOrigin) == QueryParallel {
-		defer req.Body.Close()
-	}
 	qr = &QueryResult{}
 	if len(req.Form) == 0 {
 		req.Form = url.Values{}

@@ -80,12 +80,10 @@ func (hs *HttpService) Register(mux *http.ServeMux) {
 }
 
 func (hs *HttpService) HandlerPing(w http.ResponseWriter, req *http.Request) {
-	defer req.Body.Close()
 	hs.WriteHeader(w, 204)
 }
 
 func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
-	defer req.Body.Close()
 	if !hs.checkMethodAndAuth(w, req, "GET", "POST") {
 		return
 	}
@@ -105,7 +103,6 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
 }
 
 func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
-	defer req.Body.Close()
 	if !hs.checkMethodAndAuth(w, req, "POST") {
 		return
 	}
@@ -155,7 +152,6 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
 }
 
 func (hs *HttpService) HandlerHealth(w http.ResponseWriter, req *http.Request) {
-	defer req.Body.Close()
 	if !hs.checkMethodAndAuth(w, req, "GET") {
 		return
 	}
@@ -164,7 +160,6 @@ func (hs *HttpService) HandlerHealth(w http.ResponseWriter, req *http.Request) {
 }
 
 func (hs *HttpService) HandlerReplica(w http.ResponseWriter, req *http.Request) {
-	defer req.Body.Close()
 	if !hs.checkMethodAndAuth(w, req, "GET") {
 		return
 	}
@@ -189,7 +184,6 @@ func (hs *HttpService) HandlerReplica(w http.ResponseWriter, req *http.Request) 
 }
 
 func (hs *HttpService) HandlerEncrypt(w http.ResponseWriter, req *http.Request) {
-	defer req.Body.Close()
 	if !hs.checkMethod(w, req, "GET") {
 		return
 	}
@@ -199,7 +193,6 @@ func (hs *HttpService) HandlerEncrypt(w http.ResponseWriter, req *http.Request) 
 }
 
 func (hs *HttpService) HandlerDecrypt(w http.ResponseWriter, req *http.Request) {
-	defer req.Body.Close()
 	if !hs.checkMethod(w, req, "GET") {
 		return
 	}
@@ -214,7 +207,6 @@ func (hs *HttpService) HandlerDecrypt(w http.ResponseWriter, req *http.Request) 
 }
 
 func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request) {
-	defer req.Body.Close()
 	if !hs.checkMethodAndAuth(w, req, "POST") {
 		return
 	}
@@ -269,7 +261,6 @@ func (hs *HttpService) HandlerRebalance(w http.ResponseWriter, req *http.Request
 }
 
 func (hs *HttpService) HandlerRecovery(w http.ResponseWriter, req *http.Request) {
-	defer req.Body.Close()
 	if !hs.checkMethodAndAuth(w, req, "POST") {
 		return
 	}
@@ -311,7 +302,6 @@ func (hs *HttpService) HandlerRecovery(w http.ResponseWriter, req *http.Request)
 }
 
 func (hs *HttpService) HandlerResync(w http.ResponseWriter, req *http.Request) {
-	defer req.Body.Close()
 	if !hs.checkMethodAndAuth(w, req, "POST") {
 		return
 	}
@@ -345,7 +335,6 @@ func (hs *HttpService) HandlerResync(w http.ResponseWriter, req *http.Request) {
 }
 
 func (hs *HttpService) HandlerCleanup(w http.ResponseWriter, req *http.Request) {
-	defer req.Body.Close()
 	if !hs.checkMethodAndAuth(w, req, "POST") {
 		return
 	}
@@ -376,7 +365,6 @@ func (hs *HttpService) HandlerCleanup(w http.ResponseWriter, req *http.Request) 
 }
 
 func (hs *HttpService) HandlerTransferState(w http.ResponseWriter, req *http.Request) {
-	defer req.Body.Close()
 	if !hs.checkMethodAndAuth(w, req, "GET", "POST") {
 		return
 	}
@@ -434,7 +422,6 @@ func (hs *HttpService) HandlerTransferState(w http.ResponseWriter, req *http.Req
 }
 
 func (hs *HttpService) HandlerTransferStats(w http.ResponseWriter, req *http.Request) {
-	defer req.Body.Close()
 	if !hs.checkMethodAndAuth(w, req, "GET") {
 		return
 	}
@@ -454,7 +441,6 @@ func (hs *HttpService) HandlerTransferStats(w http.ResponseWriter, req *http.Req
 }
 
 func (hs *HttpService) HandlerPromRead(w http.ResponseWriter, req *http.Request) {
-	defer req.Body.Close()
 	if !hs.checkMethodAndAuth(w, req, "POST") {
 		return
 	}
@@ -514,7 +500,6 @@ func (hs *HttpService) HandlerPromRead(w http.ResponseWriter, req *http.Request)
 }
 
 func (hs *HttpService) HandlerPromWrite(w http.ResponseWriter, req *http.Request) {
-	defer req.Body.Close()
 	if !hs.checkMethodAndAuth(w, req, "POST") {
 		return
 	}
