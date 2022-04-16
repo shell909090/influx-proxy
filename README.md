@@ -1,5 +1,13 @@
 # InfluxDB Proxy
 
+[![Go Report Card](https://goreportcard.com/badge/chengshiwen/influx-proxy)](https://goreportcard.com/report/chengshiwen/influx-proxy)
+[![LICENSE](https://img.shields.io/github/license/chengshiwen/influx-proxy.svg)](https://github.com/chengshiwen/influx-proxy/blob/master/LICENSE)
+[![Releases](https://img.shields.io/github/release-pre/chengshiwen/influx-proxy.svg)](https://github.com/chengshiwen/influx-proxy/releases)
+![GitHub stars](https://img.shields.io/github/stars/chengshiwen/influx-proxy.svg?label=github%20stars&logo=github)
+
+[![EN doc](https://img.shields.io/badge/document-English-blue.svg)](https://github.com/chengshiwen/influx-proxy/blob/master/README.md)
+[![CN doc](https://img.shields.io/badge/文档-中文版-blue.svg)](https://github.com/chengshiwen/influx-proxy/wiki)
+
 This project adds a basic high availability and consistent hash layer to InfluxDB.
 
 NOTE: influx-proxy must be built with Go 1.14+ with Go module support, don't implement udp.
@@ -96,10 +104,6 @@ $ ./script/write.sh  # write data
 $ ./script/query.sh  # query data
 $ ./script/remove.sh # remove 4 influxdb instances
 ```
-
-## Tutorial
-
-[Chinese](https://github.com/chengshiwen/influx-proxy/wiki)
 
 ## Description
 
