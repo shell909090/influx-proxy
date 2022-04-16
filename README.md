@@ -99,7 +99,7 @@ $ ./script/remove.sh # remove 4 influxdb instances
 
 ## Tutorial
 
-[Chinese](https://git.io/influx-proxy-wiki)
+[Chinese](https://github.com/chengshiwen/influx-proxy/wiki)
 
 ## Description
 
