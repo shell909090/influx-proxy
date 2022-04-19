@@ -1,12 +1,12 @@
 # InfluxDB Proxy
 
+[![CN doc](https://img.shields.io/badge/文档-中文版-blue.svg)](https://github.com/chengshiwen/influx-proxy/wiki)
+[![EN doc](https://img.shields.io/badge/document-English-blue.svg)](https://github.com/chengshiwen/influx-proxy/blob/master/README.md)
 [![Go Report Card](https://goreportcard.com/badge/chengshiwen/influx-proxy)](https://goreportcard.com/report/chengshiwen/influx-proxy)
 [![LICENSE](https://img.shields.io/github/license/chengshiwen/influx-proxy.svg)](https://github.com/chengshiwen/influx-proxy/blob/master/LICENSE)
-[![Releases](https://img.shields.io/github/release-pre/chengshiwen/influx-proxy.svg)](https://github.com/chengshiwen/influx-proxy/releases)
+[![Releases](https://img.shields.io/github/v/release/chengshiwen/influx-proxy.svg)](https://github.com/chengshiwen/influx-proxy/releases)
 ![GitHub stars](https://img.shields.io/github/stars/chengshiwen/influx-proxy.svg?label=github%20stars&logo=github)
-
-[![EN doc](https://img.shields.io/badge/document-English-blue.svg)](https://github.com/chengshiwen/influx-proxy/blob/master/README.md)
-[![CN doc](https://img.shields.io/badge/文档-中文版-blue.svg)](https://github.com/chengshiwen/influx-proxy/wiki)
+[![Docker pulls](https://img.shields.io/docker/pulls/chengshiwen/influx-proxy.svg)](https://hub.docker.com/r/chengshiwen/influx-proxy)
 
 This project adds a basic high availability and consistent hash layer to InfluxDB.
 
