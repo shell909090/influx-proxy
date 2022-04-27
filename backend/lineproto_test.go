@@ -165,16 +165,16 @@ func TestAppendNano(t *testing.T) {
 		},
 		{
 			name: "test9",
-			line: []byte("\tcpu5 value=3,value2=4\t"),
-			time: false,
+			line: []byte("\tcpu5 value=3,value2=4  1434055562000010"),
+			time: true,
 			unit: "u",
-			want: "cpu5 value=3,value2=4",
+			want: "cpu5 value=3,value2=4  1434055562000010000",
 		},
 		{
 			name: "test10",
 			line: []byte("\tcpu5 value=3,value2=4 1434055562000010\t"),
 			time: true,
-			unit: "u",
+			unit: "us",
 			want: "cpu5 value=3,value2=4 1434055562000010000",
 		},
 		{

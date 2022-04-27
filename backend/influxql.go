@@ -179,6 +179,10 @@ func GetDatabaseFromInfluxQL(q string) (m string, err error) {
 	return GetDatabaseFromTokens(ScanTokens(q, 0))
 }
 
+func GetRetentionPolicyFromInfluxQL(q string) (m string, err error) {
+	return GetRetentionPolicyFromTokens(ScanTokens(q, 0))
+}
+
 func GetMeasurementFromInfluxQL(q string) (m string, err error) {
 	return GetMeasurementFromTokens(ScanTokens(q, 0))
 }
@@ -188,6 +192,15 @@ func GetDatabaseFromTokens(tokens []string) (m string, err error) {
 	// handle subquery
 	if strings.HasPrefix(strings.ToLower(strings.TrimLeft(m, "( ")), "select") {
 		m, err = GetDatabaseFromInfluxQL(m[1:])
+	}
+	return
+}
+
+func GetRetentionPolicyFromTokens(tokens []string) (m string, err error) {
+	m, err = GetIdentifierFromTokens(tokens, []string{"from"}, getRetentionPolicy)
+	// handle subquery
+	if strings.HasPrefix(strings.ToLower(strings.TrimLeft(m, "( ")), "select") {
+		m, err = GetRetentionPolicyFromInfluxQL(m[1:])
 	}
 	return
 }
@@ -240,6 +253,51 @@ func getDatabase(tokens []string, keyword string) (m string) {
 	}
 
 	m = m[:index]
+	return
+}
+
+func getRetentionPolicy(tokens []string, keyword string) (m string) {
+	if len(tokens) >= 3 && tokens[1] == ".." {
+		return ""
+	}
+	if len(tokens) >= 5 && tokens[1] == "." && tokens[3] == "." {
+		m = tokens[2]
+		if m[0] == '"' || m[0] == '\'' {
+			m = m[1 : len(m)-1]
+		}
+		return
+	} else if len(tokens) >= 3 && tokens[1] == "." {
+		m = strings.Join(tokens[:3], "")
+	} else {
+		m = tokens[0]
+	}
+
+	if m[0] == '(' {
+		return
+	}
+	if m[0] == '/' {
+		return ""
+	}
+
+	index := strings.IndexByte(m, '.')
+	if index == -1 || index == len(m)-1 {
+		return ""
+	}
+	lastIndex := FindLastIndexWithIdent(m)
+	if lastIndex == -1 {
+		return ""
+	}
+	if index == lastIndex {
+		m = m[:index]
+	} else if index < lastIndex-1 {
+		m = m[index+1 : lastIndex]
+	} else {
+		return ""
+	}
+
+	if m[0] == '"' || m[0] == '\'' {
+		m = m[1 : len(m)-1]
+	}
 	return
 }
 

@@ -56,7 +56,7 @@ func AppendNano(line []byte, precision string) []byte {
 	if found {
 		if precision == "ns" || precision == "n" {
 			return line
-		} else if precision == "u" {
+		} else if precision == "us" || precision == "u" {
 			return append(line, '0', '0', '0')
 		} else if precision == "ms" {
 			return append(line, '0', '0', '0', '0', '0', '0')
