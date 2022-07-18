@@ -478,7 +478,7 @@ func (hs *HttpService) HandlerPromRead(w http.ResponseWriter, req *http.Request)
 	q := readReq.Queries[0]
 	for _, m := range q.Matchers {
 		if m.Name == "__name__" {
-			metric = m.Name
+			metric = m.Value
 		}
 	}
 	if metric == "" {
