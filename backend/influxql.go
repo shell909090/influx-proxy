@@ -128,14 +128,9 @@ func ScanToken(data []byte, atEOF bool) (advance int, token []byte, err error) {
 		}
 	case '.':
 		advance = start + 1
-		for ; advance < len(data); advance++ {
-			if data[advance] != '.' {
-				break
-			}
-		}
 	default:
 		advance = bytes.IndexFunc(data[start:], func(r rune) bool {
-			return r == ' '
+			return r == ' ' || r == '.'
 		})
 		if advance == -1 {
 			advance = len(data)
@@ -229,72 +224,45 @@ func GetIdentifierFromTokens(tokens []string, keywords []string, fn func([]strin
 }
 
 func getDatabase(tokens []string, keyword string) (m string) {
+	if len(tokens) == 0 {
+		return
+	}
 	m = tokens[0]
 	if m[0] == '(' {
 		return
 	}
 
+	if keyword == "from" {
+		if !(len(tokens) >= 4 && tokens[1] == "." && tokens[3] == ".") && !(len(tokens) >= 3 && tokens[1] == "." && tokens[2] == ".") {
+			return ""
+		}
+	}
 	if m[0] == '"' || m[0] == '\'' {
 		m = m[1 : len(m)-1]
-		if keyword == "from" && (len(tokens) < 3 || (tokens[1] != "." && tokens[1] != "..")) {
-			return ""
-		}
-		return
 	}
-
-	index := strings.IndexByte(m, '.')
-	if index == -1 {
-		if keyword == "from" {
-			return ""
-		}
-		return
-	} else if index == len(m)-1 {
-		return ""
-	}
-
-	m = m[:index]
 	return
 }
 
 func getRetentionPolicy(tokens []string, keyword string) (m string) {
-	if len(tokens) >= 3 && tokens[1] == ".." {
-		return ""
+	if len(tokens) == 0 {
+		return
 	}
+	if tokens[0][0] == '(' {
+		m = tokens[0]
+		return
+	} else if tokens[0][0] == '/' {
+		return
+	} else if len(tokens) >= 3 && tokens[1] == "." && tokens[2] == "." {
+		return
+	}
+
 	if len(tokens) >= 5 && tokens[1] == "." && tokens[3] == "." {
 		m = tokens[2]
-		if m[0] == '"' || m[0] == '\'' {
-			m = m[1 : len(m)-1]
-		}
-		return
 	} else if len(tokens) >= 3 && tokens[1] == "." {
-		m = strings.Join(tokens[:3], "")
-	} else {
 		m = tokens[0]
-	}
-
-	if m[0] == '(' {
+	} else {
 		return
 	}
-	if m[0] == '/' {
-		return ""
-	}
-
-	index := strings.IndexByte(m, '.')
-	if index == -1 || index == len(m)-1 {
-		return ""
-	}
-	lastIndex := FindLastIndexWithIdent(m)
-	if lastIndex == -1 {
-		return ""
-	}
-	if index == lastIndex {
-		m = m[:index]
-	} else if index < lastIndex-1 {
-		m = m[index+1 : lastIndex]
-	} else {
-		return ""
-	}
-
 	if m[0] == '"' || m[0] == '\'' {
 		m = m[1 : len(m)-1]
 	}
@@ -302,52 +270,31 @@ func getRetentionPolicy(tokens []string, keyword string) (m string) {
 }
 
 func getMeasurement(tokens []string, keyword string) (m string) {
-	if len(tokens) >= 3 && (tokens[1] == "." || tokens[1] == "..") {
-		if len(tokens) >= 5 && tokens[3] == "." {
-			m = tokens[4]
-		} else {
-			m = tokens[2]
-		}
+	if len(tokens) == 0 {
+		return
+	}
+	if tokens[0][0] == '(' {
+		m = tokens[0]
+		return
+	} else if tokens[0][0] == '/' {
+		m = strings.Join(tokens[:], "")
+		advance, _, _ := FindEndWithQuote([]byte(m), 0, '/')
+		return m[:advance]
+	}
+
+	if len(tokens) >= 5 && tokens[1] == "." && tokens[3] == "." {
+		m = tokens[4]
+	} else if len(tokens) >= 4 && tokens[1] == "." && tokens[2] == "." {
+		m = tokens[3]
+	} else if len(tokens) >= 3 && tokens[1] == "." {
+		m = tokens[2]
 	} else {
 		m = tokens[0]
 	}
-
-	if m[0] == '(' || m[0] == '/' {
-		return
-	}
-
 	if m[0] == '"' || m[0] == '\'' {
 		m = m[1 : len(m)-1]
-		return
-	}
-
-	index := FindLastIndexWithIdent(m)
-	if index == -1 {
-		return
-	}
-
-	m = m[index+1:]
-	if m[0] == '"' || m[0] == '\'' {
-		m = strings.ReplaceAll(m[1:len(m)-1], `\"`, `"`)
 	}
 	return
-}
-
-func FindLastIndexWithIdent(m string) (i int) {
-	i = len(m) - 1
-	if m[i] == '"' || m[i] == '\'' {
-		for i = i - 1; i >= 0; i-- {
-			if m[i] == '"' || m[i] == '\'' {
-				if i > 0 && m[i-1] == '\\' {
-					i--
-				} else {
-					break
-				}
-			}
-		}
-		return i - 1
-	}
-	return strings.LastIndexByte(m, '.')
 }
 
 func CheckQuery(q string) (tokens []string, check bool, from bool) {
