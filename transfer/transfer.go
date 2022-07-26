@@ -95,6 +95,24 @@ func (tx *Transfer) setLogOutput(name string) {
 	}
 }
 
+func (tx *Transfer) getRetentionPolicies(db string) []string {
+	rps := make([]string, 0)
+	rpm := make(map[string]bool)
+	for _, cs := range tx.CircleStates {
+		for _, be := range cs.Backends {
+			if be.IsActive() {
+				for _, rp := range be.GetRetentionPolicies(db) {
+					if _, ok := rpm[rp]; !ok {
+						rps = append(rps, rp)
+						rpm[rp] = true
+					}
+				}
+			}
+		}
+	}
+	return rps
+}
+
 func (tx *Transfer) getDatabases() []string {
 	dbs := make([]string, 0)
 	dbm := make(map[string]bool)
@@ -122,6 +140,7 @@ func (tx *Transfer) createDatabases(dbs []string) ([]string, error) {
 		for _, cs := range tx.CircleStates {
 			backends = append(backends, cs.Backends...)
 		}
+		// create database
 		for _, db := range dbs {
 			q := fmt.Sprintf("create database \"%s\"", util.EscapeIdentifier(db))
 			req := backend.NewQueryRequest("POST", "", q, "")
@@ -129,6 +148,17 @@ func (tx *Transfer) createDatabases(dbs []string) ([]string, error) {
 			if err != nil {
 				tlog.Printf("create databases error: %s, db: %s, dbs: %v", err, db, dbs)
 				return dbs, err
+			}
+			// create retention policy
+			rps := tx.getRetentionPolicies(db)
+			tlog.Printf("create retention policy, db: %s, rps: %v", db, rps)
+			for _, rp := range rps {
+				q = fmt.Sprintf("create retention policy \"%s\" on \"%s\" duration 0s replication 1", util.EscapeIdentifier(rp), util.EscapeIdentifier(db))
+				req = backend.NewQueryRequest("POST", "", q, "")
+				_, _, err = backend.QueryInParallel(backends, req, nil, false)
+				if err != nil {
+					tlog.Printf("create retention policy error: %s, db: %s, rp: %s", err, db, rp)
+				}
 			}
 		}
 	} else {
@@ -169,7 +199,7 @@ func reformFieldKeys(fieldKeys map[string][]string) map[string]string {
 	return fieldMap
 }
 
-func (tx *Transfer) write(ch chan *QueryResult, dsts []*backend.Backend, db, meas string, tagMap util.Set, fieldMap map[string]string) error {
+func (tx *Transfer) write(ch chan *QueryResult, dsts []*backend.Backend, db, rp, meas string, tagMap util.Set, fieldMap map[string]string) error {
 	var buf bytes.Buffer
 	var wg sync.WaitGroup
 	pool, err := ants.NewPool(len(dsts) * 20)
@@ -221,15 +251,15 @@ func (tx *Transfer) write(ch chan *QueryResult, dsts []*backend.Backend, db, mea
 						for i := 0; i <= RetryCount; i++ {
 							if i > 0 {
 								time.Sleep(time.Duration(RetryInterval) * time.Second)
-								tlog.Printf("transfer write retry: %d, last err:%s dst:%s db:%s meas:%s", i, err, dst.Url, db, meas)
+								tlog.Printf("transfer write retry: %d, err:%s dst:%s db:%s rp:%s meas:%s", i, err, dst.Url, db, rp, meas)
 							}
-							err = dst.Write(db, "", p)
+							err = dst.Write(db, rp, p)
 							if err == nil {
 								break
 							}
 						}
 						if err != nil {
-							tlog.Printf("transfer write error: %s, dst:%s db:%s meas:%s", err, dst.Url, db, meas)
+							tlog.Printf("transfer write error: %s, dst:%s db:%s rp:%s meas:%s", err, dst.Url, db, rp, meas)
 						}
 					})
 				}
@@ -241,20 +271,20 @@ func (tx *Transfer) write(ch chan *QueryResult, dsts []*backend.Backend, db, mea
 	return nil
 }
 
-func (tx *Transfer) query(ch chan *QueryResult, src *backend.Backend, db, meas string, tick int64) {
+func (tx *Transfer) query(ch chan *QueryResult, src *backend.Backend, db, rp, meas string, tick int64) {
 	defer close(ch)
 	for offset := 0; ; offset += tx.Limit {
 		whereClause := ""
 		if tick > 0 {
 			whereClause = fmt.Sprintf("where time >= %ds", tick)
 		}
-		q := fmt.Sprintf("select * from \"%s\" %s order by time desc limit %d offset %d", util.EscapeIdentifier(meas), whereClause, tx.Limit, offset)
+		q := fmt.Sprintf("select * from \"%s\".\"%s\" %s order by time desc limit %d offset %d", util.EscapeIdentifier(rp), util.EscapeIdentifier(meas), whereClause, tx.Limit, offset)
 		var rsp []byte
 		var err error
 		for i := 0; i <= RetryCount; i++ {
 			if i > 0 {
 				time.Sleep(time.Duration(RetryInterval) * time.Second)
-				tlog.Printf("transfer query retry: %d, last err:%s src:%s db:%s meas:%s tick:%d limit:%d offset:%d", i, err, src.Url, db, meas, tick, tx.Limit, offset)
+				tlog.Printf("transfer query retry: %d, err:%s src:%s db:%s rp:%s meas:%s tick:%d limit:%d offset:%d", i, err, src.Url, db, rp, meas, tick, tx.Limit, offset)
 			}
 			rsp, err = src.QueryIQL("GET", db, q, "ns")
 			if err == nil {
@@ -277,9 +307,9 @@ func (tx *Transfer) query(ch chan *QueryResult, src *backend.Backend, db, meas s
 	}
 }
 
-func (tx *Transfer) transfer(src *backend.Backend, dsts []*backend.Backend, db, meas string, tick int64) error {
+func (tx *Transfer) transfer(src *backend.Backend, dsts []*backend.Backend, db, rp, meas string, tick int64) error {
 	ch := make(chan *QueryResult, 4)
-	go tx.query(ch, src, db, meas, tick)
+	go tx.query(ch, src, db, rp, meas, tick)
 
 	var tagMap util.Set
 	var fieldMap map[string]string
@@ -287,30 +317,34 @@ func (tx *Transfer) transfer(src *backend.Backend, dsts []*backend.Backend, db, 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		tagKeys := src.GetTagKeys(db, meas)
+		tagKeys := src.GetTagKeys(db, rp, meas)
 		tagMap = util.NewSetFromSlice(tagKeys)
 	}()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		fieldKeys := src.GetFieldKeys(db, meas)
+		fieldKeys := src.GetFieldKeys(db, rp, meas)
 		fieldMap = reformFieldKeys(fieldKeys)
 	}()
 	wg.Wait()
-	return tx.write(ch, dsts, db, meas, tagMap, fieldMap)
+	return tx.write(ch, dsts, db, rp, meas, tagMap, fieldMap)
 }
 
 func (tx *Transfer) submitTransfer(cs *CircleState, src *backend.Backend, dsts []*backend.Backend, db, meas string, tick int64) {
-	cs.wg.Add(1)
-	tx.pool.Submit(func() {
-		defer cs.wg.Done()
-		err := tx.transfer(src, dsts, db, meas, tick)
-		if err == nil {
-			tlog.Printf("transfer done, src:%s dst:%v db:%s meas:%s tick:%d", src.Url, getBackendUrls(dsts), db, meas, tick)
-		} else {
-			tlog.Printf("transfer error: %s, src:%s dst:%v db:%s meas:%s tick:%d", err, src.Url, getBackendUrls(dsts), db, meas, tick)
-		}
-	})
+	rps := src.GetRetentionPolicies(db)
+	for _, rp := range rps {
+		rp := rp
+		cs.wg.Add(1)
+		tx.pool.Submit(func() {
+			defer cs.wg.Done()
+			err := tx.transfer(src, dsts, db, rp, meas, tick)
+			if err == nil {
+				tlog.Printf("transfer done, src:%s dst:%v db:%s rp:%s meas:%s tick:%d", src.Url, getBackendUrls(dsts), db, rp, meas, tick)
+			} else {
+				tlog.Printf("transfer error: %s, src:%s dst:%v db:%s rp:%s meas:%s tick:%d", err, src.Url, getBackendUrls(dsts), db, rp, meas, tick)
+			}
+		})
+	}
 }
 
 func (tx *Transfer) submitCleanup(cs *CircleState, be *backend.Backend, db, meas string) {

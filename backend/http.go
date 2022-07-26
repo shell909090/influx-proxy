@@ -384,17 +384,21 @@ func (hb *HttpBackend) GetDatabases() []string {
 	return hb.GetSeriesValues("", "show databases")
 }
 
+func (hb *HttpBackend) GetRetentionPolicies(db string) []string {
+	return hb.GetSeriesValues(db, "show retention policies")
+}
+
 func (hb *HttpBackend) GetMeasurements(db string) []string {
 	return hb.GetSeriesValues(db, "show measurements")
 }
 
-func (hb *HttpBackend) GetTagKeys(db, meas string) []string {
-	return hb.GetSeriesValues(db, fmt.Sprintf("show tag keys from \"%s\"", util.EscapeIdentifier(meas)))
+func (hb *HttpBackend) GetTagKeys(db, rp, meas string) []string {
+	return hb.GetSeriesValues(db, fmt.Sprintf("show tag keys from \"%s\".\"%s\"", util.EscapeIdentifier(rp), util.EscapeIdentifier(meas)))
 }
 
-func (hb *HttpBackend) GetFieldKeys(db, meas string) map[string][]string {
+func (hb *HttpBackend) GetFieldKeys(db, rp, meas string) map[string][]string {
 	fieldKeys := make(map[string][]string)
-	q := fmt.Sprintf("show field keys from \"%s\"", util.EscapeIdentifier(meas))
+	q := fmt.Sprintf("show field keys from \"%s\".\"%s\"", util.EscapeIdentifier(rp), util.EscapeIdentifier(meas))
 	qr := hb.Query(NewQueryRequest("GET", db, q, ""), nil, true)
 	if qr.Err != nil {
 		return fieldKeys
