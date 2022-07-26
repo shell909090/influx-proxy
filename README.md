@@ -12,7 +12,7 @@ This project adds a basic high availability and consistent hash layer to InfluxD
 
 NOTE: influx-proxy must be built with Go 1.16+ with Go module support, don't implement udp.
 
-NOTE: [InfluxDB Cluster](https://github.com/chengshiwen/influxdb-cluster) for replacing [InfluxDB Enterprise](https://docs.influxdata.com/enterprise_influxdb/v1.8/) is coming, which is better than InfluxDB Proxy.
+NOTE: [InfluxDB Cluster](https://github.com/chengshiwen/influxdb-cluster) - open source alternative to [InfluxDB Enterprise](https://docs.influxdata.com/enterprise_influxdb/v1.8/) has been released, which is better than InfluxDB Proxy.
 
 ## Why
 
