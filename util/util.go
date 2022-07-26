@@ -6,7 +6,10 @@ package util
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
+
+	jsoniter "github.com/json-iterator/go"
 )
 
 func PathExist(path string) (bool, error) {
@@ -43,4 +46,16 @@ func MarshalJSON(v interface{}, pretty bool) []byte {
 	}
 	res = append(res, '\n')
 	return res
+}
+
+func CastString(v interface{}) string {
+	switch tv := v.(type) {
+	case json.Number:
+		return tv.String()
+	case jsoniter.Number:
+		return tv.String()
+	case string:
+		return tv
+	}
+	return fmt.Sprint(v)
 }

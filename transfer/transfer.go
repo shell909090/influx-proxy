@@ -222,7 +222,7 @@ func (tx *Transfer) write(ch chan *QueryResult, dsts []*backend.Backend, db, rp,
 				v := value[i]
 				if tagMap[k] {
 					if v != nil {
-						mtagSet = append(mtagSet, fmt.Sprintf("%s=%s", util.EscapeTag(k), util.EscapeTag(v.(string))))
+						mtagSet = append(mtagSet, fmt.Sprintf("%s=%s", util.EscapeTag(k), util.EscapeTag(util.CastString(v))))
 					}
 				} else if vtype, ok := fieldMap[k]; ok {
 					if v != nil {
@@ -231,7 +231,7 @@ func (tx *Transfer) write(ch chan *QueryResult, dsts []*backend.Backend, db, rp,
 						} else if vtype == "integer" {
 							fieldSet = append(fieldSet, fmt.Sprintf("%s=%vi", util.EscapeTag(k), v))
 						} else if vtype == "string" {
-							fieldSet = append(fieldSet, fmt.Sprintf("%s=\"%s\"", util.EscapeTag(k), models.EscapeStringField(v.(string))))
+							fieldSet = append(fieldSet, fmt.Sprintf("%s=\"%s\"", util.EscapeTag(k), models.EscapeStringField(util.CastString(v))))
 						}
 					}
 				}
