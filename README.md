@@ -175,6 +175,7 @@ The configuration settings are as follows:
 * `auth_encrypt`: whether to encrypt auth (username/password), default is `false`
 * `write_tracing`: enable logging for the write, default is `false`
 * `query_tracing`: enable logging for the query, default is `false`
+* `pprof_enabled`: enable `/debug/pprof` HTTP endpoint, default is `false`
 * `https_enabled`: enable https, default is `false`
 * `https_cert`: the ssl certificate to use when https is enabled, default is `empty`
 * `https_key`: use a separate private key location, default is `empty`

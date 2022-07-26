@@ -43,6 +43,7 @@ type HttpService struct { // nolint:golint
 	authEncrypt  bool
 	writeTracing bool
 	queryTracing bool
+	pprofEnabled bool
 }
 
 func NewHttpService(cfg *backend.ProxyConfig) (hs *HttpService) { // nolint:golint
@@ -55,6 +56,7 @@ func NewHttpService(cfg *backend.ProxyConfig) (hs *HttpService) { // nolint:goli
 		authEncrypt:  cfg.AuthEncrypt,
 		writeTracing: cfg.WriteTracing,
 		queryTracing: cfg.QueryTracing,
+		pprofEnabled: cfg.PprofEnabled,
 	}
 	return
 }
@@ -75,8 +77,10 @@ func (hs *HttpService) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/transfer/stats", hs.HandlerTransferStats)
 	mux.HandleFunc("/api/v1/prom/read", hs.HandlerPromRead)
 	mux.HandleFunc("/api/v1/prom/write", hs.HandlerPromWrite)
-	mux.HandleFunc("/debug/pprof/", pprof.Index)
-	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	if hs.pprofEnabled {
+		mux.HandleFunc("/debug/pprof/", pprof.Index)
+		mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	}
 }
 
 func (hs *HttpService) HandlerPing(w http.ResponseWriter, req *http.Request) {

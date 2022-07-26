@@ -51,6 +51,7 @@
     "password": "",
     "write_tracing": false,
     "query_tracing": false,
+    "pprof_enabled": false,
     "https_enabled": false,
     "https_cert": "",
     "https_key": ""
