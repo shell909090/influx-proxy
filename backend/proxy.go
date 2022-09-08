@@ -5,9 +5,7 @@
 package backend
 
 import (
-	"bytes"
 	"fmt"
-	"io"
 	"log"
 	"math/rand"
 	"net/http"
@@ -132,24 +130,27 @@ func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request) (body []byte, e
 }
 
 func (ip *Proxy) Write(p []byte, db, rp, precision string) (err error) {
-	buf := bytes.NewBuffer(p)
-	var line []byte
-	for {
-		line, err = buf.ReadBytes('\n')
-		switch err {
-		default:
-			log.Printf("error: %s", err)
-			return
-		case io.EOF, nil:
-			err = nil
-		}
-		if len(line) == 0 {
-			break
-		}
-		line = bytes.TrimSpace(line)
-		if len(line) == 0 {
+	var (
+		pos   int
+		block []byte
+	)
+	for pos < len(p) {
+		pos, block = ScanLine(p, pos)
+		pos++
+
+		if len(block) == 0 {
 			continue
 		}
+		start := SkipWhitespace(block, 0)
+		if start >= len(block) || block[start] == '#' {
+			continue
+		}
+		if block[len(block)-1] == '\n' {
+			block = block[:len(block)-1]
+		}
+
+		line := make([]byte, len(block[start:]))
+		copy(line, block[start:])
 		ip.WriteRow(line, db, rp, precision)
 	}
 	return

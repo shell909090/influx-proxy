@@ -69,6 +69,68 @@ func FindEndWithQuote(data []byte, start int, endchar byte) (end int, unquoted [
 	return
 }
 
+func SkipWhitespace(buf []byte, i int) int {
+	for i < len(buf) {
+		if buf[i] != ' ' && buf[i] != '\t' && buf[i] != 0 {
+			break
+		}
+		i++
+	}
+	return i
+}
+
+func ScanLine(buf []byte, i int) (int, []byte) {
+	start := i
+	quoted := false
+	fields := false
+
+	// tracks how many '=' and commas we've seen
+	// this duplicates some of the functionality in scanFields
+	equals := 0
+	commas := 0
+	for {
+		// reached the end of buf?
+		if i >= len(buf) {
+			break
+		}
+
+		// skip past escaped characters
+		if buf[i] == '\\' && i+2 < len(buf) {
+			i += 2
+			continue
+		}
+
+		if buf[i] == ' ' {
+			fields = true
+		}
+
+		// If we see a double quote, makes sure it is not escaped
+		if fields {
+			if !quoted && buf[i] == '=' {
+				i++
+				equals++
+				continue
+			} else if !quoted && buf[i] == ',' {
+				i++
+				commas++
+				continue
+			} else if buf[i] == '"' && equals > commas {
+				i++
+				quoted = !quoted
+				continue
+			}
+		}
+
+		if buf[i] == '\n' && !quoted {
+			break
+		}
+
+		i++
+	}
+
+	return i, buf[start:i]
+}
+
 func ScanToken(data []byte, atEOF bool) (advance int, token []byte, err error) {
 	if atEOF && len(data) == 0 {
 		return 0, nil, nil
