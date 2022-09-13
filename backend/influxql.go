@@ -225,59 +225,58 @@ func ScanTokens(q string, n int) (tokens []string) {
 	return
 }
 
-func GetHeadStmtFromTokens(tokens []string, n int) (stmt string) {
+func GetHeadStmtFromTokens(tokens []string, n int) string {
 	if n <= 0 || n > len(tokens) {
 		n = len(tokens)
 	}
 	return strings.ToLower(strings.Join(tokens[:n], " "))
 }
 
-func GetDatabaseFromInfluxQL(q string) (m string, err error) {
+func GetDatabaseFromInfluxQL(q string) (string, error) {
 	return GetDatabaseFromTokens(ScanTokens(q, 0))
 }
 
-func GetRetentionPolicyFromInfluxQL(q string) (m string, err error) {
+func GetRetentionPolicyFromInfluxQL(q string) (string, error) {
 	return GetRetentionPolicyFromTokens(ScanTokens(q, 0))
 }
 
-func GetMeasurementFromInfluxQL(q string) (m string, err error) {
+func GetMeasurementFromInfluxQL(q string) (string, error) {
 	return GetMeasurementFromTokens(ScanTokens(q, 0))
 }
 
-func GetDatabaseFromTokens(tokens []string) (m string, err error) {
-	m, err = GetIdentifierFromTokens(tokens, []string{"on", "database", "from"}, getDatabase)
+func GetDatabaseFromTokens(tokens []string) (db string, err error) {
+	db, err = GetIdentifierFromTokens(tokens, []string{"on", "database", "from"}, getDatabase)
 	// handle subquery
-	if strings.HasPrefix(strings.ToLower(strings.TrimLeft(m, "( ")), "select") {
-		m, err = GetDatabaseFromInfluxQL(m[1:])
+	if strings.HasPrefix(strings.ToLower(strings.TrimLeft(db, "( ")), "select ") {
+		db, err = GetDatabaseFromInfluxQL(db[1:])
 	}
 	return
 }
 
-func GetRetentionPolicyFromTokens(tokens []string) (m string, err error) {
-	m, err = GetIdentifierFromTokens(tokens, []string{"from"}, getRetentionPolicy)
+func GetRetentionPolicyFromTokens(tokens []string) (rp string, err error) {
+	rp, err = GetIdentifierFromTokens(tokens, []string{"from"}, getRetentionPolicy)
 	// handle subquery
-	if strings.HasPrefix(strings.ToLower(strings.TrimLeft(m, "( ")), "select") {
-		m, err = GetRetentionPolicyFromInfluxQL(m[1:])
+	if strings.HasPrefix(strings.ToLower(strings.TrimLeft(rp, "( ")), "select ") {
+		rp, err = GetRetentionPolicyFromInfluxQL(rp[1:])
 	}
 	return
 }
 
-func GetMeasurementFromTokens(tokens []string) (m string, err error) {
-	m, err = GetIdentifierFromTokens(tokens, []string{"from", "measurement"}, getMeasurement)
+func GetMeasurementFromTokens(tokens []string) (mm string, err error) {
+	mm, err = GetIdentifierFromTokens(tokens, []string{"from", "measurement"}, getMeasurement)
 	// handle subquery
-	if strings.HasPrefix(strings.ToLower(strings.TrimLeft(m, "( ")), "select") {
-		m, err = GetMeasurementFromInfluxQL(m[1 : len(m)-1])
+	if strings.HasPrefix(strings.ToLower(strings.TrimLeft(mm, "( ")), "select ") {
+		mm, err = GetMeasurementFromInfluxQL(mm[1 : len(mm)-1])
 	}
 	return
 }
 
-func GetIdentifierFromTokens(tokens []string, keywords []string, fn func([]string, string) string) (m string, err error) {
+func GetIdentifierFromTokens(tokens []string, keywords []string, fn func([]string, string) string) (string, error) {
 	for i := 0; i < len(tokens); i++ {
 		for j := 0; j < len(keywords); j++ {
 			if strings.ToLower(tokens[i]) == keywords[j] {
 				if i+1 < len(tokens) {
-					m = fn(tokens[i+1:], keywords[j])
-					return
+					return fn(tokens[i+1:], keywords[j]), nil
 				}
 			}
 		}
@@ -285,12 +284,12 @@ func GetIdentifierFromTokens(tokens []string, keywords []string, fn func([]strin
 	return "", ErrIllegalQL
 }
 
-func getDatabase(tokens []string, keyword string) (m string) {
+func getDatabase(tokens []string, keyword string) (db string) {
 	if len(tokens) == 0 {
 		return
 	}
-	m = tokens[0]
-	if m[0] == '(' {
+	db = tokens[0]
+	if db[0] == '(' {
 		return
 	}
 
@@ -299,18 +298,18 @@ func getDatabase(tokens []string, keyword string) (m string) {
 			return ""
 		}
 	}
-	if m[0] == '"' || m[0] == '\'' {
-		m = m[1 : len(m)-1]
+	if db[0] == '"' || db[0] == '\'' {
+		db = db[1 : len(db)-1]
 	}
 	return
 }
 
-func getRetentionPolicy(tokens []string, keyword string) (m string) {
+func getRetentionPolicy(tokens []string, keyword string) (rp string) {
 	if len(tokens) == 0 {
 		return
 	}
 	if tokens[0][0] == '(' {
-		m = tokens[0]
+		rp = tokens[0]
 		return
 	} else if tokens[0][0] == '/' {
 		return
@@ -319,42 +318,43 @@ func getRetentionPolicy(tokens []string, keyword string) (m string) {
 	}
 
 	if len(tokens) >= 5 && tokens[1] == "." && tokens[3] == "." {
-		m = tokens[2]
+		rp = tokens[2]
 	} else if len(tokens) >= 3 && tokens[1] == "." {
-		m = tokens[0]
+		rp = tokens[0]
 	} else {
 		return
 	}
-	if m[0] == '"' || m[0] == '\'' {
-		m = m[1 : len(m)-1]
+	if rp[0] == '"' || rp[0] == '\'' {
+		rp = rp[1 : len(rp)-1]
 	}
 	return
 }
 
-func getMeasurement(tokens []string, keyword string) (m string) {
+func getMeasurement(tokens []string, keyword string) (mm string) {
 	if len(tokens) == 0 {
 		return
 	}
 	if tokens[0][0] == '(' {
-		m = tokens[0]
+		mm = tokens[0]
 		return
 	} else if tokens[0][0] == '/' {
-		m = strings.Join(tokens[:], "")
-		advance, _, _ := FindEndWithQuote([]byte(m), 0, '/')
-		return m[:advance]
+		mm = strings.Join(tokens[:], "")
+		advance, _, _ := FindEndWithQuote([]byte(mm), 0, '/')
+		mm = mm[:advance]
+		return
 	}
 
 	if len(tokens) >= 5 && tokens[1] == "." && tokens[3] == "." {
-		m = tokens[4]
+		mm = tokens[4]
 	} else if len(tokens) >= 4 && tokens[1] == "." && tokens[2] == "." {
-		m = tokens[3]
+		mm = tokens[3]
 	} else if len(tokens) >= 3 && tokens[1] == "." {
-		m = tokens[2]
+		mm = tokens[2]
 	} else {
-		m = tokens[0]
+		mm = tokens[0]
 	}
-	if m[0] == '"' || m[0] == '\'' {
-		m = m[1 : len(m)-1]
+	if mm[0] == '"' || mm[0] == '\'' {
+		mm = mm[1 : len(mm)-1]
 	}
 	return
 }
