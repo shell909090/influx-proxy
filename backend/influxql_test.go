@@ -159,6 +159,15 @@ func TestGetDatabaseFromInfluxQL(t *testing.T) {
 	assertDatabase(t, `select * from "d.b".`, "")
 	assertDatabase(t, `select * from "db"`, "")
 
+	assertDatabase(t, `select * from select_sth`, "")
+	assertDatabase(t, `select * from "select sth"`, "")
+	assertDatabase(t, `select * from db..select_sth`, "db")
+	assertDatabase(t, `select * from db.rp."select sth"`, "db")
+	assertDatabase(t, `select * from "select * from sth"`, "")
+	assertDatabase(t, `select * from "(SELECT * FROM sth)"`, "")
+	assertDatabase(t, `select * from db.."select * from sth"`, "db")
+	assertDatabase(t, `select * from db.rp."(SELECT * FROM sth)"`, "db")
+
 	assertDatabase(t, `SELECT SUM("max") FROM (SELECT MAX("water_level") FROM db."auto.gen"."h2o_feet" GROUP BY "location")`, "db")
 	assertDatabase(t, `SELECT SUM("max") FROM ( SELECT MAX("water_level") FROM ( SELECT "water_total" / "water_unit" AS "water_level" FROM "db".autogen."pet_daycare" ) GROUP BY "location" )`, "db")
 	assertDatabase(t, `select mean(kpi_3) from (select kpi_1+kpi_2 as kpi_3 from "d.b"..cpu where time < 1620877962) where time < 1620877962 group by time(1m),app`, "d.b")
@@ -224,6 +233,15 @@ func TestGetRetentionPolicyFromInfluxQL(t *testing.T) {
 
 	assertRetentionPolicy(t, `SELECT mean("value") INTO "cpu\"_1h".:MEASUREMENT FROM /cpu.*/`, "")
 	assertRetentionPolicy(t, `SELECT mean("value") FROM "cpu" WHERE "region" = 'uswest' GROUP BY time(10m) fill(0)`, "")
+
+	assertRetentionPolicy(t, `select * from select_sth`, "")
+	assertRetentionPolicy(t, `select * from "select sth"`, "")
+	assertRetentionPolicy(t, `select * from db..select_sth`, "")
+	assertRetentionPolicy(t, `select * from db.rp."select sth"`, "rp")
+	assertRetentionPolicy(t, `select * from "select * from sth"`, "")
+	assertRetentionPolicy(t, `select * from "(SELECT * FROM sth)"`, "")
+	assertRetentionPolicy(t, `select * from db.."select * from sth"`, "")
+	assertRetentionPolicy(t, `select * from db.rp."(SELECT * FROM sth)"`, "rp")
 
 	assertRetentionPolicy(t, `SELECT SUM("max") FROM (SELECT MAX("water_level") FROM test1.autogen."h2o_feet" GROUP BY "location")`, "autogen")
 	assertRetentionPolicy(t, `SELECT MEAN("difference") FROM ( SELECT "cats" - "dogs" AS "difference" FROM test1."auto.gen"."pet_daycare" )`, "auto.gen")
@@ -320,6 +338,15 @@ func TestGetMeasurementFromInfluxQL(t *testing.T) {
 
 	assertMeasurement(t, `SELECT mean("value") INTO "cpu\"_1h".:MEASUREMENT FROM /cpu.*/`, "/cpu.*/")
 	assertMeasurement(t, `SELECT mean("value") FROM "cpu" WHERE "region" = 'uswest' GROUP BY time(10m) fill(0)`, "cpu")
+
+	assertMeasurement(t, `select * from select_sth`, "select_sth")
+	assertMeasurement(t, `select * from "select sth"`, "select sth")
+	assertMeasurement(t, `select * from db..select_sth`, "select_sth")
+	assertMeasurement(t, `select * from db.rp."select sth"`, "select sth")
+	assertMeasurement(t, `select * from "select * from sth"`, "select * from sth")
+	assertMeasurement(t, `select * from "(SELECT * FROM sth)"`, "(SELECT * FROM sth)")
+	assertMeasurement(t, `select * from db.."select * from sth"`, "select * from sth")
+	assertMeasurement(t, `select * from db.rp."(SELECT * FROM sth)"`, "(SELECT * FROM sth)")
 
 	assertMeasurement(t, `SELECT SUM("max") FROM (SELECT MAX("water_level") FROM "h2o_feet" GROUP BY "location")`, "h2o_feet")
 	assertMeasurement(t, `SELECT MEAN("difference") FROM ( SELECT "cats" - "dogs" AS "difference" FROM "pet_daycare" )`, "pet_daycare")

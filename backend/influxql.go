@@ -247,7 +247,7 @@ func GetMeasurementFromInfluxQL(q string) (string, error) {
 func GetDatabaseFromTokens(tokens []string) (db string, err error) {
 	db, err = GetIdentifierFromTokens(tokens, []string{"on", "database", "from"}, getDatabase)
 	// handle subquery
-	if strings.HasPrefix(strings.ToLower(strings.TrimLeft(db, "( ")), "select ") {
+	if len(db) > 16 && db[0] == '(' && db[len(db)-1] == ')' && strings.HasPrefix(strings.ToLower(strings.TrimLeft(db, "( ")), "select ") {
 		db, err = GetDatabaseFromInfluxQL(db[1:])
 	}
 	return
@@ -256,7 +256,7 @@ func GetDatabaseFromTokens(tokens []string) (db string, err error) {
 func GetRetentionPolicyFromTokens(tokens []string) (rp string, err error) {
 	rp, err = GetIdentifierFromTokens(tokens, []string{"from"}, getRetentionPolicy)
 	// handle subquery
-	if strings.HasPrefix(strings.ToLower(strings.TrimLeft(rp, "( ")), "select ") {
+	if len(rp) > 16 && rp[0] == '(' && rp[len(rp)-1] == ')' && strings.HasPrefix(strings.ToLower(strings.TrimLeft(rp, "( ")), "select ") {
 		rp, err = GetRetentionPolicyFromInfluxQL(rp[1:])
 	}
 	return
@@ -265,8 +265,13 @@ func GetRetentionPolicyFromTokens(tokens []string) (rp string, err error) {
 func GetMeasurementFromTokens(tokens []string) (mm string, err error) {
 	mm, err = GetIdentifierFromTokens(tokens, []string{"from", "measurement"}, getMeasurement)
 	// handle subquery
-	if strings.HasPrefix(strings.ToLower(strings.TrimLeft(mm, "( ")), "select ") {
-		mm, err = GetMeasurementFromInfluxQL(mm[1 : len(mm)-1])
+	if len(mm) > 16 && mm[0] == '(' && mm[len(mm)-1] == ')' && strings.HasPrefix(strings.ToLower(strings.TrimLeft(mm, "( ")), "select ") {
+		for _, token := range tokens {
+			if token == mm {
+				mm, err = GetMeasurementFromInfluxQL(mm[1 : len(mm)-1])
+				break
+			}
+		}
 	}
 	return
 }
