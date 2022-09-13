@@ -624,17 +624,36 @@ func (hs *HttpService) checkAuth(w http.ResponseWriter, req *http.Request) bool 
 	if hs.username == "" && hs.password == "" {
 		return true
 	}
-	query := req.URL.Query()
-	u, p := query.Get("u"), query.Get("p")
-	if hs.transAuth(u) == hs.username && hs.transAuth(p) == hs.password {
+	q := req.URL.Query()
+	if u, p := q.Get("u"), q.Get("p"); hs.compareAuth(u, p) {
 		return true
 	}
-	u, p, ok := req.BasicAuth()
-	if ok && hs.transAuth(u) == hs.username && hs.transAuth(p) == hs.password {
+	if u, p, ok := req.BasicAuth(); ok && hs.compareAuth(u, p) {
+		return true
+	}
+	if u, p, ok := hs.parseAuth(req); ok && hs.compareAuth(u, p) {
 		return true
 	}
 	hs.WriteError(w, req, 401, "authentication failed")
 	return false
+}
+
+func (hs *HttpService) parseAuth(req *http.Request) (string, string, bool) {
+	if auth := req.Header.Get("Authorization"); auth != "" {
+		items := strings.Split(auth, " ")
+		if len(items) == 2 && items[0] == "Token" {
+			token := items[1]
+			i := strings.IndexByte(token, ':')
+			if i >= 0 {
+				return token[:i], token[i+1:], true
+			}
+		}
+	}
+	return "", "", false
+}
+
+func (hs *HttpService) compareAuth(u, p string) bool {
+	return hs.transAuth(u) == hs.username && hs.transAuth(p) == hs.password
 }
 
 func (hs *HttpService) transAuth(text string) string {
