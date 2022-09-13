@@ -86,7 +86,7 @@ func (ip *Proxy) GetHealth(stats bool) []interface{} {
 }
 
 func (ip *Proxy) IsForbiddenDB(db string) bool {
-	return db == "_internal" || (len(ip.dbSet) > 0 && !ip.dbSet[db])
+	return len(ip.dbSet) > 0 && !ip.dbSet[db]
 }
 
 func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request) (body []byte, err error) {
