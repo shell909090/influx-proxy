@@ -89,6 +89,25 @@ func (ip *Proxy) IsForbiddenDB(db string) bool {
 	return len(ip.dbSet) > 0 && !ip.dbSet[db]
 }
 
+func (ip *Proxy) QueryFlux(w http.ResponseWriter, req *http.Request, query string) (err error) {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return ErrEmptyQuery
+	}
+	bucket, meas, err := ScanQuery(query)
+	if err != nil {
+		return
+	}
+	if bucket != "" && meas != "" {
+		return QueryFlux(w, req, ip, bucket, meas)
+	} else if bucket == "" {
+		return ErrGetBucket
+	} else if meas == "" {
+		return ErrGetMeasurement
+	}
+	return ErrIllegalFluxQuery
+}
+
 func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request) (body []byte, err error) {
 	q := strings.TrimSpace(req.FormValue("q"))
 	if q == "" {

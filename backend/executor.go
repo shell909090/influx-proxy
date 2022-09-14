@@ -60,6 +60,41 @@ func ReadPromQL(w http.ResponseWriter, req *http.Request, ip *Proxy, db, meas st
 	return ErrBackendsUnavailable
 }
 
+func QueryFlux(w http.ResponseWriter, req *http.Request, ip *Proxy, bucket, meas string) (err error) {
+	// all circles -> backend by key(org,bucket,meas) -> query flux
+	key := GetKey(bucket, meas)
+
+	// pass non-active, rewriting or write-only.
+	perms := rand.Perm(len(ip.Circles))
+	for _, p := range perms {
+		be := ip.Circles[p].GetBackend(key)
+		if !be.IsActive() || be.IsRewriting() || be.IsWriteOnly() {
+			continue
+		}
+		err = be.QueryFlux(req, w)
+		if err == nil {
+			return
+		}
+	}
+
+	// pass non-active, non-writing (excluding rewriting and write-only).
+	backends := ip.GetBackends(key)
+	for _, be := range backends {
+		if !be.IsActive() || !(be.IsRewriting() || be.IsWriteOnly()) {
+			continue
+		}
+		err = be.QueryFlux(req, w)
+		if err == nil {
+			return
+		}
+	}
+
+	if err != nil {
+		return err
+	}
+	return ErrBackendsUnavailable
+}
+
 func QueryFromQL(w http.ResponseWriter, req *http.Request, ip *Proxy, tokens []string, db string) (body []byte, err error) {
 	// all circles -> backend by key(db,meas) -> select or show
 	meas, err := GetMeasurementFromTokens(tokens)

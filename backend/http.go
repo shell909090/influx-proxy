@@ -156,6 +156,16 @@ func (hb *HttpBackend) SetBasicAuth(req *http.Request) {
 	SetBasicAuth(req, hb.username, hb.password, hb.authEncrypt)
 }
 
+func (hb *HttpBackend) SetTokenAuth(req *http.Request) {
+	var auth string
+	if hb.authEncrypt {
+		auth = fmt.Sprintf("Token %s:%s", util.AesDecrypt(hb.username), util.AesDecrypt(hb.password))
+	} else {
+		auth = fmt.Sprintf("Token %s:%s", hb.username, hb.password)
+	}
+	req.Header.Set("Authorization", auth)
+}
+
 func (hb *HttpBackend) CheckActive() {
 	for hb.running.Load().(bool) {
 		hb.active.Store(hb.Ping())
@@ -293,6 +303,36 @@ func (hb *HttpBackend) ReadProm(req *http.Request, w http.ResponseWriter) (err e
 		return
 	}
 
+	w.WriteHeader(resp.StatusCode)
+	_, err = w.Write(p)
+	return
+}
+
+func (hb *HttpBackend) QueryFlux(req *http.Request, w http.ResponseWriter) (err error) {
+	if hb.username != "" || hb.password != "" {
+		hb.SetTokenAuth(req)
+	}
+
+	req.URL, err = url.Parse(hb.Url + "/api/v2/query")
+	if err != nil {
+		log.Print("internal url parse error: ", err)
+		return
+	}
+
+	resp, err := hb.transport.RoundTrip(req)
+	if err != nil {
+		log.Printf("flux query error: %s", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	CopyHeader(w.Header(), resp.Header)
+
+	p, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("flux read body error: %s", err)
+		return
+	}
 	w.WriteHeader(resp.StatusCode)
 	_, err = w.Write(p)
 	return

@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"mime"
 	"net/http"
 	"net/http/pprof"
 	"regexp"
@@ -75,6 +76,8 @@ func (hs *HttpService) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/cleanup", hs.HandlerCleanup)
 	mux.HandleFunc("/transfer/state", hs.HandlerTransferState)
 	mux.HandleFunc("/transfer/stats", hs.HandlerTransferStats)
+	mux.HandleFunc("/api/v2/query", hs.HandlerQueryV2)
+	mux.HandleFunc("/api/v2/write", hs.HandlerWriteV2)
 	mux.HandleFunc("/api/v1/prom/read", hs.HandlerPromRead)
 	mux.HandleFunc("/api/v1/prom/write", hs.HandlerPromWrite)
 	if hs.pprofEnabled {
@@ -106,6 +109,54 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
+func (hs *HttpService) HandlerQueryV2(w http.ResponseWriter, req *http.Request) {
+	if !hs.checkMethodAndAuth(w, req, "POST") {
+		return
+	}
+
+	var contentType = "application/json"
+	if ct := req.Header.Get("Content-Type"); ct != "" {
+		contentType = ct
+	}
+	mt, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		hs.WriteError(w, req, 400, err.Error())
+		return
+	}
+	rbody, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		hs.WriteError(w, req, 400, err.Error())
+		return
+	}
+	var query string
+	switch mt {
+	case "application/vnd.flux":
+		query = string(rbody)
+	case "application/json":
+		fallthrough
+	default:
+		var r struct {
+			Query string `json:"query"`
+		}
+		if err = json.Unmarshal(rbody, &r); err != nil {
+			hs.WriteError(w, req, 400, fmt.Sprintf("failed parsing request body as JSON: %s", err))
+			return
+		}
+		query = r.Query
+	}
+
+	req.Body = ioutil.NopCloser(bytes.NewBuffer(rbody))
+	err = hs.ip.QueryFlux(w, req, query)
+	if err != nil {
+		log.Printf("flux query error: %s, query: %s, client: %s", err, query, req.RemoteAddr)
+		hs.WriteError(w, req, 400, err.Error())
+		return
+	}
+	if hs.queryTracing {
+		log.Printf("flux query: %s, client: %s", query, req.RemoteAddr)
+	}
+}
+
 func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
 	if !hs.checkMethodAndAuth(w, req, "POST") {
 		return
@@ -130,6 +181,41 @@ func (hs *HttpService) HandlerWrite(w http.ResponseWriter, req *http.Request) {
 	}
 	rp := req.URL.Query().Get("rp")
 
+	hs.handlerWrite(db, rp, precision, w, req)
+}
+
+func (hs *HttpService) HandlerWriteV2(w http.ResponseWriter, req *http.Request) {
+	if !hs.checkMethodAndAuth(w, req, "POST") {
+		return
+	}
+
+	precision := req.URL.Query().Get("precision")
+	switch precision {
+	case "ns":
+		precision = "n"
+	case "us":
+		precision = "u"
+	case "ms", "s", "":
+		// same as v1 so do nothing
+	default:
+		hs.WriteError(w, req, 400, fmt.Sprintf("invalid precision %q (use ns, us, ms or s)", precision))
+		return
+	}
+
+	db, rp, err := hs.bucket2dbrp(req.URL.Query().Get("bucket"))
+	if err != nil {
+		hs.WriteError(w, req, 404, err.Error())
+		return
+	}
+	if hs.ip.IsForbiddenDB(db) {
+		hs.WriteError(w, req, 400, fmt.Sprintf("database forbidden: %s", db))
+		return
+	}
+
+	hs.handlerWrite(db, rp, precision, w, req)
+}
+
+func (hs *HttpService) handlerWrite(db, rp, precision string, w http.ResponseWriter, req *http.Request) {
 	body := req.Body
 	if req.Header.Get("Content-Encoding") == "gzip" {
 		b, err := gzip.NewReader(body)
@@ -661,6 +747,30 @@ func (hs *HttpService) transAuth(text string) string {
 		return util.AesEncrypt(text)
 	}
 	return text
+}
+
+func (hs *HttpService) bucket2dbrp(bucket string) (string, string, error) {
+	// test for a slash in our bucket name.
+	switch idx := strings.IndexByte(bucket, '/'); idx {
+	case -1:
+		// if there is no slash, we're mapping bucket to the database.
+		switch db := bucket; db {
+		case "":
+			// if our "database" is an empty string, this is an error.
+			return "", "", fmt.Errorf(`bucket name %q is missing a slash; not in "database/retention-policy" format`, bucket)
+		default:
+			return db, "", nil
+		}
+	default:
+		// there is a slash
+		switch db, rp := bucket[:idx], bucket[idx+1:]; {
+		case db == "":
+			// empty database is unrecoverable
+			return "", "", fmt.Errorf(`bucket name %q is in db/rp form but has an empty database`, bucket)
+		default:
+			return db, rp, nil
+		}
+	}
 }
 
 func (hs *HttpService) queryDB(req *http.Request, form bool) (string, error) {
