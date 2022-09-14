@@ -25,10 +25,7 @@ var (
 	ErrGetBackends         = errors.New("can't get backends")
 )
 
-func ReadPromQL(w http.ResponseWriter, req *http.Request, ip *Proxy, db, meas string) (err error) {
-	// all circles -> backend by key(db,meas) -> select or show
-	key := GetKey(db, meas)
-
+func query(w http.ResponseWriter, req *http.Request, ip *Proxy, key string, fn func(*Backend, *http.Request, http.ResponseWriter) ([]byte, error)) (body []byte, err error) {
 	// pass non-active, rewriting or write-only.
 	perms := rand.Perm(len(ip.Circles))
 	for _, p := range perms {
@@ -36,7 +33,7 @@ func ReadPromQL(w http.ResponseWriter, req *http.Request, ip *Proxy, db, meas st
 		if !be.IsActive() || be.IsRewriting() || be.IsWriteOnly() {
 			continue
 		}
-		err = be.ReadProm(req, w)
+		body, err = fn(be, req, w)
 		if err == nil {
 			return
 		}
@@ -48,7 +45,7 @@ func ReadPromQL(w http.ResponseWriter, req *http.Request, ip *Proxy, db, meas st
 		if !be.IsActive() || !(be.IsRewriting() || be.IsWriteOnly()) {
 			continue
 		}
-		err = be.ReadProm(req, w)
+		body, err = fn(be, req, w)
 		if err == nil {
 			return
 		}
@@ -57,42 +54,29 @@ func ReadPromQL(w http.ResponseWriter, req *http.Request, ip *Proxy, db, meas st
 	if err != nil {
 		return
 	}
-	return ErrBackendsUnavailable
+	return nil, ErrBackendsUnavailable
+}
+
+func ReadProm(w http.ResponseWriter, req *http.Request, ip *Proxy, db, meas string) (err error) {
+	// all circles -> backend by key(db,meas) -> select or show
+	key := GetKey(db, meas)
+	fn := func(be *Backend, req *http.Request, w http.ResponseWriter) ([]byte, error) {
+		err = be.ReadProm(req, w)
+		return nil, err
+	}
+	_, err = query(w, req, ip, key, fn)
+	return
 }
 
 func QueryFlux(w http.ResponseWriter, req *http.Request, ip *Proxy, bucket, meas string) (err error) {
 	// all circles -> backend by key(org,bucket,meas) -> query flux
 	key := GetKey(bucket, meas)
-
-	// pass non-active, rewriting or write-only.
-	perms := rand.Perm(len(ip.Circles))
-	for _, p := range perms {
-		be := ip.Circles[p].GetBackend(key)
-		if !be.IsActive() || be.IsRewriting() || be.IsWriteOnly() {
-			continue
-		}
+	fn := func(be *Backend, req *http.Request, w http.ResponseWriter) ([]byte, error) {
 		err = be.QueryFlux(req, w)
-		if err == nil {
-			return
-		}
+		return nil, err
 	}
-
-	// pass non-active, non-writing (excluding rewriting and write-only).
-	backends := ip.GetBackends(key)
-	for _, be := range backends {
-		if !be.IsActive() || !(be.IsRewriting() || be.IsWriteOnly()) {
-			continue
-		}
-		err = be.QueryFlux(req, w)
-		if err == nil {
-			return
-		}
-	}
-
-	if err != nil {
-		return err
-	}
-	return ErrBackendsUnavailable
+	_, err = query(w, req, ip, key, fn)
+	return
 }
 
 func QueryFromQL(w http.ResponseWriter, req *http.Request, ip *Proxy, tokens []string, db string) (body []byte, err error) {
@@ -102,38 +86,12 @@ func QueryFromQL(w http.ResponseWriter, req *http.Request, ip *Proxy, tokens []s
 		return nil, ErrGetMeasurement
 	}
 	key := GetKey(db, meas)
-
-	// pass non-active, rewriting or write-only.
-	perms := rand.Perm(len(ip.Circles))
-	for _, p := range perms {
-		be := ip.Circles[p].GetBackend(key)
-		if !be.IsActive() || be.IsRewriting() || be.IsWriteOnly() {
-			continue
-		}
+	fn := func(be *Backend, req *http.Request, w http.ResponseWriter) ([]byte, error) {
 		qr := be.Query(req, w, false)
-		if qr.Err == nil {
-			return qr.Body, nil
-		}
-		err = qr.Err
+		return qr.Body, qr.Err
 	}
-
-	// pass non-active, non-writing (excluding rewriting and write-only).
-	backends := ip.GetBackends(key)
-	for _, be := range backends {
-		if !be.IsActive() || !(be.IsRewriting() || be.IsWriteOnly()) {
-			continue
-		}
-		qr := be.Query(req, w, false)
-		if qr.Err == nil {
-			return qr.Body, nil
-		}
-		err = qr.Err
-	}
-
-	if err != nil {
-		return nil, err
-	}
-	return nil, ErrBackendsUnavailable
+	body, err = query(w, req, ip, key, fn)
+	return
 }
 
 func QueryShowQL(w http.ResponseWriter, req *http.Request, ip *Proxy, tokens []string) (body []byte, err error) {

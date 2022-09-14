@@ -227,7 +227,7 @@ func (ip *Proxy) WritePoints(points []models.Point, db, rp string) error {
 }
 
 func (ip *Proxy) ReadProm(w http.ResponseWriter, req *http.Request, db, metric string) (err error) {
-	return ReadPromQL(w, req, ip, db, metric)
+	return ReadProm(w, req, ip, db, metric)
 }
 
 func (ip *Proxy) Close() {
