@@ -21,7 +21,7 @@ curl -i -X POST 'http://127.0.0.1:7076/write?db=db2&rp=rp2&precision=h' --data-b
 cpu3,host=server06,region=cn\ south,tag\ key=value\=with"equals" idle=16,system=16i,user="Jay Chou",admin=false  439888
 cpu3,host=server07,region=cn\ south,tag\ key=value\,with"commas" idle=74,system=23i,user="Stephen Chow" 440204'
 
-curl -i -X POST 'http://127.0.0.1:7076/write?db=db2&rp=rp2&precision=ms' --data-binary \
+curl -i -X POST 'http://127.0.0.1:7076/api/v2/write?bucket=db2/rp2&precision=ms' --data-binary \
 'cpu4 idle=14,system=31i,user="Dwayne Johnson",admin=true,character="\", ,\,\\,\\\,\\\\"
 cpu4 idle=39,system=56i,user="Jay Chou",brief\ desc="the best
  \"singer\"" 1422568543702

@@ -1,11 +1,14 @@
 #!/bin/bash
 
-if [[ $# -gt 1 ]] || [[ "$1" != "" && "$1" != "auth" && "$1" != "https" ]]; then
-    echo "Usage: $0 [auth|https]"
+if [[ $# -gt 1 ]] || [[ "$1" != "" && "$1" != "flux" && "$1" != "auth" && "$1" != "https" ]]; then
+    echo "Usage: $0 [flux|auth|https]"
     exit 1
 fi
 
-if [[ "$1" == "auth" ]]; then
+if [[ "$1" == "flux" ]]; then
+    echo "Mode: $1"
+    OPTIONS="-e INFLUXDB_HTTP_FLUX_ENABLED=true"
+elif [[ "$1" == "auth" ]]; then
     echo "Mode: $1"
     OPTIONS="-e INFLUXDB_HTTP_AUTH_ENABLED=true -e INFLUXDB_ADMIN_USER=admin -e INFLUXDB_ADMIN_PASSWORD=admin"
 elif [[ "$1" == "https" ]]; then
