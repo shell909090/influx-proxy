@@ -188,11 +188,11 @@ func ScanToken(data []byte, atEOF bool) (advance int, token []byte, err error) {
 		} else {
 			advance += start + 1
 		}
-	case '.':
+	case ',', '.':
 		advance = start + 1
 	default:
 		advance = bytes.IndexFunc(data[start:], func(r rune) bool {
-			return r == ' ' || r == '.'
+			return r == ' ' || r == '.' || r == '"'
 		})
 		if advance == -1 {
 			advance = len(data)
