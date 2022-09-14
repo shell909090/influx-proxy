@@ -246,7 +246,15 @@ func (hs *HttpService) HandlerHealth(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	stats := req.URL.Query().Get("stats") == "true"
-	hs.Write(w, req, 200, hs.ip.GetHealth(stats))
+	resp := map[string]interface{}{
+		"name":    "influx-proxy",
+		"message": "ready for queries and writes",
+		"status":  "pass",
+		"checks":  []string{},
+		"circles": hs.ip.GetHealth(stats),
+		"version": backend.Version,
+	}
+	hs.Write(w, req, 200, resp)
 }
 
 func (hs *HttpService) HandlerReplica(w http.ResponseWriter, req *http.Request) {
