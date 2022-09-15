@@ -113,13 +113,13 @@ func (hs *HttpService) HandlerQuery(w http.ResponseWriter, req *http.Request) {
 	q := req.FormValue("q")
 	body, err := hs.ip.Query(w, req)
 	if err != nil {
-		log.Printf("query error: %s, query: %s %s %s, client: %s", err, req.Method, db, q, req.RemoteAddr)
+		log.Printf("influxql query error: %s, query: %s, db: %s, client: %s", err, q, db, req.RemoteAddr)
 		hs.WriteError(w, req, http.StatusBadRequest, err.Error())
 		return
 	}
 	hs.WriteBody(w, body)
 	if hs.queryTracing {
-		log.Printf("query: %s %s %s, client: %s", req.Method, db, q, req.RemoteAddr)
+		log.Printf("influxql query: %s, db: %s, client: %s", q, db, req.RemoteAddr)
 	}
 }
 
@@ -256,7 +256,7 @@ func (hs *HttpService) handlerWrite(db, rp, precision string, w http.ResponseWri
 		w.WriteHeader(http.StatusNoContent)
 	}
 	if hs.writeTracing {
-		log.Printf("write: %s %s %s %s, client: %s", db, rp, precision, p, req.RemoteAddr)
+		log.Printf("write line protocol, db: %s, rp: %s, precision: %s, data: %s, client: %s", db, rp, precision, p, req.RemoteAddr)
 	}
 }
 

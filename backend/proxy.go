@@ -185,7 +185,7 @@ func (ip *Proxy) WriteRow(line []byte, db, rp, precision string) {
 		return
 	}
 	if !RapidCheck(nanoLine[len(meas):]) {
-		log.Printf("invalid format, drop data: %s %s %s %s", db, rp, precision, string(line))
+		log.Printf("invalid format, db: %s, rp: %s, precision: %s, line: %s", db, rp, precision, string(line))
 		return
 	}
 
@@ -200,7 +200,7 @@ func (ip *Proxy) WriteRow(line []byte, db, rp, precision string) {
 	for _, be := range backends {
 		err = be.WritePoint(point)
 		if err != nil {
-			log.Printf("write data to buffer error: %s, %s, %s, %s, %s, %s", err, be.Url, db, rp, precision, string(line))
+			log.Printf("write data to buffer error: %s, url: %s, db: %s, rp: %s, precision: %s, line: %s", err, be.Url, db, rp, precision, string(line))
 		}
 	}
 }
@@ -221,7 +221,7 @@ func (ip *Proxy) WritePoints(points []models.Point, db, rp string) error {
 		for _, be := range backends {
 			err = be.WritePoint(point)
 			if err != nil {
-				log.Printf("write point to buffer error: %s, %s, %s, %s, %s", err, be.Url, db, rp, pt.String())
+				log.Printf("write point to buffer error: %s, url: %s, db: %s, rp: %s, point: %s", err, be.Url, db, rp, pt.String())
 			}
 		}
 	}

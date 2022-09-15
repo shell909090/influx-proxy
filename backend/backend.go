@@ -183,14 +183,14 @@ func (ib *Backend) FlushBuffer(db, rp string) {
 				log.Printf("bad backend, drop all data")
 				return
 			default:
-				log.Printf("write http error: %s %s %s, length: %d", ib.Url, db, rp, len(p))
+				log.Printf("write http error, url: %s, db: %s, rp: %s, plen: %d", ib.Url, db, rp, len(p))
 			}
 		}
 
 		b := bytes.Join([][]byte{[]byte(url.QueryEscape(db)), []byte(url.QueryEscape(rp)), p}, []byte{' '})
 		err = ib.fb.Write(b)
 		if err != nil {
-			log.Printf("write db and data to file error with db: %s, rp: %s, length: %d error: %s", db, rp, len(p), err)
+			log.Printf("write db and data to file error: %s, db: %s, rp: %s, plen: %d", err, db, rp, len(p))
 			return
 		}
 	})
@@ -268,7 +268,7 @@ func (ib *Backend) Rewrite() (err error) {
 		log.Printf("bad backend, drop all data")
 		err = nil
 	default:
-		log.Printf("rewrite http error: %s %s %s, length: %d", ib.Url, db, rp, len(p[1]))
+		log.Printf("rewrite http error, url: %s, db: %s, rp: %s, plen: %d", ib.Url, db, rp, len(p[1]))
 
 		err = ib.fb.RollbackMeta()
 		if err != nil {
