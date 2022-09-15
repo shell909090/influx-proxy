@@ -99,14 +99,15 @@ func (ip *Proxy) QueryFlux(w http.ResponseWriter, req *http.Request, qr *QueryRe
 	if err != nil {
 		return
 	}
-	if bucket != "" && meas != "" {
-		return QueryFlux(w, req, ip, bucket, meas)
-	} else if bucket == "" {
+	if bucket == "" {
 		return ErrGetBucket
-	} else if meas == "" {
+	} else if ip.IsForbiddenDB(bucket) {
+		return fmt.Errorf("database forbidden: %s", bucket)
+	}
+	if meas == "" {
 		return ErrGetMeasurement
 	}
-	return ErrIllegalFluxQuery
+	return QueryFlux(w, req, ip, bucket, meas)
 }
 
 func (ip *Proxy) Query(w http.ResponseWriter, req *http.Request) (body []byte, err error) {

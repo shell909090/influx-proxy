@@ -52,7 +52,7 @@ func main() {
 	log.Printf("version: %s, commit: %s, build: %s", backend.Version, backend.GitCommit, backend.BuildTime)
 	cfg.PrintSummary()
 
-	mux := http.NewServeMux()
+	mux := service.NewServeMux()
 	service.NewHttpService(cfg).Register(mux)
 
 	server := &http.Server{
