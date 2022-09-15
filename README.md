@@ -29,6 +29,8 @@ Since the InfluxDB Proxy v1 is limited by the only `ONE` database and the `KEYMA
 ## Features
 
 * Support query and write.
+* Support /api/v2 endpoints.
+* Support flux language query.
 * Support some cluster influxql.
 * Filter some dangerous influxql.
 * Transparent for client, like cluster for client.
@@ -42,7 +44,7 @@ Since the InfluxDB Proxy v1 is limited by the only `ONE` database and the `KEYMA
 * Support prometheus remote read and write.
 * Support authentication and https.
 * Support authentication encryption.
-* Support health status query.
+* Support health status check.
 * Support database whitelist.
 * Support version display.
 * Support gzip.
@@ -91,6 +93,8 @@ $ # build current platform
 $ make build
 $ # build linux amd64
 $ make linux
+$ # cross-build all platforms
+$ make release
 ```
 
 ## Development
