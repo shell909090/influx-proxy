@@ -6,7 +6,7 @@ package backend
 
 import "testing"
 
-func TestParseBucket(t *testing.T) {
+func TestParseQueryBucket(t *testing.T) {
 	tests := []struct {
 		name string
 		have string
@@ -53,7 +53,7 @@ func TestParseBucket(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		got, err := ParseBucket(tt.have)
+		got, err := ParseQueryBucket(tt.have)
 		if err != tt.werr || got != tt.want {
 			t.Errorf("%v: got %v, %v, want %v, %v", tt.name, got, err, tt.want, tt.werr)
 			continue
@@ -61,7 +61,7 @@ func TestParseBucket(t *testing.T) {
 	}
 }
 
-func TestParseMeasurement(t *testing.T) {
+func TestParseQueryMeasurement(t *testing.T) {
 	tests := []struct {
 		name string
 		have string
@@ -143,7 +143,112 @@ data() |> filter(fn: (r) => r._measurement == "m1")`,
 		},
 	}
 	for _, tt := range tests {
-		got, err := ParseMeasurement(tt.have)
+		got, err := ParseQueryMeasurement(tt.have)
+		if err != tt.werr || got != tt.want {
+			t.Errorf("%v: got %v, %v, want %v, %v", tt.name, got, err, tt.want, tt.werr)
+			continue
+		}
+	}
+}
+
+func TestParseSpecBucket(t *testing.T) {
+	tests := []struct {
+		name string
+		have string
+		want string
+		werr error
+	}{
+		{
+			name: "test1",
+			have: `{"bucket":"example-bucket"}`,
+			want: "example-bucket",
+		},
+		{
+			name: "test2",
+			have: ` { "bucket" : "example-bucket" } `,
+			want: "example-bucket",
+		},
+		{
+			name: "test3",
+			have: ` {  } `,
+			want: "",
+			werr: ErrGetBucket,
+		},
+		{
+			name: "test5",
+			have: `{"bucketID":"0261d8287f4d6000"}  `,
+			want: "",
+			werr: ErrGetBucket,
+		},
+	}
+	for _, tt := range tests {
+		got, err := ParseSpecBucket([]byte(tt.have))
+		if err != tt.werr || got != tt.want {
+			t.Errorf("%v: got %v, %v, want %v, %v", tt.name, got, err, tt.want, tt.werr)
+			continue
+		}
+	}
+}
+
+func TestParseSpecMeasurement(t *testing.T) {
+	tests := []struct {
+		name string
+		have string
+		want string
+		werr error
+	}{
+		{
+			name: "test1",
+			have: `{"fn":{"fn":{"type":"FunctionExpression","block":{"type":"FunctionBlock","parameters":{"type":"FunctionParameters","list":[{"type":"FunctionParameter","key":{"type":"Identifier","name":"r"}}],"pipe":null},"body":{"type":"BinaryExpression","operator":"==","left":{"type":"MemberExpression","object":{"type":"IdentifierExpression","name":"r"},"property":"_measurement"},"right":{"type":"StringLiteral","value":"example-measurement"}}}}}}`,
+			want: "example-measurement",
+		},
+		{
+			name: "test2",
+			have: `{"fn": {"fn": {"type": "FunctionExpression", "block": {"type": "FunctionBlock", "parameters": {"type": "FunctionParameters", "list": [{"type": "FunctionParameter", "key": {"type": "Identifier", "name": "r"}}], "pipe": null}, "body": {"type": "BinaryExpression", "operator": "==", "left": {"type": "MemberExpression", "object": {"type": "IdentifierExpression", "name": "r"}, "property": "_measurement"}, "right": {"type": "StringLiteral", "value": "example-measurement"}}}}}}`,
+			want: "example-measurement",
+		},
+		{
+			name: "test3",
+			have: ` {"fn": {"fn": {}}} `,
+			want: "",
+			werr: ErrGetMeasurement,
+		},
+		{
+			name: "test4",
+			have: ` {"fn": {"fn": {"type": "FunctionExpression", "block": {}}}} `,
+			want: "",
+			werr: ErrGetMeasurement,
+		},
+		{
+			name: "test5",
+			have: `{"fn":{"fn":{"type":"FunctionExpression","block":{"type":"FunctionBlock","parameters":{},"body":{}}}}}`,
+			want: "",
+			werr: ErrGetMeasurement,
+		},
+		{
+			name: "test6",
+			have: `{"fn":{"fn":{"type":"FunctionExpression","block":{"type":"FunctionBlock","parameters":{"type":"FunctionParameters","list":[{"type":"FunctionParameter","key":{"type":"Identifier","name":"r"}}],"pipe":null},"body":{"type":"BinaryExpression","operator":"!=","left":{"type":"MemberExpression","object":{"type":"IdentifierExpression","name":"r"},"property":"_measurement"},"right":{"type":"StringLiteral","value":"example-measurement"}}}}}}`,
+			want: "",
+			werr: ErrEqualMeasurement,
+		},
+		{
+			name: "test7",
+			have: `{"fn":{"fn":{"type":"FunctionExpression","block":{"type":"FunctionBlock","parameters":{"type":"FunctionParameters","list":[{"type":"FunctionParameter","key":{"type":"Identifier","name":"r"}}],"pipe":null},"body":{"type":"BinaryExpression","operator":"==","left":{"type":"MemberExpression","object":{"type":"IdentifierExpression","name":"r"},"property":"_measurement"},"right":{"type":"StringLiteral","value":"'measurement with spaces, commas and 'quotes''"}}}}}}`,
+			want: `'measurement with spaces, commas and 'quotes''`,
+		},
+		{
+			name: "test8",
+			have: `{"fn":{"fn":{"type":"FunctionExpression","block":{"type":"FunctionBlock","parameters":{"type":"FunctionParameters","list":[{"type":"FunctionParameter","key":{"type":"Identifier","name":"r"}}],"pipe":null},"body":{"type":"BinaryExpression","operator":"==","left":{"type":"MemberExpression","object":{"type":"IdentifierExpression","name":"r"},"property":"_measurement"},"right":{"type":"StringLiteral","value":"measurement with spaces, commas and \"quotes\""}}}}}}`,
+			want: `measurement with spaces, commas and "quotes"`,
+		},
+		{
+			name: "test9",
+			have: `{"fn":{"fn":{"type":"FunctionExpression","block":{"type":"FunctionBlock","parameters":{"type":"FunctionParameters","list":[{"type":"FunctionParameter","key":{"type":"Identifier","name":"r"}}],"pipe":null},"body":{"type":"BinaryExpression","operator":"==","left":{"type":"MemberExpression","object":{"type":"IdentifierExpression","name":"r"},"property":"_measurement"},"right":{"type":"StringLiteral","value":"\"measurement with spaces, commas and \"quotes\"\""}}}}}}`,
+			want: `"measurement with spaces, commas and "quotes""`,
+		},
+	}
+	for _, tt := range tests {
+		got, err := ParseSpecMeasurement([]byte(tt.have))
 		if err != tt.werr || got != tt.want {
 			t.Errorf("%v: got %v, %v, want %v, %v", tt.name, got, err, tt.want, tt.werr)
 			continue

@@ -89,12 +89,13 @@ func (ip *Proxy) IsForbiddenDB(db string) bool {
 	return len(ip.dbSet) > 0 && !ip.dbSet[db]
 }
 
-func (ip *Proxy) QueryFlux(w http.ResponseWriter, req *http.Request, query string) (err error) {
-	query = strings.TrimSpace(query)
-	if query == "" {
-		return ErrEmptyQuery
+func (ip *Proxy) QueryFlux(w http.ResponseWriter, req *http.Request, qr *QueryRequest) (err error) {
+	var bucket, meas string
+	if qr.Query != "" {
+		bucket, meas, err = ScanQuery(qr.Query)
+	} else if qr.Spec != nil {
+		bucket, meas, err = ScanSpec(qr.Spec)
 	}
-	bucket, meas, err := ScanQuery(query)
 	if err != nil {
 		return
 	}

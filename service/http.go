@@ -128,32 +128,37 @@ func (hs *HttpService) HandlerQueryV2(w http.ResponseWriter, req *http.Request) 
 		hs.WriteError(w, req, 400, err.Error())
 		return
 	}
-	var query string
+	qr := &backend.QueryRequest{}
 	switch mt {
 	case "application/vnd.flux":
-		query = string(rbody)
+		qr.Query = string(rbody)
 	case "application/json":
 		fallthrough
 	default:
-		var r struct {
-			Query string `json:"query"`
-		}
-		if err = json.Unmarshal(rbody, &r); err != nil {
+		if err = json.Unmarshal(rbody, qr); err != nil {
 			hs.WriteError(w, req, 400, fmt.Sprintf("failed parsing request body as JSON: %s", err))
 			return
 		}
-		query = r.Query
+	}
+
+	if qr.Query == "" && qr.Spec == nil {
+		hs.WriteError(w, req, 400, "request body requires either spec or query")
+		return
+	}
+	if qr.Type != "" && qr.Type != "flux" {
+		hs.WriteError(w, req, 400, fmt.Sprintf("unknown query type: %s", qr.Type))
+		return
 	}
 
 	req.Body = ioutil.NopCloser(bytes.NewBuffer(rbody))
-	err = hs.ip.QueryFlux(w, req, query)
+	err = hs.ip.QueryFlux(w, req, qr)
 	if err != nil {
-		log.Printf("flux query error: %s, query: %s, client: %s", err, query, req.RemoteAddr)
+		log.Printf("flux query error: %s, query: %s, spec: %s, client: %s", err, qr.Query, qr.Spec, req.RemoteAddr)
 		hs.WriteError(w, req, 400, err.Error())
 		return
 	}
 	if hs.queryTracing {
-		log.Printf("flux query: %s, client: %s", query, req.RemoteAddr)
+		log.Printf("flux query: %s, spec: %s, client: %s", qr.Query, qr.Spec, req.RemoteAddr)
 	}
 }
 
